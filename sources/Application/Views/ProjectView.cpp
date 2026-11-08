@@ -13,6 +13,9 @@
 #include "BaseClasses/UITempoField.h"
 #include "Services/Midi/MidiService.h"
 #include "System/System/System.h"
+#include "Application/Model/Config.h"
+#include <cstdlib>
+#include <string>
 
 #define ACTION_PURGE            MAKE_FOURCC('P','U','R','G')
 #define ACTION_SAVE             MAKE_FOURCC('S','A','V','E')
@@ -21,6 +24,7 @@
 #define ACTION_QUIT             MAKE_FOURCC('Q','U','I','T')
 #define ACTION_PURGE_INSTRUMENT MAKE_FOURCC('P','R','G','I')
 #define ACTION_TEMPO_CHANGED    MAKE_FOURCC('T','E','M','P')
+#define ACTION_EXPORT_LIVE      MAKE_FOURCC('A','L','S','X')
 
 static void SaveAsProjectCallback(View &v,ModalView &dialog) {
 
@@ -180,6 +184,11 @@ ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
     a1->AddObserver(*this);
     T_SimpleList<UIField>::Insert(a1);
 
+    position._y += 1;
+    a1 = new UIActionField("Export Live Set", ACTION_EXPORT_LIVE, position);
+    a1->AddObserver(*this);
+    T_SimpleList<UIField>::Insert(a1);
+
     v = project_->FindVariable(VAR_MIDIDEVICE);
     NAssert(v);
     position._y += 2;
@@ -314,6 +323,39 @@ void ProjectView::Update(Observable &,I_ObservableData *data) {
             service->Save("project:lgptsav_tmp.dat");
             NewProjectDialog *mb = new NewProjectDialog(*this, "root:");
             DoModal(mb, SaveAsProjectCallback);
+            break;
+        }
+        case ACTION_EXPORT_LIVE: {
+            // Guarda y llama al convertidor lgpt2als.py (repo trk2als).
+            // config.xml: <TRK2ALS_DIR value="/ruta/a/trk2als/tracker"/>
+            const char *dir = Config::GetInstance()->GetValue("TRK2ALS_DIR");
+            if (!dir) {
+                View::SetNotification("Set TRK2ALS_DIR in config.xml");
+                break;
+            }
+            MixerService::GetInstance()->SetRenderMode(0);
+            PersistencyService::GetInstance()->Save();
+
+            std::string prj = Path("project:").GetPath();
+            while (!prj.empty() && prj[prj.size() - 1] == '/')
+                prj.erase(prj.size() - 1);
+            std::string name = prj.substr(prj.find_last_of('/') + 1);
+            if (name.compare(0, 5, "lgpt_") == 0)
+                name = name.substr(5);
+            std::string root = Path("root:").GetPath();
+            while (!root.empty() && root[root.size() - 1] == '/')
+                root.erase(root.size() - 1);
+            std::string outDir = root + "/LiveExports/" + name + " Project";
+            std::string log = root + "/LiveExports/export.log";
+            std::string cmd = "mkdir -p '" + outDir + "' && python3 '" +
+                              std::string(dir) + "/lgpt2als.py' '" + prj +
+                              "' '" + std::string(dir) + "/plantilla.als' '" +
+                              outDir + "/" + name + ".als' > '" + log +
+                              "' 2>&1";
+            Trace::Log("ProjectView", "Export Live: %s", cmd.c_str());
+            int rc = system(cmd.c_str());
+            View::SetNotification(rc == 0 ? "Live set exported!"
+                                          : "Export failed, see export.log");
             break;
         }
         case ACTION_LOAD: {
