@@ -1098,7 +1098,11 @@ int SampleInstrument::DetectLoopBpm() {
 	int index=GetSampleIndex() ;
 	float secs=GetLoopSeconds() ;
 	if (index<0 || secs<=0) return 0 ;
-	const char *name=SamplePool::GetInstance()->GetNameList()[index] ;
+	return DetectBpm(SamplePool::GetInstance()->GetNameList()[index],secs,true) ;
+}
+
+int SampleInstrument::DetectBpm(const char *name, float secs, bool allowGuess) {
+	if (!name || secs<=0) return 0 ;
 	int candidates[16] ;
 	int n=0 ;
 	for (const char *p=name;*p && n<16;) {
@@ -1123,6 +1127,7 @@ int SampleInstrument::DetectLoopBpm() {
 		int r=int(bars+0.5f) ;
 		if (bars>=0.5f && fabsf(bars-r)<0.05f*(r>1?r:1)) return candidates[i] ;
 	}
+	if (!allowGuess) return 0 ;
 	for (int bars=1;bars<=16;bars*=2) {
 		float bpm=bars*240.0f/secs ;
 		if (bpm>=80 && bpm<=160) return int(bpm+0.5f) ;

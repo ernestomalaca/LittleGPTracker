@@ -16,6 +16,9 @@ public:
 	virtual ~AudioFileStreamer() ;
 	virtual bool Render(fixed *buffer,int samplecount) ;
 	bool Start(const Path &) ;
+	// trk2als: preview a tempo. speed multiplica la velocidad, delaySecs espera
+	// antes de sonar, startFrac es el punto de arranque (0-1) y loop repite
+	bool Start(const Path &, double speed, double delaySecs, double startFrac, bool loop) ;
 	void Stop() ;
 protected:
 	AudioFileStreamerMode mode_ ;
@@ -23,6 +26,10 @@ protected:
 	bool newPath_ ;
 	WavFile *wav_ ;
 	int position_ ;
+	double speed_ ;
+	double startFrac_ ;
+	long delay_ ;     // frames de silencio antes de sonar
+	bool loop_ ;
 	double frac_ ;   // trk2als: posición fraccionaria para respetar la frecuencia del archivo
 	int shift_ ;
 } ;

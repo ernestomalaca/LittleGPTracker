@@ -2,6 +2,9 @@
 #include "Application/Instruments/SampleInstrument.h"
 #include "Application/Instruments/SamplePool.h"
 #include "Application/Views/ModalDialogs/MessageBox.h"
+#include "Application/Instruments/WavFile.h"
+#include "Application/Player/Player.h"
+#include <math.h>
 
 #define LIST_SIZE 15
 #define LIST_WIDTH 28
@@ -118,7 +121,35 @@ void ImportSampleDialog::OnFocus() {
 } ;
 
 void ImportSampleDialog::preview(Path &element) {
-	Player::GetInstance()->StartStreaming(element) ;
+	// trk2als: si es un loop, el preview suena al tempo del proyecto, en loop
+	// y en fase: con la canción sonando entra en el siguiente tiempo, en el
+	// punto del loop que corresponde a ese tiempo del compás
+	Player *player=Player::GetInstance() ;
+	WavFile *wav=WavFile::Open(element.GetPath().c_str()) ;
+	if (wav) {
+		float secs=(wav->GetSampleRate(-1)>0)?float(wav->GetSize(-1))/wav->GetSampleRate(-1):0 ;
+		delete wav ;
+		// el nombre manda; si se abrió desde una pista de audio, también se adivina
+		int bpm=SampleInstrument::DetectBpm(element.GetName().c_str(),secs,
+		                                    viewData_->instrumentFromSong_) ;
+		if (bpm>0) {
+			int tempo=viewData_->project_->GetTempo() ;
+			int bars=int(secs*bpm/240.0f+0.5f) ;
+			if (bars<1) bars=1 ;
+			double speed=(secs*tempo)/(bars*240.0) ; // la región dura 'bars' compases
+			double delay=0,startFrac=0 ;
+			if (player->IsRunning()) {
+				double beat=60.0/tempo ;
+				double t=player->GetPlayTime() ;
+				long next=long(floor(t/beat))+1 ;            // siguiente tiempo de la canción
+				delay=next*beat-t ;
+				startFrac=double(next%(4*bars))/(4.0*bars) ; // ese tiempo dentro del loop
+			}
+			player->StartStreaming(element,speed,delay,startFrac,true) ;
+			return ;
+		}
+	}
+	player->StartStreaming(element) ;
 }
 
 void ImportSampleDialog::endPreview() {
@@ -134,8 +165,12 @@ void ImportSampleDialog::import(Path &element) {
 		if (instr->GetType()==IT_SAMPLE) {
 			SampleInstrument *sinstr=(SampleInstrument *)instr ;
 			sinstr->AssignSample(sampleID) ;
-			toInstr_=viewData_->project_->GetInstrumentBank()->GetNext() ;
+			// trk2als: el instrumento se compromete con este sample. Antes saltaba
+			// al siguiente instrumento libre para importar muchos de un jalón
 		};
+		endPreview() ;
+		EndModal(0) ;
+		return ;
 	} else {
         const char *err_str = (sampleID == -SLOAD_ERR_MAX_SAMPLES)
                                   ? "Maximum number of samples exceeded"

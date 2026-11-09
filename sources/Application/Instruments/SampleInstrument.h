@@ -91,6 +91,8 @@ public:
 	   // trk2als: tempo de los loops
 	   float GetLoopSeconds() ;   // duración de la región loop start..end
 	   int DetectLoopBpm() ;      // BPM del nombre del archivo o adivinado por la duración
+	   // name: nombre del archivo; secs: duración; allowGuess: adivinar si el nombre no dice
+	   static int DetectBpm(const char *name, float secs, bool allowGuess) ;
 	   void UpdateLoopBars() ;    // compases = duración x BPM / 240
 	   // El Player avisa si el canal es pista de audio: entonces la voz toca en
 	   // looper sync sin cambiar el loop mode del instrumento (que puede usarse en MIDI)

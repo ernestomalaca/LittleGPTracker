@@ -150,6 +150,10 @@ void PlayerMixer::StartStreaming(const Path &path) {
 	fileStreamer_.Start(path) ;
 } ;
 
+void PlayerMixer::StartStreaming(const Path &path, double speed, double delaySecs, double startFrac, bool loop) {
+	fileStreamer_.Start(path,speed,delaySecs,startFrac,loop) ;
+} ;
+
 void PlayerMixer::StopStreaming() {
 	fileStreamer_.Stop() ;
 } ;

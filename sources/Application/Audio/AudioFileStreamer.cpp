@@ -12,6 +12,10 @@ AudioFileStreamer::AudioFileStreamer() {
 	newPath_=false ;
 	position_=0 ;
 	frac_=0 ;
+	speed_=1.0 ;
+	startFrac_=0 ;
+	delay_=0 ;
+	loop_=false ;
 } ;
 
 AudioFileStreamer::~AudioFileStreamer() {
@@ -19,11 +23,19 @@ AudioFileStreamer::~AudioFileStreamer() {
 } ;
  
 bool AudioFileStreamer::Start(const Path &path) {
+	return Start(path,1.0,0.0,0.0,false) ;
+} ;
+
+bool AudioFileStreamer::Start(const Path &path, double speed, double delaySecs, double startFrac, bool loop) {
   Trace::Debug("Starting to stream %s",path.GetPath().c_str());
 	path_=path ;
 	const char *shift=Config::GetInstance()->GetValue("PRELISTENATTENUATION") ;
 	shift_=(shift)?atoi(shift):1 ;
   Trace::Debug("Streaming shift is %d",shift_);
+	speed_=(speed>0)?speed:1.0 ;
+	startFrac_=(startFrac>=0 && startFrac<1)?startFrac:0.0 ;
+	delay_=long(delaySecs*Audio::GetInstance()->GetSampleRate()) ;
+	loop_=loop ;
 	newPath_=true ;
 	mode_=AFSM_PLAYING ;
 	return true ;
@@ -61,7 +73,7 @@ bool AudioFileStreamer::Render(fixed *buffer,int samplecount) {
 			mode_=AFSM_STOPPED ;
 			return false ;
 		}
-		position_=0 ;
+		position_=long(startFrac_*wav_->GetSize(-1)) ;
 		frac_=0 ;
 	}
 
@@ -72,37 +84,53 @@ bool AudioFileStreamer::Render(fixed *buffer,int samplecount) {
 	int fileRate=wav_->GetSampleRate(-1) ;
 	int outRate=Audio::GetInstance()->GetSampleRate() ;
 	double step=(fileRate>0 && outRate>0)?double(fileRate)/double(outRate):1.0 ;
+	step*=speed_ ;
 
-	int need=int(samplecount*step+frac_)+2 ;
+	// trk2als: silencio hasta el siguiente tiempo
+	memset(buffer,0,2*samplecount*sizeof(fixed)) ;
+	int skip=0 ;
+	if (delay_>0) {
+		skip=(delay_>samplecount)?samplecount:int(delay_) ;
+		delay_-=skip ;
+		if (skip==samplecount) return true ;
+	}
+	int frames=samplecount-skip ;
+
+	int need=int(frames*step+frac_)+2 ;
 	int count=need ;
 	if (position_+count>size) {
 		count=size-position_ ;
 	}
-	memset(buffer,0,2*samplecount*sizeof(fixed)) ;
 	if (count<=0) {
+		if (loop_ && size>0) { position_=0 ; frac_=0 ; return true ; }
 		mode_=AFSM_STOPPED ;
 		return true ;
 	}
 	wav_->GetBuffer(position_,count) ;
-	fixed *dst=buffer ;
+	fixed *dst=buffer+2*skip ;
 	short *src=(short *)wav_->GetSampleBuffer(-1) ;
 	int channel=wav_->GetChannelCount(-1) ;
 
 	int i=0 ;
-	for (;i<samplecount;i++) {
+	for (;i<frames;i++) {
 		int idx=int(frac_+i*step) ;
 		if (idx>=count) break ;
 		short *s=src+idx*channel ;
 		fixed v=*dst++=i2fp((*s)>>(1+shift_)) ;
 		*dst++=(channel==2)?i2fp((s[1])>>(1+shift_)):v ;
 	}
-	double advance=frac_+samplecount*step ;
+	double advance=frac_+i*step ;
 	int whole=int(advance) ;
 	frac_=advance-whole ;
 	position_+=whole ;
-	if (i<samplecount || position_>=size) {
-		Trace::Debug("Reached the end of %d samples",size);
-		mode_=AFSM_STOPPED ;
+	if (i<frames || position_>=size) {
+		if (loop_) {            // trk2als: el preview de un loop se repite
+			position_=0 ;
+			frac_=0 ;
+		} else {
+			Trace::Debug("Reached the end of %d samples",size);
+			mode_=AFSM_STOPPED ;
+		}
 	}
 	return true ;
 }

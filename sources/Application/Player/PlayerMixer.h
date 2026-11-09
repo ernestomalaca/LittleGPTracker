@@ -41,6 +41,7 @@ public:
 	bool IsChannelPlaying(int channel) ;
 	
 	void StartStreaming(const Path &) ;
+	void StartStreaming(const Path &, double speed, double delaySecs, double startFrac, bool loop) ;
 	void StopStreaming()  ;
 
 	bool Clipped() ;

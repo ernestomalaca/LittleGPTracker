@@ -74,6 +74,7 @@ public:
     bool ProcessChannelCommand(int channel,FourCC cmd,ushort param) ;
 
 	void StartStreaming(const Path &path) ;
+	void StartStreaming(const Path &path, double speed, double delaySecs, double startFrac, bool loop) ;
 	void StopStreaming() ;
 
 	// Channel data
