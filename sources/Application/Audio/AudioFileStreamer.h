@@ -23,6 +23,7 @@ protected:
 	bool newPath_ ;
 	WavFile *wav_ ;
 	int position_ ;
+	double frac_ ;   // trk2als: posición fraccionaria para respetar la frecuencia del archivo
 	int shift_ ;
 } ;
 
