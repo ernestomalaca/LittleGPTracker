@@ -65,5 +65,8 @@ private:
 	int appAnchorX_ ;
 	int appAnchorY_ ;
 	int mult_ ;
+	bool hdFont_ ;   // trk2als: fuente nítida de 16x16 (pantallas de 640x480)
+	int hdScale_ ;
+	void drawHDChar(unsigned char c,int xx,int yy,GUITextProperties &p) ;
 } ;
 #endif

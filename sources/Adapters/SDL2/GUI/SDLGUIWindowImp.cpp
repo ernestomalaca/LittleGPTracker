@@ -7,6 +7,7 @@
 #include "UIFramework/BasicDatas/FontConfig.h"
 #include "UIFramework/BasicDatas/GUIEvent.h"
 #include "UIFramework/SimpleBaseClasses/GUIWindow.h"
+#include "Resources/hdfont.h"
 #include <assert.h>
 #include <string.h>
 
@@ -92,6 +93,16 @@ SDLGUIWindowImp::SDLGUIWindowImp(GUICreateWindowParams &p) {
         }
     }
 #endif
+    // trk2als: a partir de 640x480 (SCREENMULT par) se usa la fuente nítida de
+    // 16x16 en vez de la de 8x8 ampliada. HDFONT=NO en config.xml la apaga.
+    {
+        const char *hd = Config::GetInstance()->GetValue("HDFONT");
+        bool wanted = !(hd && !strcmp(hd, "NO"));
+        hdFont_ = wanted && (mult_ >= 2) && (mult_ % 2 == 0);
+        hdScale_ = hdFont_ ? mult_ / 2 : 1;
+        Trace::Log("DISPLAY", "HD font: %s", hdFont_ ? "on" : "off");
+    }
+
     // Create a window that is the requested size
 
     screenRect_._topLeft._x = 0;
@@ -257,6 +268,11 @@ void SDLGUIWindowImp::DrawChar(const char c, GUIPoint &pos,
         area->w = 8 * mult_;
     }
 
+    if (hdFont_) { // trk2als
+        drawHDChar((unsigned char)c, xx, yy, p);
+        return;
+    }
+
     bool useCache = false;
     if (cacheFonts_ && (currentColor_ == foregroundColor_) && (!p.invert_)) {
         useCache = true;
@@ -309,6 +325,48 @@ void SDLGUIWindowImp::DrawChar(const char c, GUIPoint &pos,
             }
             if (y < 7)
                 src += FONT_WIDTH;
+        }
+    }
+}
+
+// trk2als: dibuja un caracter de la fuente nítida mezclando el color del texto
+// con el fondo según la opacidad de cada pixel (16 tonos por caracter)
+void SDLGUIWindowImp::drawHDChar(unsigned char c, int xx, int yy,
+                                 GUITextProperties &p) {
+    c &= 127;
+    Uint32 fg = p.invert_ ? backgroundColor_ : currentColor_;
+    Uint32 bg = p.invert_ ? currentColor_ : backgroundColor_;
+    Uint8 fr, fgc, fb, br, bgc, bb;
+    SDL_GetRGB(fg, surface_->format, &fr, &fgc, &fb);
+    SDL_GetRGB(bg, surface_->format, &br, &bgc, &bb);
+    Uint32 shades[16];
+    for (int i = 0; i < 16; i++) {
+        int a = i * 17; // 0..255
+        shades[i] = SDL_MapRGB(surface_->format, (br * (255 - a) + fr * a) / 255,
+                               (bgc * (255 - a) + fgc * a) / 255,
+                               (bb * (255 - a) + fb * a) / 255);
+    }
+    int pixelSize = surface_->format->BytesPerPixel;
+    int size = HDFONT_SIZE * hdScale_;
+    if (xx + size > surface_->w || yy + size > surface_->h)
+        return;
+    const unsigned char *src = hdfont[c];
+    for (int y = 0; y < HDFONT_SIZE; y++) {
+        for (int sy = 0; sy < hdScale_; sy++) {
+            unsigned char *dest = ((unsigned char *)surface_->pixels) +
+                                  (yy + y * hdScale_ + sy) * surface_->pitch +
+                                  xx * pixelSize;
+            for (int x = 0; x < HDFONT_SIZE; x++) {
+                Uint32 v = shades[src[y * HDFONT_SIZE + x] >> 4];
+                unsigned char *vp = (unsigned char *)&v;
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
+                vp += (4 - pixelSize);
+#endif
+                for (int sx = 0; sx < hdScale_; sx++) {
+                    memcpy(dest, vp, pixelSize);
+                    dest += pixelSize;
+                }
+            }
         }
     }
 }
