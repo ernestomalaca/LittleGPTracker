@@ -101,6 +101,10 @@ SampleInstrument::SampleInstrument() {
 	 loopBars_=new Variable("loop bars",SIP_LOOPBARS,1,16) ;
 	 Insert(loopBars_) ;
 
+	 loopBpm_=new WatchedVariable("loop bpm",SIP_LOOPBPM,0) ;
+	 Insert(loopBpm_) ;
+	 loopBpm_->AddObserver(*this) ;
+
 	 loopStart_=new WatchedVariable("loopstart",SIP_LOOPSTART,0) ;
 	 Insert(loopStart_) ;
 	 loopStart_->AddObserver(*this) ;
@@ -1007,6 +1011,67 @@ void SampleInstrument::AssignSample(int i) {
 	 v->SetInt(i) ;
 } ;
 
+/************************************************************
+ trk2als: tempo de los loops
+ ************************************************************/
+
+float SampleInstrument::GetLoopSeconds() {
+	int index=GetSampleIndex() ;
+	if (index<0) return 0 ;
+	SoundSource *src=SamplePool::GetInstance()->GetSource(index) ;
+	if (!src || src->GetSampleRate(-1)<=0) return 0 ;
+	int a=loopStart_->GetInt() ;
+	int b=loopEnd_->GetInt() ;
+	if (b<=a) b=src->GetSize(-1) ;
+	return float(b-a)/float(src->GetSampleRate(-1)) ;
+}
+
+void SampleInstrument::UpdateLoopBars() {
+	int bpm=loopBpm_->GetInt() ;
+	float secs=GetLoopSeconds() ;
+	if (bpm<=0 || secs<=0) return ;          // 0 = compases a mano
+	int bars=int(secs*bpm/240.0f+0.5f) ;
+	loopBars_->SetInt(bars<1?1:(bars>16?16:bars)) ;
+}
+
+// Busca "85bpm" o un número 60–200 suelto en el nombre ("loop_85_Am");
+// si no hay, el tempo entre 80 y 160 que dé 1, 2, 4, 8 o 16 compases
+int SampleInstrument::DetectLoopBpm() {
+	int index=GetSampleIndex() ;
+	float secs=GetLoopSeconds() ;
+	if (index<0 || secs<=0) return 0 ;
+	const char *name=SamplePool::GetInstance()->GetNameList()[index] ;
+	int candidates[16] ;
+	int n=0 ;
+	for (const char *p=name;*p && n<16;) {
+		if (*p>='0' && *p<='9') {
+			int v=0 ;
+			const char *q=p ;
+			while (*q>='0' && *q<='9') { v=v*10+(*q-'0') ; q++ ; }
+			bool sepBefore=(p==name) || !((p[-1]>='a'&&p[-1]<='z')||(p[-1]>='A'&&p[-1]<='Z')) ;
+			bool bpmAfter=(strncasecmp(q,"bpm",3)==0) || (*q==' ' && strncasecmp(q+1,"bpm",3)==0) ;
+			bool sepAfter=bpmAfter || !((*q>='a'&&*q<='z')||(*q>='A'&&*q<='Z')) ;
+			if (v>=60 && v<=200 && ((sepBefore && sepAfter) || bpmAfter)) {
+				if (bpmAfter) { candidates[0]=v ; n=1 ; break ; }
+				candidates[n++]=v ;
+			}
+			p=q ;
+		} else {
+			p++ ;
+		}
+	}
+	for (int i=0;i<n;i++) {        // el número tiene que dar compases casi enteros
+		float bars=secs*candidates[i]/240.0f ;
+		int r=int(bars+0.5f) ;
+		if (bars>=0.5f && fabsf(bars-r)<0.05f*(r>1?r:1)) return candidates[i] ;
+	}
+	for (int bars=1;bars<=16;bars*=2) {
+		float bpm=bars*240.0f/secs ;
+		if (bpm>=80 && bpm<=160) return int(bpm+0.5f) ;
+	}
+	return 0 ;
+}
+
 int SampleInstrument::GetSampleIndex() {
 	 Variable *v=FindVariable(SIP_SAMPLE) ;
 	 return v->GetInt() ;
@@ -1083,6 +1148,12 @@ void SampleInstrument::Update(Observable &o,I_ObservableData *d)
 			break ;
 
 
+
+		case SIP_LOOPBPM:
+		case SIP_LOOPSTART:
+		case SIP_END:
+			UpdateLoopBars() ; // trk2als
+			break ;
 
 		default:
    //         Trace::Dump("Got notification from %c%c%c%c",fourcc[0],fourcc[1],fourcc[2],fourcc[3]) ;

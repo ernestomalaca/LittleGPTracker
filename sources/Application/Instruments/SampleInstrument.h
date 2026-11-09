@@ -51,6 +51,8 @@ enum SampleInstrumentLoopMode {
 #define SIP_IR_WET MAKE_FOURCC('I', 'R', 'W', 'T')
 // trk2als: compases que dura la region del loop en modo looper sync
 #define SIP_LOOPBARS MAKE_FOURCC('L', 'B', 'A', 'R')
+// trk2als: BPM original del loop (0 = compases a mano)
+#define SIP_LOOPBPM MAKE_FOURCC('L', 'B', 'P', 'M')
 
 #define FB_BUFFER_LENGTH 3500 // (in samples)
 
@@ -86,6 +88,10 @@ public:
        // Additional
        void AssignSample(int i) ;
 	   int GetSampleIndex() ;
+	   // trk2als: tempo de los loops
+	   float GetLoopSeconds() ;   // duración de la región loop start..end
+	   int DetectLoopBpm() ;      // BPM del nombre del archivo o adivinado por la duración
+	   void UpdateLoopBars() ;    // compases = duración x BPM / 240
 	   int GetVolume() ;
 	   void SetVolume(int) ;
 	   int GetSampleSize(int channel=-1) ;
@@ -134,6 +140,7 @@ private:
 	   Variable *loopMode_ ;
 	   Variable *slices_ ;
 	   Variable *loopBars_ ;
+	   WatchedVariable *loopBpm_ ;
 	   Variable *interpolation_ ;
        Variable *printFx_;
        Variable *irPad_;

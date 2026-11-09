@@ -1,4 +1,6 @@
 #include "InstrumentView.h"
+#include <math.h>
+#include <stdio.h>
 #include "Application/Instruments/MidiInstrument.h"
 #include "Application/Instruments/SampleInstrument.h"
 #include "Application/Instruments/SamplePool.h"
@@ -21,6 +23,7 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data) {
 	project_=data->project_ ;
 	lastFocusID_=0 ;
 	current_=0 ;
+	lastSampleIdx_=-2 ;
 	onInstrumentChange() ;
 }
 
@@ -43,6 +46,19 @@ void InstrumentView::onInstrumentChange() {
 	int i=viewData_->currentInstrument_ ;
 	InstrumentBank *bank=viewData_->project_->GetInstrumentBank() ;
 	current_=bank->GetInstrument(i) ;
+
+	// trk2als: al cambiar el sample de este instrumento, detectar el BPM del loop
+	if (current_->GetType()==IT_SAMPLE) {
+		SampleInstrument *si=(SampleInstrument *)current_ ;
+		int idx=si->GetSampleIndex() ;
+		if (current_==old && lastSampleIdx_!=-2 && idx!=lastSampleIdx_ && idx>=0) {
+			int bpm=si->DetectLoopBpm() ;
+			if (bpm>0) si->FindVariable(SIP_LOOPBPM)->SetInt(bpm) ;
+		}
+		lastSampleIdx_=idx ;
+	} else {
+		lastSampleIdx_=-2 ;
+	}
 
 	if (current_!=old) {
 		current_->RemoveObserver(*this) ;
@@ -210,6 +226,14 @@ void InstrumentView::fillSampleParameters() {
 	f1=new UIIntVarField(position,*v,"bars: %2d",1,16,1,4) ;
 	T_SimpleList<UIField>::Insert(f1) ;
 	position._x-=14 ;
+
+	// trk2als: BPM original del loop (0 = compases a mano)
+	position._y+=1 ;
+	v=instrument->FindVariable(SIP_LOOPBPM) ;
+	f1=new UIIntVarField(position,*v,"bpm: %3d",0,300,1,10) ;
+	T_SimpleList<UIField>::Insert(f1) ;
+	bpmInfoPos_=position ;
+	bpmInfoPos_._x+=10 ;
 
 	position._y+=1 ;
 	v=instrument->FindVariable(SIP_START) ;
@@ -487,6 +511,23 @@ void InstrumentView::DrawView() {
 
     FieldView::Redraw();
     drawMap() ;
+
+    // trk2als: cuánto se acelera o frena el loop para ir al tempo del proyecto
+    if (current_ && current_->GetType()==IT_SAMPLE) {
+        SampleInstrument *si=(SampleInstrument *)current_ ;
+        int bpm=si->FindVariable(SIP_LOOPBPM)->GetInt() ;
+        int bars=si->FindVariable(SIP_LOOPBARS)->GetInt() ;
+        float secs=si->GetLoopSeconds() ;
+        if (bpm>0 && secs>0 && bars>0) {
+            int tempo=viewData_->project_->GetTempo() ;
+            float ratio=secs/(bars*240.0f/tempo) ; // >1 = se acelera
+            char info[32] ;
+            sprintf(info,"%d>%d %+.1fst",bpm,tempo,12.0f*log2f(ratio)) ;
+            SetColor(CD_HILITE1) ;
+            DrawString(bpmInfoPos_._x,bpmInfoPos_._y,info,props) ;
+            SetColor(CD_NORMAL) ;
+        }
+    }
 } ;
 
 void InstrumentView::OnFocus() { onInstrumentChange(); }

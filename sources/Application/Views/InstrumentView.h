@@ -28,5 +28,7 @@ private:
 	Project *project_ ;
 	FourCC lastFocusID_ ;
 	I_Instrument *current_ ;
+	int lastSampleIdx_ ;     // trk2als: para detectar el BPM al cambiar de sample
+	GUIPoint bpmInfoPos_ ;   // trk2als: dónde dibujar '85>100 +2.8st'
 } ;
 #endif
