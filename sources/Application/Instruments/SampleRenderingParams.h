@@ -25,6 +25,7 @@ struct renderParams {
     
 	fixed baseSpeed_ ;  // The base speed with respect to current note
     fixed speed_ ;      // speed at which we currently travel the stream
+    bool forceSync_ ;   // trk2als: esta voz toca en looper sync porque es una pista de audio
     float syncTickSamples_ ; // trk2als: duración del tick con la que se calculó el looper sync (0 = no aplica)
 	fixed baseVolume_ ;  // Base volume the instrument was triggered with
 	fixed volume_ ;     // Current volume

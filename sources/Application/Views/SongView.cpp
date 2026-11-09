@@ -68,12 +68,9 @@ void SongView::prepareClip(unsigned char clip) {
         return;
     I_Instrument *instr =
         viewData_->project_->GetInstrumentBank()->GetInstrument(clip);
-    if (instr && instr->GetType() == IT_SAMPLE) {
-        Variable *v = instr->FindVariable(SIP_LOOPMODE);
-        if (v && v->GetInt() == SILM_ONESHOT) {
-            v->SetInt(SILM_LOOPSYNC); // un loop de audio va siempre a tempo
-        }
-    }
+    // trk2als: ya no se toca el loop mode (el instrumento puede estar en una
+    // pista MIDI); el canal de audio lo toca en looper sync por su cuenta
+    (void)instr;
 }
 
 void SongView::updateChain(int offset) {

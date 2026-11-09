@@ -92,6 +92,9 @@ public:
 	   float GetLoopSeconds() ;   // duración de la región loop start..end
 	   int DetectLoopBpm() ;      // BPM del nombre del archivo o adivinado por la duración
 	   void UpdateLoopBars() ;    // compases = duración x BPM / 240
+	   // El Player avisa si el canal es pista de audio: entonces la voz toca en
+	   // looper sync sin cambiar el loop mode del instrumento (que puede usarse en MIDI)
+	   static void SetChannelSync(int channel, bool sync) ;
 	   int GetVolume() ;
 	   void SetVolume(int) ;
 	   int GetSampleSize(int channel=-1) ;
@@ -115,6 +118,8 @@ private:
 	   TableSaveState tableState_ ;
 	   
 	   static int lastMidiNote_[SONG_CHANNEL_COUNT] ;
+	   static bool syncRequest_[SONG_CHANNEL_COUNT] ; // trk2als
+	   SampleInstrumentLoopMode effectiveLoopMode(renderParams *rp) ;
 	   static fixed lastSample_[SONG_CHANNEL_COUNT][2] ;
 	   static fixed feedback_[SONG_CHANNEL_COUNT][FB_BUFFER_LENGTH*2] ;
 

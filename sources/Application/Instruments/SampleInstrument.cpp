@@ -24,6 +24,16 @@ bool SampleInstrument::useDirtyDownsampling_ = false;
 
 #define SHOULD_KILL_CLICKS false
 
+bool SampleInstrument::syncRequest_[SONG_CHANNEL_COUNT]= {false,false,false,false,false,false,false,false} ;
+
+void SampleInstrument::SetChannelSync(int channel, bool sync) {
+	if (channel>=0 && channel<SONG_CHANNEL_COUNT) syncRequest_[channel]=sync ;
+}
+
+SampleInstrumentLoopMode SampleInstrument::effectiveLoopMode(renderParams *rp) {
+	return rp->forceSync_ ? SILM_LOOPSYNC : (SampleInstrumentLoopMode)loopMode_->GetInt() ;
+}
+
 int SampleInstrument::lastMidiNote_[SONG_CHANNEL_COUNT]= {
 	-1,-1,-1,-1,-1,-1,-1,-1
 } ;
@@ -229,7 +239,8 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 			 loopMode_->SetInt(SILM_ONESHOT) ;
 		 } ;
 	 } 
-     SampleInstrumentLoopMode loopmode=(SampleInstrumentLoopMode)loopMode_->GetInt() ;
+     rp->forceSync_=syncRequest_[channel] ; // trk2als: pista de audio
+     SampleInstrumentLoopMode loopmode=effectiveLoopMode(rp) ;
 
 /*	 if (loopmode==SILM_OSCFINE) {
 		if (rp->rendLoopEnd_>source_->GetSize()-1) { // check for older instrument that were not correctly handled
@@ -336,7 +347,7 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 	// We allow processing
 
 	rp->finished_=false ;
-	if (loopMode_->GetInt()!=SILM_LOOPSYNC) rp->syncTickSamples_=0 ;
+	if (loopmode!=SILM_LOOPSYNC) rp->syncTickSamples_=0 ;
 
   // Initialize feedback data
 
@@ -427,7 +438,7 @@ void SampleInstrument::doKRateUpdate(int channel) {
 
 void SampleInstrument::updateFeedback(renderParams *rp) {
 
-	 SampleInstrumentLoopMode loopMode=(SampleInstrumentLoopMode)loopMode_->GetInt() ;
+	 SampleInstrumentLoopMode loopMode=effectiveLoopMode(rp) ;
 
 	 if (rp->fbMix_!=0) {
 		int offset=fp2i(fp_mul(rp->fbTun_,fl2fp(255.0f))) ;
@@ -578,7 +589,7 @@ bool SampleInstrument::Render(int channel, fixed *buffer, int size, int flags) {
 
 		 // Loop mode
 
-		 SampleInstrumentLoopMode loopMode=(SampleInstrumentLoopMode)loopMode_->GetInt() ;
+		 SampleInstrumentLoopMode loopMode=effectiveLoopMode(rp) ;
 
 		 // Interpolation
 
@@ -1204,8 +1215,7 @@ void SampleInstrument::ProcessCommand(int channel,FourCC cc,ushort value) {
         //    into neighbors). That's intentional — these are useful artifacts,
         //    not bugs.
 
-        SampleInstrumentLoopMode loopmode =
-            (SampleInstrumentLoopMode)loopMode_->GetInt();
+        SampleInstrumentLoopMode loopmode = effectiveLoopMode(rp);
         bool dragPlayhead = (loopmode != SILM_OSC);
 
         if (value > 0x8000) {

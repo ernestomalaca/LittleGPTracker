@@ -106,6 +106,7 @@ void Player::Start(PlayMode mode, bool forceSongMode) {
         timeToLive_[i] = 0;
         timeToStart_[i]=0;
         audioStarted_[i] = false;
+        SampleInstrument::SetChannelSync(i, isAudio(i));
 		TablePlayback &tpb=TablePlayback::GetTablePlayback(i);
 		tpb.Stop();
     }
@@ -442,6 +443,7 @@ void Player::playAudioCell(int channel) {
     int note = root ? root->GetInt() : 60;
 
     mixer_->StopInstrument(channel);
+    SampleInstrument::SetChannelSync(channel, true);
     mixer_->StartInstrument(channel, instrument, note, true);
     if (!atStart) {
         int step = cpos * 16 + pos;
@@ -931,6 +933,7 @@ void Player::playCursorPosition(int channel) {
                 // Check if note is in acceptable midi range
 
                 if (note < 128) {
+                    SampleInstrument::SetChannelSync(channel, false); // trk2als
                     mixer_->StartInstrument(channel, instrument, note,
                                             newInstrument);
                     int instrTable = instrument->GetTable();

@@ -52,8 +52,8 @@ void InstrumentView::onInstrumentChange() {
 		SampleInstrument *si=(SampleInstrument *)current_ ;
 		int idx=si->GetSampleIndex() ;
 		if (current_==old && lastSampleIdx_!=-2 && idx!=lastSampleIdx_ && idx>=0) {
-			int bpm=si->DetectLoopBpm() ;
-			if (bpm>0) si->FindVariable(SIP_LOOPBPM)->SetInt(bpm) ;
+			// 0 si no parece un loop: así no arrastra el BPM del sample anterior
+			si->FindVariable(SIP_LOOPBPM)->SetInt(si->DetectLoopBpm()) ;
 		}
 		lastSampleIdx_=idx ;
 	} else {
@@ -518,7 +518,9 @@ void InstrumentView::DrawView() {
         int bpm=si->FindVariable(SIP_LOOPBPM)->GetInt() ;
         int bars=si->FindVariable(SIP_LOOPBARS)->GetInt() ;
         float secs=si->GetLoopSeconds() ;
-        if (bpm>0 && secs>0 && bars>0) {
+        bool sync=viewData_->instrumentFromSong_ ||
+                  si->FindVariable(SIP_LOOPMODE)->GetInt()==SILM_LOOPSYNC ;
+        if (sync && bpm>0 && secs>0 && bars>0) {
             int tempo=viewData_->project_->GetTempo() ;
             float ratio=secs/(bars*240.0f/tempo) ; // >1 = se acelera
             char info[32] ;
