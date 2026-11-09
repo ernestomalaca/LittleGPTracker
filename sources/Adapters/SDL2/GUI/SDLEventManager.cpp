@@ -31,6 +31,13 @@ bool SDLEventManager::Init()
 	
   SDL_InitSubSystem(SDL_INIT_JOYSTICK);
 
+	// macOS: los controles (p. ej. 8BitDo por Bluetooth) aparecen hasta que SDL
+	// procesa eventos; esperamos hasta ~500 ms para no perderlos al arrancar
+	for (int t = 0; t < 50 && SDL_NumJoysticks() == 0; t++) {
+		SDL_PumpEvents();
+		SDL_Delay(10);
+	}
+
 	int joyCount=SDL_NumJoysticks() ;
 	joyCount=(joyCount>MAX_JOY_COUNT)?MAX_JOY_COUNT:joyCount ;
 
@@ -95,6 +102,9 @@ int SDLEventManager::MainLoop()
 
 
 				case SDL_JOYBUTTONDOWN:
+					if (dumpEvent_) {
+						Trace::Log("EVENT","but(%d):%d down",event.jbutton.which,event.jbutton.button) ;
+					}
 					buttonCS_[event.jbutton.which]->SetButton(event.jbutton.button,true) ;
 					break ;
 				case SDL_JOYBUTTONUP:
