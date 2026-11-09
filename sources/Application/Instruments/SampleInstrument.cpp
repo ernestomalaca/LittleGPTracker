@@ -302,6 +302,7 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 				sampleCount*=(bars<1)?1:bars ;
 			}
 			rp->baseSpeed_=fl2fp(length/float(sampleCount)) ;
+			rp->syncTickSamples_=sm->GetTickSampleCount() ; // trk2als: para seguir cambios de tempo
       rp->rendFirst_ = rp->rendLoopStart_;
       if (cleanstart) {
         rp->position_= float(rp->rendFirst_);
@@ -335,6 +336,7 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 	// We allow processing
 
 	rp->finished_=false ;
+	if (loopMode_->GetInt()!=SILM_LOOPSYNC) rp->syncTickSamples_=0 ;
 
   // Initialize feedback data
 
@@ -484,6 +486,18 @@ bool SampleInstrument::Render(int channel, fixed *buffer, int size, int flags) {
         // clear the fixed point buffer
 
         SYS_MEMSET(buffer, 0, size * 2 * sizeof(fixed));
+
+        // trk2als: looper sync sigue al tempo en tiempo real. Si cambió la
+        // duración del tick, se reescala la velocidad (con su transposición)
+        if (rp->syncTickSamples_>0) {
+            float now=SyncMaster::GetInstance()->GetTickSampleCount() ;
+            if (now>0 && now!=rp->syncTickSamples_) {
+                fixed scale=fl2fp(rp->syncTickSamples_/now) ;
+                rp->baseSpeed_=fp_mul(rp->baseSpeed_,scale) ;
+                rp->speed_=fp_mul(rp->speed_,scale) ;
+                rp->syncTickSamples_=now ;
+            }
+        }
 
         bool hasUpdaters = !(rp->activeUpdaters_.empty());
 

@@ -11,6 +11,8 @@
 #include "System/FileSystem/FileSystem.h"
 #include "System/io/Status.h"
 #include "Table.h"
+#include "Application/Model/Config.h"
+#include <stdlib.h>
 
 #include "ProjectDatas.h"
 #include <math.h>
@@ -20,7 +22,11 @@ Project::Project()
 ,midiDeviceList_(0),
 tempoNudge_(0)
 {
-    WatchedVariable *tempo = new WatchedVariable("tempo", VAR_TEMPO, 138);
+    // trk2als: tempo de los proyectos nuevos, 120 o DEFAULTTEMPO en config.xml
+    const char *defTempo = Config::GetInstance()->GetValue("DEFAULTTEMPO");
+    int startTempo = defTempo ? atoi(defTempo) : 120;
+    if (startTempo < 60 || startTempo > 400) startTempo = 120;
+    WatchedVariable *tempo = new WatchedVariable("tempo", VAR_TEMPO, startTempo);
     this->Insert(tempo);
     Variable *masterVolume = new Variable("master", VAR_MASTERVOL, 100, 100);
     this->Insert(masterVolume) ;
