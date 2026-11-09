@@ -57,6 +57,10 @@ class SongView : public View {
     int updateY_; //
 
     unsigned char lastChain_; // .Last chain clipboard
+    unsigned char lastClip_;  // .trk2als: último loop usado en una pista de audio
+
+    bool isAudioColumn(int x); // .trk2als: la columna es una pista de audio
+    void prepareClip(unsigned char clip); // .pone el instrumento en looper sync
 
     int lastPlayedPosition_[8]; // .Last position played for song
                                 //  used for drawing purpose

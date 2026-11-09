@@ -120,6 +120,14 @@ protected:
     bool isPlayable(int row,int col,int chainPos=0) ;
     bool findPlayable(uchar *row, int col, uchar chainPos = 0);
 
+    // trk2als: pistas de audio. En un canal de audio la celda de la song es un
+    // instrumento (el loop) y se comporta como una chain virtual de 'loop bars'
+    // compases, sin phrases ni notas.
+    bool isAudio(int channel) ;
+    int audioBars(uchar clip) ;
+    uchar chainStep(int channel, uchar chain, int pos) ;
+    void playAudioCell(int channel) ;
+
   private:
     PlayerMixer *mixer_ ;
 	ViewData *viewData_ ;
@@ -150,6 +158,7 @@ protected:
 	unsigned char liveQueueChainPosition_[SONG_CHANNEL_COUNT] ;
 	unsigned int timeToLive_[SONG_CHANNEL_COUNT] ;
 	unsigned int timeToStart_[SONG_CHANNEL_COUNT] ;
+	bool audioStarted_[SONG_CHANNEL_COUNT] ; // el loop de la celda actual ya arranco
 
 	bool retrigAllImmediate_ ;
 	unsigned char retrigPos_ ;

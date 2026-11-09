@@ -18,6 +18,9 @@
 #define VAR_PREGAIN   		MAKE_FOURCC('P', 'R', 'G', 'N')
 #define VAR_SCALE 			MAKE_FOURCC('S', 'C', 'A', 'L')
 #define VAR_RENDER MAKE_FOURCC('R', 'N', 'D', 'R')
+// trk2als: cuantos de los 8 canales (contando desde el ultimo) son pistas de audio
+#define VAR_AUDIOTRACKS MAKE_FOURCC('A', 'U', 'D', 'T')
+#define DEFAULT_AUDIO_TRACKS 2
 
 #define PROJECT_NUMBER "1"
 #define PROJECT_RELEASE "6"
@@ -45,6 +48,8 @@ public:
   int GetSoftclipGain();
   int GetPregain();
   int GetRenderMode();
+  int GetAudioTrackCount();
+  bool IsAudioChannel(int channel); // canal de audio: sus celdas son loops, no chains
   void Trigger();
 
   static const unsigned int MAX_RENDER_MODE = 3;

@@ -1040,6 +1040,7 @@ void PhraseView::processNormalButtonMask(unsigned short mask) {
                     }
                     if (viewData_->currentInstrument_ != 0xFF) {
                         ViewType vt = VT_INSTRUMENT;
+                    viewData_->instrumentFromSong_ = false; // trk2als
                         ViewEvent ve(VET_SWITCH_VIEW, &vt);
                         SetChanged();
                         NotifyObservers(&ve);
@@ -1183,6 +1184,7 @@ void PhraseView::processSelectionButtonMask(unsigned short mask) {
                         } else viewData_->currentInstrument_= lastInstr_;
                     }
                     ViewType vt = VT_INSTRUMENT;
+                    viewData_->instrumentFromSong_ = false; // trk2als
                     ViewEvent ve(VET_SWITCH_VIEW, &vt);
                     SetChanged();
                     NotifyObservers(&ve);

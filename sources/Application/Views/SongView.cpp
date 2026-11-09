@@ -4,6 +4,8 @@
 #include "Application/Model/ProjectDatas.h"
 #include "Application/Player/Player.h"
 #include "Application/Utils/char.h"
+#include "Application/Instruments/SampleInstrument.h"
+#include "Application/Model/Song.h"
 #include "System/Console/Trace.h"
 #include "System/System/System.h"
 #include "UIController.h"
@@ -22,6 +24,7 @@ SongView::SongView(GUIWindow &w, ViewData *viewData, const char *song)
 
     updatingChain_ = false;
     lastChain_ = 0;
+    lastClip_ = 0;
     songname_ = song;
 
     for (int i = 0; i < 8; i++) {
@@ -52,7 +55,40 @@ SongView::~SongView() {
         parameter
  ******************************************************/
 
+/******************************************************
+ trk2als: pistas de audio
+ ******************************************************/
+
+bool SongView::isAudioColumn(int x) {
+    return viewData_->project_->IsAudioChannel(x);
+}
+
+void SongView::prepareClip(unsigned char clip) {
+    if (clip >= MAX_SAMPLEINSTRUMENT_COUNT)
+        return;
+    I_Instrument *instr =
+        viewData_->project_->GetInstrumentBank()->GetInstrument(clip);
+    if (instr && instr->GetType() == IT_SAMPLE) {
+        Variable *v = instr->FindVariable(SIP_LOOPMODE);
+        if (v && v->GetInt() == SILM_ONESHOT) {
+            v->SetInt(SILM_LOOPSYNC); // un loop de audio va siempre a tempo
+        }
+    }
+}
+
 void SongView::updateChain(int offset) {
+
+    if (isAudioColumn(viewData_->songX_)) {
+        unsigned char *c = viewData_->GetCurrentSongPointer();
+        int v = (*c == 0xFF) ? lastClip_ : *c + offset;
+        if (v < 0) v = 0;
+        if (v > MAX_SAMPLEINSTRUMENT_COUNT - 1) v = MAX_SAMPLEINSTRUMENT_COUNT - 1;
+        *c = (unsigned char)v;
+        prepareClip(*c);
+        lastClip_ = *c;
+        isDirty_ = true;
+        return;
+    }
 
     unsigned int chain = viewData_->UpdateSongChain(offset);
     updatingChain_ = true;
@@ -131,6 +167,16 @@ void SongView::pasteLast() {
     // otherwise we take the current chain as last
 
     unsigned char *c = viewData_->GetCurrentSongPointer();
+    if (isAudioColumn(viewData_->songX_)) { // trk2als: el último loop
+        if (*c == 0xFF) {
+            *c = lastClip_;
+            prepareClip(*c);
+            isDirty_ = true;
+        } else {
+            lastClip_ = *c;
+        }
+        return;
+    }
     if (*c == 0xFF) {
         *c = lastChain_;
         viewData_->song_->chain_->SetUsed(*c);
@@ -146,6 +192,9 @@ void SongView::pasteLast() {
  ******************************************************/
 
 void SongView::clonePosition() {
+
+    if (isAudioColumn(viewData_->songX_))
+        return; // trk2als: un loop no tiene chain que clonar
 
     unsigned char *pos = viewData_->GetCurrentSongPointer();
     unsigned char current = *pos;
@@ -180,6 +229,9 @@ void SongView::clonePosition() {
  ******************************************************/
 
 void SongView::deepClonePosition() {
+
+    if (isAudioColumn(viewData_->songX_))
+        return; // trk2als
     Phrase *ph = viewData_->song_->phrase_;
     Chain *ch = viewData_->song_->chain_;
     unsigned char *pos = viewData_->GetCurrentSongPointer();
@@ -603,6 +655,10 @@ void SongView::ProcessButtonMask(unsigned short mask, bool pressed) {
         return;
     };
 
+    if (viewMode_ == VM_NEW && isAudioColumn(viewData_->songX_)) {
+        viewMode_ = VM_NORMAL; // trk2als: no hay chain nueva que crear
+    }
+
     if (viewMode_ == VM_NEW) {
         if (mask == EPBM_A) {
             unsigned short next = viewData_->song_->chain_->GetNext();
@@ -731,7 +787,15 @@ void SongView::processNormalButtonMask(unsigned int mask) {
 
                 if (mask & EPBM_RIGHT) {
                     unsigned char *data = viewData_->GetCurrentSongPointer();
-                    if (*data != 0xFF) {
+                    if (*data != 0xFF && isAudioColumn(viewData_->songX_)) {
+                        // trk2als: un loop se edita en su instrumento
+                        ViewType vt = VT_INSTRUMENT;
+                        ViewEvent ve(VET_SWITCH_VIEW, &vt);
+                        viewData_->currentInstrument_ = *data;
+                        viewData_->instrumentFromSong_ = true;
+                        SetChanged();
+                        NotifyObservers(&ve);
+                    } else if (*data != 0xFF) {
                         ViewType vt = VT_CHAIN;
                         ViewEvent ve(VET_SWITCH_VIEW, &vt);
                         viewData_->currentChain_ = *data;
@@ -846,7 +910,15 @@ void SongView::processSelectionButtonMask(unsigned int mask) {
 
                 if (mask & EPBM_RIGHT) {
                     unsigned char *data = viewData_->GetCurrentSongPointer();
-                    if (*data != 0xFF) {
+                    if (*data != 0xFF && isAudioColumn(viewData_->songX_)) {
+                        // trk2als: un loop se edita en su instrumento
+                        ViewType vt = VT_INSTRUMENT;
+                        ViewEvent ve(VET_SWITCH_VIEW, &vt);
+                        viewData_->currentInstrument_ = *data;
+                        viewData_->instrumentFromSong_ = true;
+                        SetChanged();
+                        NotifyObservers(&ve);
+                    } else if (*data != 0xFF) {
                         ViewType vt = VT_CHAIN;
                         ViewEvent ve(VET_SWITCH_VIEW, &vt);
                         viewData_->currentChain_ = *data;
@@ -1027,7 +1099,9 @@ void SongView::DrawView() {
     char chbuf[4];
     short dx = 3;
     for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
-        snprintf(chbuf, sizeof(chbuf), "%02d", i);
+        bool audio = isAudioColumn(i);
+        snprintf(chbuf, sizeof(chbuf), audio ? "A%d" : "%02d", i); // trk2als
+        SetColor(audio ? CD_HILITE1 : CD_COL_TITLE);
         DrawString(pos._x + i * dx, pos._y, chbuf, props);
     }
 
@@ -1065,7 +1139,9 @@ void SongView::DrawView() {
 
             unsigned char d = *data++;
 
-            if (d == 0xFE) {
+            if (d != 0xFF && isAudioColumn(i)) {
+                SetColor(CD_HILITE1); // trk2als: loop de audio
+            } else if (d == 0xFE) {
                 SetColor(CD_SONGVIEWFE);
             } else if (d == 0x00) {
                 SetColor(CD_SONGVIEW00);

@@ -41,6 +41,11 @@ tempoNudge_(0)
         new Variable("scale", VAR_SCALE, scaleNames, scaleCount, 0);
     this->Insert(scale);
     scale->SetInt(0);
+    // trk2als: pistas de audio (proyectos nuevos: 6 MIDI + 2 audio)
+    Variable *audioTracks =
+        new Variable("audiotracks", VAR_AUDIOTRACKS, DEFAULT_AUDIO_TRACKS, 8);
+    this->Insert(audioTracks);
+
     Variable *renderMode =
         new Variable("renderMode", VAR_RENDER, renderModes, MAX_RENDER_MODE, 0);
     this->Insert(renderMode);
@@ -133,6 +138,16 @@ void Project::Trigger() {
 		};
 	}
 } ;
+
+int Project::GetAudioTrackCount() {
+    Variable *v = FindVariable(VAR_AUDIOTRACKS);
+    int n = v ? v->GetInt() : 0;
+    return (n < 0) ? 0 : ((n > SONG_CHANNEL_COUNT) ? SONG_CHANNEL_COUNT : n);
+}
+
+bool Project::IsAudioChannel(int channel) {
+    return channel >= SONG_CHANNEL_COUNT - GetAudioTrackCount();
+}
 
 int Project::GetTranspose() {
 	Variable *v=FindVariable(VAR_TRANSPOSE) ;
@@ -258,6 +273,16 @@ void Project::PurgeInstruments(bool removeFromDisk) {
 		}
 	}
 
+	// trk2als: los loops de las pistas de audio también son instrumentos usados
+	for (int row=0;row<256;row++) {
+		for (int ch=0;ch<SONG_CHANNEL_COUNT;ch++) {
+			unsigned char clip=song_->data_[row*SONG_CHANNEL_COUNT+ch] ;
+			if (IsAudioChannel(ch) && clip<MAX_INSTRUMENT_COUNT) {
+				used[clip]=true ;
+			}
+		}
+	}
+
 	InstrumentBank *bank=GetInstrumentBank() ;
 	for (int i=0;i<MAX_INSTRUMENT_COUNT;i++) {
 		if (!used[i]) {
@@ -319,6 +344,10 @@ void Project::RestoreContent(TiXmlElement *element) {
 		tableRatio=(doc->version_<=32)?2:1 ;
 	}
 	SyncMaster::GetInstance()->SetTableRatio(tableRatio) ;
+
+	// trk2als: un proyecto guardado sin este ajuste es de antes de las pistas
+	// de audio, asi que todos sus canales siguen siendo MIDI
+	FindVariable(VAR_AUDIOTRACKS)->SetInt(0) ;
 
 	// Now loop on all variables
 

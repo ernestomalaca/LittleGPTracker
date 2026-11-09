@@ -98,6 +98,9 @@ SampleInstrument::SampleInstrument() {
 	 slices_=new Variable("slices",SIP_SLICES,1) ;
 	 Insert(slices_) ;
 
+	 loopBars_=new Variable("loop bars",SIP_LOOPBARS,1,16) ;
+	 Insert(loopBars_) ;
+
 	 loopStart_=new WatchedVariable("loopstart",SIP_LOOPSTART,0) ;
 	 Insert(loopStart_) ;
 	 loopStart_->AddObserver(*this) ;
@@ -290,6 +293,10 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 			SyncMaster *sm=SyncMaster::GetInstance() ;
 			int sampleCount=int(sm->GetTickSampleCount()) ;
 			sampleCount*=(6*16) ; 
+			{ // trk2als: la region dura 'loop bars' compases (1 por defecto)
+				int bars=loopBars_->GetInt() ;
+				sampleCount*=(bars<1)?1:bars ;
+			}
 			rp->baseSpeed_=fl2fp(length/float(sampleCount)) ;
       rp->rendFirst_ = rp->rendLoopStart_;
       if (cleanstart) {

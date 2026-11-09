@@ -49,6 +49,8 @@ enum SampleInstrumentLoopMode {
 #define SIP_PRINTFX MAKE_FOURCC('P', 'R', 'F', 'X')
 #define SIP_IR_PAD MAKE_FOURCC('I', 'R', 'P', 'D')
 #define SIP_IR_WET MAKE_FOURCC('I', 'R', 'W', 'T')
+// trk2als: compases que dura la region del loop en modo looper sync
+#define SIP_LOOPBARS MAKE_FOURCC('L', 'B', 'A', 'R')
 
 #define FB_BUFFER_LENGTH 3500 // (in samples)
 
@@ -131,6 +133,7 @@ private:
 	   Variable *pan_ ;
 	   Variable *loopMode_ ;
 	   Variable *slices_ ;
+	   Variable *loopBars_ ;
 	   Variable *interpolation_ ;
        Variable *printFx_;
        Variable *irPad_;

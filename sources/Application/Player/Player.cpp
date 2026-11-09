@@ -11,6 +11,7 @@
 #include <math.h>
 #include <string.h>
 #include "Services/Midi/MidiService.h"
+#include "Application/Instruments/SampleInstrument.h"
 
 // Private constructor - Singleton
 
@@ -104,6 +105,7 @@ void Player::Start(PlayMode mode, bool forceSongMode) {
         mixer_->StopChannel(i);
         timeToLive_[i] = 0;
         timeToStart_[i]=0;
+        audioStarted_[i] = false;
 		TablePlayback &tpb=TablePlayback::GetTablePlayback(i);
 		tpb.Stop();
     }
@@ -394,11 +396,70 @@ bool Player::IsRunning() { return isRunning_; }
 
 bool Player::Clipped() { return mixer_->Clipped(); }
 
+/************************************************************
+ trk2als: pistas de audio
+ ************************************************************/
+
+#define AUDIO_PHRASE 0xFE // phrase virtual de un canal de audio
+
+bool Player::isAudio(int channel) {
+    return project_ && project_->IsAudioChannel(channel);
+}
+
+int Player::audioBars(uchar clip) {
+    if (clip >= MAX_SAMPLEINSTRUMENT_COUNT) return 0;
+    I_Instrument *instr = project_->GetInstrumentBank()->GetInstrument(clip);
+    if (!instr || instr->GetType() != IT_SAMPLE) return 0;
+    Variable *v = instr->FindVariable(SIP_LOOPBARS);
+    int bars = v ? v->GetInt() : 1;
+    return (bars < 1) ? 1 : ((bars > 16) ? 16 : bars);
+}
+
+// Contenido de la chain en una posición; en canales de audio, una chain virtual
+uchar Player::chainStep(int channel, uchar chain, int pos) {
+    if (chain == 0xFF || pos < 0 || pos > 15) return 0xFF;
+    if (isAudio(channel)) {
+        return (pos < audioBars(chain)) ? AUDIO_PHRASE : 0xFF;
+    }
+    return viewData_->song_->chain_->data_[16 * chain + pos];
+}
+
+// Arranca el loop al entrar a la celda (o al empezar a tocar a media celda,
+// con un offset para que quede en fase con el compás)
+void Player::playAudioCell(int channel) {
+    uchar clip = viewData_->currentPlayChain_[channel];
+    if (clip == 0xFF || viewData_->currentPlayPhrase_[channel] == 0xFF) return;
+    int cpos = viewData_->chainPlayPos_[channel];
+    int pos = viewData_->phrasePlayPos_[channel];
+    bool atStart = (cpos == 0 && pos == 0);
+    if (audioStarted_[channel] && !atStart) return;
+
+    int bars = audioBars(clip);
+    if (bars == 0) return;
+    I_Instrument *instrument =
+        project_->GetInstrumentBank()->GetInstrument(clip);
+    Variable *root = instrument->FindVariable(SIP_ROOTNOTE);
+    int note = root ? root->GetInt() : 60;
+
+    mixer_->StopInstrument(channel);
+    mixer_->StartInstrument(channel, instrument, note, true);
+    if (!atStart) {
+        int step = cpos * 16 + pos;
+        int offset = (step * 256) / (bars * 16);
+        if (offset > 0xFF) offset = 0xFF;
+        instrument->ProcessCommand(channel, I_CMD_PLOF, (ushort)(offset << 8));
+    }
+    instrumentOnChannel_[channel][0] = '0' + (clip / 16 > 9 ? 7 : 0) + clip / 16;
+    instrumentOnChannel_[channel][1] = '0' + (clip % 16 > 9 ? 7 : 0) + clip % 16;
+    instrumentOnChannel_[channel][2] = '\0';
+    audioStarted_[channel] = true;
+}
+
 bool Player::isPlayable(int row, int col, int chainPos) {
 
     uchar *chain = viewData_->song_->data_ + 8 * row + col;
     if (*chain != 0xFF) {
-        uchar data = viewData_->song_->chain_->data_[16 * (*chain) + chainPos];
+        uchar data = chainStep(col, *chain, chainPos);
     	return (data!=0xFF);
     }
     return false;
@@ -410,7 +471,7 @@ bool Player::findPlayable(uchar *row, int col, uchar chainPos) {
 
     uchar *chain = viewData_->song_->data_ + 8 * (*row) + col;
     if (*chain != 0xFF) {
-        uchar data=viewData_->song_->chain_->data_[16*(*chain)+chainPos];
+        uchar data = chainStep(col, *chain, chainPos);
         return (data != 0xFF);
     }
 
@@ -445,7 +506,7 @@ bool Player::findPlayable(uchar *row, int col, uchar chainPos) {
     chain = viewData_->song_->data_ + 8 * (*row) + col;
     uchar data=0xFF;
     if (*chain != 0xFF) {
-        data=viewData_->song_->chain_->data_[16*(*chain)+chainPos];
+        data = chainStep(col, *chain, chainPos);
     }
     return (data!=0xFF);
 }
@@ -587,7 +648,7 @@ void Player::ProcessCommands() {
             // check if there's any phrase playing
 
             uchar phrase = viewData_->currentPlayPhrase_[i];
-            if (phrase!=0xFF) {
+            if (phrase != 0xFF && !isAudio(i)) {
                 if (gs->TriggerChannel(
                         i)) { // If groove says it is time to play
                     int pos=viewData_->phrasePlayPos_[i];
@@ -749,6 +810,7 @@ void Player::updateSongPos(int pos, int channel, int chainPos, int hop) {
     unsigned char *data = viewData_->song_->data_ + channel + 8 * pos;
     viewData_->songPlayPos_[channel]=pos;
 	viewData_->currentPlayChain_[channel]=*data;
+    audioStarted_[channel] = false;
     updateChainPos(chainPos, channel, hop);
 }
 
@@ -761,7 +823,8 @@ void Player::updateChainPos(int pos, int channel, int hop) {
     unsigned char chain=viewData_->currentPlayChain_[channel];
     if (chain != 0xFF) {
         viewData_->chainPlayPos_[channel]=pos;
-		unsigned char *data=viewData_->song_->chain_->data_+(16*chain+pos);
+		unsigned char step = chainStep(channel, chain, pos);
+		unsigned char *data = &step;
 		viewData_->currentPlayPhrase_[channel]=*data;
         if (*data == 0xFF) { // This could happen if starting in song mode on a
                              // row where a chain contains no phrase
@@ -787,6 +850,7 @@ void Player::updatePhrasePos(int pos, int channel) {
     timeToStart_[channel] = 1;
 
     uchar phrase = viewData_->currentPlayPhrase_[channel];
+    if (isAudio(channel) || phrase == 0xFF) return; // sin comandos
 
     // Check both param colum 1 & 2
 
@@ -804,6 +868,11 @@ void Player::updatePhrasePos(int pos, int channel) {
 }
 
 void Player::playCursorPosition(int channel) {
+
+    if (isAudio(channel)) {
+        playAudioCell(channel);
+        return;
+    }
 
     int pos = viewData_->phrasePlayPos_[channel];
 
@@ -902,6 +971,7 @@ void Player::playCursorPosition(int channel) {
 int Player::getChannelHop(int channel, int pos) {
 
     int phrase = viewData_->currentPlayPhrase_[channel];
+    if (isAudio(channel) || phrase == 0xFF) return -1;
 
     Phrase *song_phrase = viewData_->song_->phrase_;
     FourCC cc[] = {song_phrase->cmd1_[phrase * 16 + pos],
@@ -1043,9 +1113,7 @@ void Player::moveToNextPhrase(int channel, int hop) {
 
     bool canContinue = (pos < 16);
     if (canContinue) {
-        unsigned char *data =
-            viewData_->song_->chain_->data_ + (16 * chain + pos);
-        canContinue = (*data != 0xFF);
+        canContinue = (chainStep(channel, chain, pos) != 0xFF);
     }
 
     // If so, we trigger it. Otherwise, we go to the next phrase
@@ -1120,7 +1188,7 @@ void Player::moveToNextChain(int channel, int hop) {
     	bool loopBack=(*data==0xFF);
         // Check if first step of chain contains somethin, if not we loop back
         if (!loopBack) {
-            unsigned char step = viewData_->song_->chain_->data_[*data * 16];
+            unsigned char step = chainStep(channel, *data, 0);
             loopBack = (step == 0xFF);
         }
         if (loopBack) {
@@ -1130,7 +1198,7 @@ void Player::moveToNextChain(int channel, int hop) {
                 if (*data == 0xFF) { // we stop searching if there's a blank
                     break;
                 } else { // Or if first phrase of chain is empty
-                    if (viewData_->song_->chain_->data_[(*data) * 16] == 0xFF) {
+                    if (chainStep(channel, *data, 0) == 0xFF) {
                         break;
                     }
                 }

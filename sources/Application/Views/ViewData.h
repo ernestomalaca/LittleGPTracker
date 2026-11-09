@@ -67,6 +67,7 @@ public:
 	int currentPhrase_ ;        // .Current edited phrase
 
 	int currentInstrument_ ;    // .Current edited instrument
+	bool instrumentFromSong_ ;  // .trk2als: se abrió desde un loop de la song
 
 	int currentTable_ ;			// .Current edited table
 

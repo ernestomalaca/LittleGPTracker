@@ -204,6 +204,13 @@ void InstrumentView::fillSampleParameters() {
 	f1=new UIIntVarField(position,*v,"slices: %2.2X",1,0xFF,1,0x10) ;
 	T_SimpleList<UIField>::Insert(f1) ;
 
+	// trk2als: compases del loop en modo looper sync
+	v=instrument->FindVariable(SIP_LOOPBARS) ;
+	position._x+=14 ;
+	f1=new UIIntVarField(position,*v,"bars: %2d",1,16,1,4) ;
+	T_SimpleList<UIField>::Insert(f1) ;
+	position._x-=14 ;
+
 	position._y+=1 ;
 	v=instrument->FindVariable(SIP_START) ;
 	f1=new UIBigHexVarField(position,*v,7,"start: %7.7X",0,instrument->GetSampleSize()-1,16) ;
@@ -403,7 +410,9 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 
             if (mask & EPBM_R) {
                 if (mask & EPBM_LEFT) {
-                    ViewType vt = VT_PHRASE;
+                    // trk2als: si vino de un loop de la song, regresa a la song
+                    ViewType vt = viewData_->instrumentFromSong_ ? VT_SONG : VT_PHRASE;
+                    viewData_->instrumentFromSong_ = false;
                     ViewEvent ve(VET_SWITCH_VIEW, &vt);
                     SetChanged();
                     NotifyObservers(&ve);

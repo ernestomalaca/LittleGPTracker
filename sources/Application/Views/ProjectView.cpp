@@ -157,6 +157,12 @@ ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
         new UIIntVarField(position, *v, "Scale: %s", 0, scaleCount - 1, 1, 10);
     T_SimpleList<UIField>::Insert(field);
 
+    // trk2als: cuántos canales (desde el último) son pistas de audio
+    v = project_->FindVariable(VAR_AUDIOTRACKS);
+    position._y += 1;
+    field = new UIIntVarField(position, *v, "Audio tracks: %d", 0, 8, 1, 2);
+    T_SimpleList<UIField>::Insert(field);
+
     position._y += 2;
     UIActionField *a1 =
         new UIActionField("Compact Sequencer", ACTION_PURGE, position);
