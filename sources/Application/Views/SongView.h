@@ -61,6 +61,7 @@ class SongView : public View {
 
     bool isAudioColumn(int x); // .trk2als: la columna es una pista de audio
     void prepareClip(unsigned char clip); // .pone el instrumento en looper sync
+    unsigned char freeClip(); // .primer instrumento que no usa ninguna phrase ni pista de audio
 
     int lastPlayedPosition_[8]; // .Last position played for song
                                 //  used for drawing purpose

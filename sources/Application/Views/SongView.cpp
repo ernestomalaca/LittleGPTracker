@@ -24,7 +24,7 @@ SongView::SongView(GUIWindow &w, ViewData *viewData, const char *song)
 
     updatingChain_ = false;
     lastChain_ = 0;
-    lastClip_ = 0;
+    lastClip_ = 0xFF; // trk2als: sin loop todavía
     songname_ = song;
 
     for (int i = 0; i < 8; i++) {
@@ -73,11 +73,31 @@ void SongView::prepareClip(unsigned char clip) {
     (void)instr;
 }
 
+unsigned char SongView::freeClip() {
+    bool used[MAX_SAMPLEINSTRUMENT_COUNT] = {false};
+    Song *song = viewData_->song_;
+    for (int i = 0; i < PHRASE_COUNT * 16; i++) {
+        unsigned char ins = song->phrase_->instr_[i];
+        if (ins < MAX_SAMPLEINSTRUMENT_COUNT) used[ins] = true;
+    }
+    for (int row = 0; row < 256; row++) {
+        for (int ch = 0; ch < SONG_CHANNEL_COUNT; ch++) {
+            unsigned char c = song->data_[row * SONG_CHANNEL_COUNT + ch];
+            if (isAudioColumn(ch) && c < MAX_SAMPLEINSTRUMENT_COUNT) used[c] = true;
+        }
+    }
+    for (int i = 0; i < MAX_SAMPLEINSTRUMENT_COUNT; i++) {
+        if (!used[i]) return (unsigned char)i;
+    }
+    return 0xFF;
+}
+
 void SongView::updateChain(int offset) {
 
     if (isAudioColumn(viewData_->songX_)) {
         unsigned char *c = viewData_->GetCurrentSongPointer();
-        int v = (*c == 0xFF) ? lastClip_ : *c + offset;
+        int v = (*c == 0xFF) ? ((lastClip_ == 0xFF) ? freeClip() : lastClip_) : *c + offset;
+        if (v == 0xFF) return; // no hay instrumentos libres
         if (v < 0) v = 0;
         if (v > MAX_SAMPLEINSTRUMENT_COUNT - 1) v = MAX_SAMPLEINSTRUMENT_COUNT - 1;
         *c = (unsigned char)v;
@@ -166,8 +186,10 @@ void SongView::pasteLast() {
     unsigned char *c = viewData_->GetCurrentSongPointer();
     if (isAudioColumn(viewData_->songX_)) { // trk2als: el último loop
         if (*c == 0xFF) {
-            *c = lastClip_;
-            prepareClip(*c);
+            unsigned char clip = (lastClip_ == 0xFF) ? freeClip() : lastClip_;
+            if (clip == 0xFF) return;
+            *c = clip;
+            lastClip_ = clip;
             isDirty_ = true;
         } else {
             lastClip_ = *c;
@@ -653,7 +675,17 @@ void SongView::ProcessButtonMask(unsigned short mask, bool pressed) {
     };
 
     if (viewMode_ == VM_NEW && isAudioColumn(viewData_->songX_)) {
-        viewMode_ = VM_NORMAL; // trk2als: no hay chain nueva que crear
+        // trk2als: A otra vez = loop nuevo (un instrumento libre), como la chain nueva en MIDI
+        if (mask == EPBM_A) {
+            unsigned char clip = freeClip();
+            if (clip != 0xFF) {
+                *viewData_->GetCurrentSongPointer() = clip;
+                lastClip_ = clip;
+                isDirty_ = true;
+            }
+            mask &= (0xFFFF - EPBM_A);
+        }
+        viewMode_ = VM_NORMAL;
     }
 
     if (viewMode_ == VM_NEW) {

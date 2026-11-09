@@ -34,6 +34,36 @@ SampleInstrumentLoopMode SampleInstrument::effectiveLoopMode(renderParams *rp) {
 	return rp->forceSync_ ? SILM_LOOPSYNC : (SampleInstrumentLoopMode)loopMode_->GetInt() ;
 }
 
+// trk2als: parámetros en vivo. Start() copia los valores del instrumento a la
+// voz; si después cambian en la pantalla del instrumento, se aplican a la voz que
+// ya está sonando (útil para loops largos de las pistas de audio)
+void SampleInstrument::snapshotLive(renderParams *rp) {
+	rp->liveVol_=volume_->GetInt() ;
+	rp->livePan_=pan_->GetInt() ;
+	rp->liveCut_=cutoff_->GetInt() ;
+	rp->liveRes_=reso_->GetInt() ;
+	rp->liveCrush_=crush_->GetInt() ;
+	rp->liveDrive_=drive_->GetInt() ;
+	rp->liveDs_=downsample_->GetInt() ;
+	rp->liveAtt_=attenuate_->GetInt() ;
+	rp->liveFbTun_=fbTune_->GetInt() ;
+	rp->liveFbMix_=fbMix_->GetInt() ;
+}
+
+void SampleInstrument::applyLive(renderParams *rp) {
+	int v ;
+	if ((v=volume_->GetInt())!=rp->liveVol_) { rp->liveVol_=v ; rp->volume_=rp->baseVolume_=i2fp(v) ; }
+	if ((v=pan_->GetInt())!=rp->livePan_) { rp->livePan_=v ; rp->pan_=rp->basePan_=i2fp(v) ; }
+	if ((v=cutoff_->GetInt())!=rp->liveCut_) { rp->liveCut_=v ; rp->cutoff_=rp->baseFCut_=fl2fp(v/255.0f) ; }
+	if ((v=reso_->GetInt())!=rp->liveRes_) { rp->liveRes_=v ; rp->reso_=rp->baseFRes_=fl2fp(v/255.0f) ; }
+	if ((v=crush_->GetInt())!=rp->liveCrush_) { rp->liveCrush_=v ; rp->crush_=v ; }
+	if ((v=drive_->GetInt())!=rp->liveDrive_) { rp->liveDrive_=v ; rp->drive_=v ; }
+	if ((v=downsample_->GetInt())!=rp->liveDs_) { rp->liveDs_=v ; rp->downsample_=v ; }
+	if ((v=attenuate_->GetInt())!=rp->liveAtt_) { rp->liveAtt_=v ; rp->attenuate_=i2fp(v) ; }
+	if ((v=fbTune_->GetInt())!=rp->liveFbTun_) { rp->liveFbTun_=v ; rp->fbTun_=rp->baseFbTun_=fl2fp(v/255.0f) ; }
+	if ((v=fbMix_->GetInt())!=rp->liveFbMix_) { rp->liveFbMix_=v ; rp->fbMix_=rp->baseFbMix_=fl2fp(v/255.0f) ; }
+}
+
 int SampleInstrument::lastMidiNote_[SONG_CHANNEL_COUNT]= {
 	-1,-1,-1,-1,-1,-1,-1,-1
 } ;
@@ -400,6 +430,7 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 
 		rp->activeUpdaters_.clear() ;
 	}	
+	snapshotLive(rp) ; // trk2als
 	return true ;
 }
 
@@ -497,6 +528,8 @@ bool SampleInstrument::Render(int channel, fixed *buffer, int size, int flags) {
         // clear the fixed point buffer
 
         SYS_MEMSET(buffer, 0, size * 2 * sizeof(fixed));
+
+        applyLive(rp); // trk2als: cambios del instrumento en vivo
 
         // trk2als: looper sync sigue al tempo en tiempo real. Si cambió la
         // duración del tick, se reescala la velocidad (con su transposición)

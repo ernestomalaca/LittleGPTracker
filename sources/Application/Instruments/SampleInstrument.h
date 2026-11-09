@@ -120,6 +120,8 @@ private:
 	   static int lastMidiNote_[SONG_CHANNEL_COUNT] ;
 	   static bool syncRequest_[SONG_CHANNEL_COUNT] ; // trk2als
 	   SampleInstrumentLoopMode effectiveLoopMode(renderParams *rp) ;
+	   void snapshotLive(renderParams *rp) ;  // trk2als
+	   void applyLive(renderParams *rp) ;     // trk2als
 	   static fixed lastSample_[SONG_CHANNEL_COUNT][2] ;
 	   static fixed feedback_[SONG_CHANNEL_COUNT][FB_BUFFER_LENGTH*2] ;
 
