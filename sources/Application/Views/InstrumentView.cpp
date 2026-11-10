@@ -108,7 +108,7 @@ void InstrumentView::fillSampleParameters() {
 	InstrumentBank *bank=viewData_->project_->GetInstrumentBank() ;
 	I_Instrument *instr=bank->GetInstrument(i) ;
 	SampleInstrument *instrument=(SampleInstrument *)instr  ;
-	audioMode_=viewData_->instrumentFromSong_ || viewData_->project_->IsAudioInstrument(i) ;
+	audioMode_=viewData_->project_->IsAudioInstrument(i) ;
 	const int L=1, R=21 ;
 	int row=10 ;
 	labelCount_=0 ;
@@ -117,7 +117,11 @@ void InstrumentView::fillSampleParameters() {
 	GUIPoint pt ;
 #define ADD(f) T_SimpleList<UIField>::Insert(f)
 #define AT(x) (pt=GUIPoint(x,row))
-#define LABEL(t) { labelRow_[labelCount_]=row ; labelText_[labelCount_++]=t ; row++ ; }
+// un renglón vacío antes de cada bloque mientras quepa (en la pantalla completa
+// solo caben dos)
+	int gaps=audioMode_?4:2 ;
+#define LABEL(t) { if (gaps>0) { row++ ; gaps-- ; } \
+                   labelRow_[labelCount_]=row ; labelText_[labelCount_++]=t ; row++ ; }
 
 	// el primero de la lista (A en él = vaciar instrumento)
 	v=instrument->FindVariable(SIP_SAMPLE) ;
