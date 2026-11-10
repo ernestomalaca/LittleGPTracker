@@ -18,6 +18,14 @@ public:
 	virtual void DrawString(const char *string,GUIPoint &pos,GUITextProperties& p,bool overlay)=0 ;
 	virtual void DrawChar(const char c,GUIPoint &pos,GUITextProperties &)=0;
 
+	// trk2als: pinceles. Coordenadas en pixeles de 640x480 (una celda = 16x16),
+	// sin importar el tamaño real de la ventana. Por defecto no hacen nada.
+	virtual bool SupportsShapes() { return false ; } ;
+	virtual void FillRoundRect(GUIRect &,int radius,GUIColor &) {} ;
+	virtual void FrameRoundRect(GUIRect &,int radius,int thick,GUIColor &) {} ;
+	// texto encima de lo que ya está dibujado (sin fondo); scale 1 = celda de 16
+	virtual void BlendText(const char *,GUIPoint &,GUIColor &,int scale) {} ;
+
 	virtual GUIRect GetRect()=0 ;
 	virtual void Invalidate()=0 ;
 	virtual void Lock()=0 ;

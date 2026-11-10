@@ -34,6 +34,12 @@ void GUIWindow::DrawString(const char *string,GUIPoint &pos,GUITextProperties &p
 	_imp->DrawString(string,pos,props,overlay) ;
 }
 
+// trk2als: pinceles, pasan directo a la implementación
+bool GUIWindow::SupportsShapes() { return _imp->SupportsShapes() ; }
+void GUIWindow::FillRoundRect(GUIRect &r,int radius,GUIColor &c) { _imp->FillRoundRect(r,radius,c) ; }
+void GUIWindow::FrameRoundRect(GUIRect &r,int radius,int thick,GUIColor &c) { _imp->FrameRoundRect(r,radius,thick,c) ; }
+void GUIWindow::BlendText(const char *s,GUIPoint &p,GUIColor &c,int scale) { _imp->BlendText(s,p,c,scale) ; }
+
 void GUIWindow::DrawChar(const char c,GUIPoint &pos,GUITextProperties &props) {
 	_imp->DrawChar(c,pos,props) ;
 }

@@ -18,6 +18,9 @@
 #include "System/io/Status.h"
 #include "UIFramework/SimpleBaseClasses/GUIWindow.h"
 
+#include <vector>
+#include <string>
+
 #define PROP_INVERT 0x80
 
 class AppWindow : public GUIWindow, I_Observer, Status {
@@ -35,6 +38,17 @@ class AppWindow : public GUIWindow, I_Observer, Status {
     virtual void ClearRect(GUIRect &rect);
     virtual void SetColor(ColorDefinition cd);
     void SetDirty();
+
+    // trk2als: capa de figuras (pinceles) sobre la rejilla de caracteres.
+    // Coordenadas de 640x480. Las figuras se quedan hasta ClearShapes(); al
+    // cambiar de pantalla se borran solas. Se dibujan encima del fondo de las
+    // celdas y debajo de su texto.
+    bool SupportsShapes();
+    void ClearShapes();
+    void AddRect(int x, int y, int w, int h, GUIColor color, int radius = 0,
+                 int thick = 0);
+    void AddText(int x, int y, const char *text, GUIColor color, int scale = 1);
+    GUIColor GetColor(ColorDefinition cd);
 
   protected: // GUIWindow implementation
     virtual bool onEvent(GUIEvent &event);
@@ -89,6 +103,18 @@ class AppWindow : public GUIWindow, I_Observer, Status {
     unsigned char _charScreenProp[1200];
     unsigned char _preScreen[1200];
     unsigned char _preScreenProp[1200];
+
+    struct Shape {
+        int type; // 0 = rectángulo, 1 = texto
+        int x, y, w, h, radius, thick, scale;
+        GUIColor color;
+        std::string text;
+        Shape() : type(0), x(0), y(0), w(0), h(0), radius(0), thick(0),
+                  scale(1), color(0, 0, 0) {}
+    };
+    std::vector<Shape> _shapes;
+    bool _shapeCells[1200];     // celdas tapadas por figuras en este cuadro
+    bool _prevShapeCells[1200]; // ... y en el anterior (hay que redibujarlas)
 
     static GUIColor backgroundColor_;
     static GUIColor normalColor_;

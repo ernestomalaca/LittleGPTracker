@@ -119,6 +119,17 @@ class View : public Observable {
 
     virtual void SetColor(ColorDefinition cd);
     virtual void ClearRect(int x, int y, int w, int h);
+    // trk2als: pinceles, en pixeles de 640x480 (una celda de texto = 16x16)
+    bool SupportsShapes();
+    bool HasModal() { return modalView_ != 0; };
+    void ClearShapes();
+    void FillRect(int x, int y, int w, int h, GUIColor c, int radius = 0);
+    void FrameRect(int x, int y, int w, int h, GUIColor c, int radius = 0,
+                   int thick = 2);
+    void DrawText(int x, int y, const char *txt, GUIColor c, int scale = 1);
+    GUIColor ColorOf(ColorDefinition cd);
+    static GUIColor Mix(GUIColor a, GUIColor b, int amount); // 0=a .. 255=b
+
     virtual void DrawString(int x, int y, const char *txt,
                             GUITextProperties &props);
 

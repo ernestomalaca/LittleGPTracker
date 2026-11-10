@@ -68,5 +68,16 @@ private:
 	bool hdFont_ ;   // trk2als: fuente nítida de 16x16 (pantallas de 640x480)
 	int hdScale_ ;
 	void drawHDChar(unsigned char c,int xx,int yy,GUITextProperties &p) ;
+public: // trk2als: pinceles
+	virtual bool SupportsShapes() { return true ; } ;
+	virtual void FillRoundRect(GUIRect &,int radius,GUIColor &) ;
+	virtual void FrameRoundRect(GUIRect &,int radius,int thick,GUIColor &) ;
+	virtual void BlendText(const char *,GUIPoint &,GUIColor &,int scale) ;
+private:
+	int hdToWin(int v) { return (v*mult_)/2 ; } ;
+	void markUpdate(int x,int y,int w,int h) ;
+	Uint32 readPixel(int x,int y) ;
+	void writePixel(int x,int y,Uint32 v) ;
+	void fillRoundRows(int x,int y,int w,int h,int r,int thick,Uint32 color) ;
 } ;
 #endif

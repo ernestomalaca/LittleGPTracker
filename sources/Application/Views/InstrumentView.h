@@ -30,5 +30,10 @@ private:
 	I_Instrument *current_ ;
 	int lastSampleIdx_ ;     // trk2als: para detectar el BPM al cambiar de sample
 	GUIPoint bpmInfoPos_ ;   // trk2als: dónde dibujar '85>100 +2.8st'
+	// trk2als: forma de onda del sample (picos precalculados por barra)
+	void drawWaveform() ;
+	int wfSample_ ;
+	int wfSize_ ;
+	unsigned char wfPeaks_[64] ;
 } ;
 #endif

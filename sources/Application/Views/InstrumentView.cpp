@@ -24,6 +24,8 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data) {
 	lastFocusID_=0 ;
 	current_=0 ;
 	lastSampleIdx_=-2 ;
+	wfSample_=-1 ;
+	wfSize_=0 ;
 	onInstrumentChange() ;
 }
 
@@ -495,6 +497,7 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 void InstrumentView::DrawView() {
 
 	Clear() ;
+	ClearShapes() ; // trk2als
     View::EnableNotification();
 
     GUITextProperties props;
@@ -530,7 +533,77 @@ void InstrumentView::DrawView() {
             SetColor(CD_NORMAL) ;
         }
     }
+    drawWaveform() ; // trk2als
 } ;
+
+/************************************************************
+ trk2als: forma de onda con los pinceles. Barras en gris; la región que suena
+ en loop (loop start .. loop end) en el color de resaltado; una línea donde
+ arranca el sample (start).
+ ************************************************************/
+
+void InstrumentView::drawWaveform() {
+	if (!SupportsShapes() || !current_ || current_->GetType()!=IT_SAMPLE) return ;
+	SampleInstrument *si=(SampleInstrument *)current_ ;
+	int index=si->GetSampleIndex() ;
+	if (index<0) return ;
+	SoundSource *src=SamplePool::GetInstance()->GetSource(index) ;
+	if (!src) return ;
+	int size=src->GetSize(-1) ;
+	short *data=(short *)src->GetSampleBuffer(-1) ;
+	int channels=src->GetChannelCount(-1) ;
+	if (size<=0 || !data || channels<1) return ;
+
+	const int BARS=58 ;              // barras de 6 px cada 8 px
+	if (index!=wfSample_ || size!=wfSize_) {
+		for (int b=0;b<BARS;b++) {
+			int from=int((long long)size*b/BARS) ;
+			int to=int((long long)size*(b+1)/BARS) ;
+			int step=(to-from)/200+1 ;      // basta con unas 200 lecturas por barra
+			int peak=0 ;
+			for (int i=from;i<to;i+=step) {
+				int v=data[i*channels] ;
+				if (v<0) v=-v ;
+				if (v>peak) peak=v ;
+			}
+			wfPeaks_[b]=(unsigned char)(peak>>7) ;   // 0..255
+		}
+		wfSample_=index ;
+		wfSize_=size ;
+	}
+
+	int X=160, Y=18, W=BARS*8, H=42 ;
+	GUIColor bg=ColorOf(CD_BACKGROUND) ;
+	GUIColor fg=ColorOf(CD_NORMAL) ;
+	GUIColor hi=ColorOf(CD_HILITE1) ;
+	GUIColor panel=Mix(bg,fg,18) ;
+	GUIColor dim=Mix(bg,fg,70) ;
+	FillRect(X-4,Y-4,W+6,H+8,panel,6) ;
+
+	int ls=si->FindVariable(SIP_LOOPSTART)->GetInt() ;
+	int le=si->FindVariable(SIP_END)->GetInt() ;
+	int st=si->FindVariable(SIP_START)->GetInt() ;
+	if (le<=0 || le>size) le=size ;
+	int mid=Y+H/2 ;
+	for (int b=0;b<BARS;b++) {
+		int pos=int((long long)size*b/BARS) ;
+		bool inLoop=(pos>=ls && pos<le) ;
+		int h=(wfPeaks_[b]*H)/255 ;
+		if (h<2) h=2 ;
+		FillRect(X+b*8,mid-h/2,6,h,inLoop?hi:dim,2) ;
+	}
+	// dónde arranca el sample
+	int sx=X+int((long long)st*W/size) ;
+	FillRect(sx-1,Y-2,2,H+4,ColorOf(CD_PLAY)) ;
+	// duración del sample, texto libre arriba a la derecha
+	int rate=src->GetSampleRate(-1) ;
+	if (rate>0) {
+		char len[16] ;
+		int cs=int((long long)size*100/rate) ;
+		sprintf(len,"%d.%02ds",cs/100,cs%100) ;
+		DrawText(X+W-16*int(strlen(len)),0,len,dim) ;
+	}
+}
 
 void InstrumentView::OnFocus() { onInstrumentChange(); }
 

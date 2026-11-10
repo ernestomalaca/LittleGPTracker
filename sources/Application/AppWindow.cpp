@@ -142,6 +142,8 @@ AppWindow::AppWindow(I_GUIWindowImp &imp) : GUIWindow(imp) {
         _currentView->DoModal(spd, ProjectSelectCallback);
     }
 
+    memset(_shapeCells, 0, sizeof(_shapeCells));
+    memset(_prevShapeCells, 0, sizeof(_prevShapeCells));
     memset(_charScreen, ' ', 1200);
     memset(_preScreen, ' ', 1200);
     memset(_charScreenProp, 0, 1200);
@@ -235,75 +237,57 @@ void AppWindow::Flush() {
 
     int count = 0;
 
+    // trk2als: celdas tapadas por figuras. Las figuras no se dibujan si hay un
+    // diálogo encima o si la plataforma no sabe dibujarlas.
+    bool shapesOn = !_shapes.empty() && SupportsShapes() && _currentView &&
+                    !_currentView->HasModal();
+    memset(_shapeCells, 0, sizeof(_shapeCells));
+    if (shapesOn) {
+        for (size_t i = 0; i < _shapes.size(); i++) {
+            Shape &sh = _shapes[i];
+            int w = sh.w, h = sh.h;
+            if (sh.type == 1) {
+                w = 16 * sh.scale * (int)sh.text.size();
+                h = 16 * sh.scale;
+            }
+            int cx0 = MAX(0, sh.x / 16), cy0 = MAX(0, sh.y / 16);
+            int cx1 = MIN(39, (sh.x + w - 1) / 16), cy1 = MIN(29, (sh.y + h - 1) / 16);
+            for (int cy = cy0; cy <= cy1; cy++)
+                for (int cx = cx0; cx <= cx1; cx++)
+                    _shapeCells[cx + 40 * cy] = true;
+        }
+    }
+
     unsigned char *current = _charScreen;
     unsigned char *previous = _preScreen;
     unsigned char *currentProp = _charScreenProp;
     unsigned char *previousProp = _preScreenProp;
     for (int y = 0; y < 30; y++) {
         for (int x = 0; x < 40; x++) {
-#ifndef _LGPT_NO_SCREEN_CACHE_
-            if ((*current != *previous) || (*currentProp != *previousProp)) {
+            int cell = x + 40 * y;
+            bool covered = _shapeCells[cell];
+            bool dirty = (*current != *previous) || (*currentProp != *previousProp) ||
+                         covered || _prevShapeCells[cell];
+#ifdef _LGPT_NO_SCREEN_CACHE_
+            dirty = true;
 #endif
+            if (dirty) {
                 props.invert_ = (*currentProp & PROP_INVERT) != 0;
                 if (((*currentProp) & 0x7F) != color) {
                     color = (ColorDefinition)((*currentProp) & 0x7F);
-                    GUIColor gcolor = normalColor_;
-                    switch (color) {
-                    case CD_BACKGROUND:
-                        gcolor = backgroundColor_;
-                        break;
-                    case CD_NORMAL:
-                        break;
-                    case CD_BORDER:
-                        gcolor = borderColor_;
-                        break;
-                    case CD_HILITE1:
-                        gcolor = highlightColor_;
-                        break;
-                    case CD_HILITE2:
-                        gcolor = highlight2Color_;
-                        break;
-                    case CD_CONSOLE:
-                        gcolor = consoleColor_;
-                        break;
-                    case CD_CURSOR:
-                        gcolor = cursorColor_;
-                        break;
-                    case CD_PLAY:
-                        gcolor = playColor_;
-                        break;
-                    case CD_MUTE:
-                        gcolor = muteColor_;
-                        break;
-                    case CD_SONGVIEWFE:
-                        gcolor = songviewfeColor_;
-                        break;
-                    case CD_SONGVIEW00:
-                        gcolor = songview00Color_;
-                        break;
-                    case CD_ROW:
-                        gcolor = rownumberColor_;
-                        break;
-                    case CD_ROW2:
-                        gcolor = rownumber2Color_;
-                        break;
-                    case CD_MAJORBEAT:
-                        gcolor = majorbeatColor_;
-                        break;
-                    case CD_COL_TITLE:
-                        gcolor = columnTitleColor_;
-                        break;
-                    default:
-                        NAssert(0);
-                        break;
-                    }
+                    GUIColor gcolor = GetColor(color);
                     GUIWindow::SetColor(gcolor);
                 }
-                GUIWindow::DrawChar(*current, pos, props);
+                if (covered) {
+                    // solo el fondo; el texto va encima de las figuras
+                    GUIRect r(x * 16, y * 16, x * 16 + 16, y * 16 + 16);
+                    GUIColor bg = GetColor(CD_BACKGROUND);
+                    GUIWindow::FillRoundRect(r, 0, bg);
+                } else {
+                    GUIWindow::DrawChar(*current, pos, props);
+                }
                 count++;
-#ifndef _LGPT_NO_SCREEN_CACHE_
             }
-#endif
             current++;
             previous++;
             currentProp++;
@@ -313,6 +297,42 @@ void AppWindow::Flush() {
         pos._y += AppWindow::charHeight_;
         pos._x = 0;
     }
+
+    if (shapesOn) {
+        for (size_t i = 0; i < _shapes.size(); i++) {
+            Shape &sh = _shapes[i];
+            if (sh.type == 0) {
+                GUIRect r(sh.x, sh.y, sh.x + sh.w, sh.y + sh.h);
+                if (sh.thick > 0)
+                    GUIWindow::FrameRoundRect(r, sh.radius, sh.thick, sh.color);
+                else
+                    GUIWindow::FillRoundRect(r, sh.radius, sh.color);
+            } else {
+                GUIPoint p(sh.x, sh.y);
+                GUIWindow::BlendText(sh.text.c_str(), p, sh.color, sh.scale);
+            }
+        }
+        // el texto de la rejilla que cae sobre figuras, encima de ellas
+        for (int cell = 0; cell < 1200; cell++) {
+            if (!_shapeCells[cell]) continue;
+            unsigned char ch = _charScreen[cell];
+            unsigned char prop = _charScreenProp[cell];
+            GUIColor fg = GetColor((ColorDefinition)(prop & 0x7F));
+            int x = (cell % 40) * 16, y = (cell / 40) * 16;
+            if (prop & PROP_INVERT) {
+                GUIRect r(x, y, x + 16, y + 16);
+                GUIWindow::FillRoundRect(r, 0, fg);
+                fg = GetColor(CD_BACKGROUND);
+            }
+            if (ch != ' ') {
+                char str[2] = {(char)ch, 0};
+                GUIPoint p(x, y);
+                GUIWindow::BlendText(str, p, fg, 1);
+            }
+        }
+    }
+    memcpy(_prevShapeCells, _shapeCells, sizeof(_shapeCells));
+
     long flushEnd = System::GetInstance()->GetClock();
     GUIWindow::Flush();
     Unlock();
@@ -596,6 +616,7 @@ void AppWindow::Update(Observable &o, I_ObservableData *d) {
             _currentView = _mixerView;
             break;
         }
+        _shapes.clear(); // trk2als: las figuras son de la pantalla anterior
         _currentView->SetFocus(*vt);
         _isDirty = true;
         GUIWindow::Clear(backgroundColor_, true);
@@ -673,6 +694,54 @@ void AppWindow::Print(char *line) {
 };
 
 void AppWindow::SetColor(ColorDefinition cd) { colorIndex_ = cd; };
+
+/************************************************************
+ trk2als: pinceles
+ ************************************************************/
+
+GUIColor AppWindow::GetColor(ColorDefinition cd) {
+    switch (cd) {
+    case CD_BACKGROUND: return backgroundColor_;
+    case CD_BORDER: return borderColor_;
+    case CD_HILITE1: return highlightColor_;
+    case CD_HILITE2: return highlight2Color_;
+    case CD_CONSOLE: return consoleColor_;
+    case CD_CURSOR: return cursorColor_;
+    case CD_PLAY: return playColor_;
+    case CD_MUTE: return muteColor_;
+    case CD_SONGVIEWFE: return songviewfeColor_;
+    case CD_SONGVIEW00: return songview00Color_;
+    case CD_ROW: return rownumberColor_;
+    case CD_ROW2: return rownumber2Color_;
+    case CD_MAJORBEAT: return majorbeatColor_;
+    case CD_COL_TITLE: return columnTitleColor_;
+    default: return normalColor_;
+    }
+}
+
+bool AppWindow::SupportsShapes() { return GUIWindow::SupportsShapes(); }
+
+void AppWindow::ClearShapes() { _shapes.clear(); }
+
+void AppWindow::AddRect(int x, int y, int w, int h, GUIColor color, int radius,
+                        int thick) {
+    Shape sh;
+    sh.type = 0;
+    sh.x = x; sh.y = y; sh.w = w; sh.h = h;
+    sh.radius = radius; sh.thick = thick;
+    sh.color = color;
+    _shapes.push_back(sh);
+}
+
+void AppWindow::AddText(int x, int y, const char *text, GUIColor color, int scale) {
+    Shape sh;
+    sh.type = 1;
+    sh.x = x; sh.y = y;
+    sh.text = text;
+    sh.scale = scale;
+    sh.color = color;
+    _shapes.push_back(sh);
+}
 
 Path AppWindow::GetLastProjectPath() {
     Path lastProjectFile(LAST_PROJECT_NAME);

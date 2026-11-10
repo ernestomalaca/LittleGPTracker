@@ -241,6 +241,24 @@ void View::ClearRect(int x,int y,int w,int h) {
 	w_.ClearRect(rect) ;
 } ;
 
+// trk2als: pinceles
+bool View::SupportsShapes() { return ((AppWindow &)w_).SupportsShapes(); }
+void View::ClearShapes() { ((AppWindow &)w_).ClearShapes(); }
+void View::FillRect(int x, int y, int w, int h, GUIColor c, int radius) {
+	((AppWindow &)w_).AddRect(x, y, w, h, c, radius, 0);
+}
+void View::FrameRect(int x, int y, int w, int h, GUIColor c, int radius, int thick) {
+	((AppWindow &)w_).AddRect(x, y, w, h, c, radius, thick < 1 ? 1 : thick);
+}
+void View::DrawText(int x, int y, const char *txt, GUIColor c, int scale) {
+	((AppWindow &)w_).AddText(x, y, txt, c, scale);
+}
+GUIColor View::ColorOf(ColorDefinition cd) { return ((AppWindow &)w_).GetColor(cd); }
+GUIColor View::Mix(GUIColor a, GUIColor b, int t) {
+	return GUIColor((a._r * (255 - t) + b._r * t) / 255, (a._g * (255 - t) + b._g * t) / 255,
+	                (a._b * (255 - t) + b._b * t) / 255);
+}
+
 void View::DrawString(int x,int y,const char *txt,GUITextProperties &props) {
 	GUIPoint pos(x,y) ;
 	w_.DrawString(txt,pos,props) ;

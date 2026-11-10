@@ -8,6 +8,7 @@
 #include "UIFramework/BasicDatas/GUIEvent.h"
 #include "UIFramework/SimpleBaseClasses/GUIWindow.h"
 #include "Resources/hdfont.h"
+#include <math.h>
 #include <assert.h>
 #include <string.h>
 
@@ -369,6 +370,142 @@ void SDLGUIWindowImp::drawHDChar(unsigned char c, int xx, int yy,
             }
         }
     }
+}
+
+/************************************************************
+ trk2als: pinceles (rectángulos redondeados, marcos y texto libre)
+ Coordenadas lógicas de 640x480; hdToWin() las lleva a la ventana real.
+ ************************************************************/
+
+void SDLGUIWindowImp::markUpdate(int x, int y, int w, int h) {
+    if ((!framebuffer_) && (updateCount_ < MAX_OVERLAYS)) {
+        SDL_Rect *area = updateRects_ + updateCount_++;
+        area->x = x;
+        area->y = y;
+        area->w = w;
+        area->h = h;
+    } else {
+        updateCount_ = MAX_OVERLAYS; // Flush() actualiza toda la pantalla
+    }
+}
+
+Uint32 SDLGUIWindowImp::readPixel(int x, int y) {
+    int bpp = surface_->format->BytesPerPixel;
+    Uint32 v = 0;
+    unsigned char *src =
+        (unsigned char *)surface_->pixels + y * surface_->pitch + x * bpp;
+    unsigned char *vp = (unsigned char *)&v;
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
+    vp += (4 - bpp);
+#endif
+    memcpy(vp, src, bpp);
+    return v;
+}
+
+void SDLGUIWindowImp::writePixel(int x, int y, Uint32 v) {
+    int bpp = surface_->format->BytesPerPixel;
+    unsigned char *dst =
+        (unsigned char *)surface_->pixels + y * surface_->pitch + x * bpp;
+    unsigned char *vp = (unsigned char *)&v;
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
+    vp += (4 - bpp);
+#endif
+    memcpy(dst, vp, bpp);
+}
+
+// Pinta un rectángulo de esquinas redondeadas fila por fila. thick<=0 lo
+// rellena; thick>0 pinta solo un marco de ese grosor (en pixeles de ventana)
+void SDLGUIWindowImp::fillRoundRows(int x, int y, int w, int h, int r,
+                                    int thick, Uint32 color) {
+    if (w <= 0 || h <= 0)
+        return;
+    if (r * 2 > w) r = w / 2;
+    if (r * 2 > h) r = h / 2;
+    for (int j = 0; j < h; j++) {
+        int inset = 0;
+        float dy = -1;
+        if (j < r) dy = r - j - 0.5f;
+        else if (j >= h - r) dy = j - (h - r) + 0.5f;
+        if (dy >= 0) {
+            float dx = sqrtf(float(r * r) - dy * dy);
+            inset = r - int(dx + 0.5f);
+        }
+        SDL_Rect row;
+        row.y = y + j;
+        row.h = 1;
+        bool full = (thick <= 0) || (j < thick) || (j >= h - thick);
+        if (full) {
+            row.x = x + inset;
+            row.w = w - 2 * inset;
+            if (row.w > 0) SDL_FillRect(surface_, &row, color);
+        } else {
+            int t = thick + (inset > 0 ? 1 : 0);
+            row.x = x + inset;
+            row.w = t;
+            SDL_FillRect(surface_, &row, color);
+            row.x = x + w - inset - t;
+            SDL_FillRect(surface_, &row, color);
+        }
+    }
+}
+
+void SDLGUIWindowImp::FillRoundRect(GUIRect &r, int radius, GUIColor &c) {
+    int x = appAnchorX_ + hdToWin(r.Left());
+    int y = appAnchorY_ + hdToWin(r.Top());
+    int w = hdToWin(r.Right()) - hdToWin(r.Left());
+    int h = hdToWin(r.Bottom()) - hdToWin(r.Top());
+    Uint32 color = SDL_MapRGB(surface_->format, c._r & 0xFF, c._g & 0xFF, c._b & 0xFF);
+    fillRoundRows(x, y, w, h, hdToWin(radius), 0, color);
+    markUpdate(x, y, w, h);
+}
+
+void SDLGUIWindowImp::FrameRoundRect(GUIRect &r, int radius, int thick,
+                                     GUIColor &c) {
+    int x = appAnchorX_ + hdToWin(r.Left());
+    int y = appAnchorY_ + hdToWin(r.Top());
+    int w = hdToWin(r.Right()) - hdToWin(r.Left());
+    int h = hdToWin(r.Bottom()) - hdToWin(r.Top());
+    int t = hdToWin(thick);
+    if (t < 1) t = 1;
+    Uint32 color = SDL_MapRGB(surface_->format, c._r & 0xFF, c._g & 0xFF, c._b & 0xFF);
+    fillRoundRows(x, y, w, h, hdToWin(radius), t, color);
+    markUpdate(x, y, w, h);
+}
+
+// Texto sin fondo: cada pixel de la letra se mezcla con lo que ya hay debajo
+void SDLGUIWindowImp::BlendText(const char *s, GUIPoint &pos, GUIColor &c,
+                                int scale) {
+    if (scale < 1) scale = 1;
+    int size = hdToWin(HDFONT_SIZE * scale);
+    if (size < 1) return;
+    int x = appAnchorX_ + hdToWin(pos._x);
+    int y = appAnchorY_ + hdToWin(pos._y);
+    int x0 = x;
+    int maxX = appAnchorX_ + hdToWin(640), maxY = appAnchorY_ + hdToWin(480);
+    for (; *s; s++, x += size) {
+        unsigned char ch = ((unsigned char)*s) & 127;
+        if (ch == ' ') continue;
+        if (x + size > maxX || y + size > maxY || x < 0 || y < 0) continue;
+        const unsigned char *g = hdfont[ch];
+        for (int dy = 0; dy < size; dy++) {
+            int sy = dy * HDFONT_SIZE / size;
+            for (int dx = 0; dx < size; dx++) {
+                int a = g[sy * HDFONT_SIZE + dx * HDFONT_SIZE / size];
+                if (a == 0) continue;
+                Uint8 br, bgc, bb;
+                if (a < 255) {
+                    SDL_GetRGB(readPixel(x + dx, y + dy), surface_->format, &br, &bgc, &bb);
+                } else {
+                    br = bgc = bb = 0;
+                }
+                Uint8 r = (br * (255 - a) + (c._r & 0xFF) * a) / 255;
+                Uint8 gg = (bgc * (255 - a) + (c._g & 0xFF) * a) / 255;
+                Uint8 b = (bb * (255 - a) + (c._b & 0xFF) * a) / 255;
+                writePixel(x + dx, y + dy, SDL_MapRGB(surface_->format, r, gg, b));
+            }
+        }
+    }
+    markUpdate(x0, y, x - x0, size);
 }
 
 void SDLGUIWindowImp::transform(const GUIRect &srcRect, SDL_Rect *dstRect) {

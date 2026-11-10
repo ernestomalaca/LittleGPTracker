@@ -36,6 +36,10 @@ public:	// I_GUIGraphics implementation
 	virtual void ClearRect(GUIRect &) ;
 	virtual void DrawChar(const char c,GUIPoint &pos,GUITextProperties &);
 	virtual void DrawString(const char *string,GUIPoint &pos,GUITextProperties &props,bool overlay=false);
+	virtual bool SupportsShapes() ;
+	virtual void FillRoundRect(GUIRect &,int radius,GUIColor &) ;
+	virtual void FrameRoundRect(GUIRect &,int radius,int thick,GUIColor &) ;
+	virtual void BlendText(const char *,GUIPoint &,GUIColor &,int scale) ;
 	virtual GUIRect GetRect() ;
 	virtual void Invalidate() ;
 	virtual void Flush() ;
