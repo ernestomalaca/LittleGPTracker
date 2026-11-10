@@ -156,6 +156,7 @@ void Player::Start(PlayMode mode, bool forceSongMode) {
         mixer_->StartChannel(currentChannel);
         ;
         int currentChainPos = viewData_->chainRow_;
+        if (isAudio(currentChannel)) currentChainPos = 0; // trk2als: el loop desde el principio
         updateSongPos(playPos, currentChannel, currentChainPos);
     } break;
     case PM_AUDITION: {
@@ -1040,7 +1041,9 @@ void Player::moveToNextStep() {
                     if (pos != 16) {
                         int hop = getChannelHop(i, pos);
                         if (hop >= 0) {
-                            if (mode_ != PM_PHRASE) {
+                            // trk2als: en una pista de audio la "phrase" es un
+                            // compás del loop: hay que seguir al siguiente
+                            if (mode_ != PM_PHRASE || isAudio(i)) {
                                 moveToNextPhrase(i, hop);
                             } else {
                                 updatePhrasePos(hop, i);
@@ -1051,7 +1054,7 @@ void Player::moveToNextStep() {
                     } else { // HOP.. something should be done so that if
                              // next chain has a hop on pos zero, it is
                              // effective
-                        if (mode_ != PM_PHRASE) {
+                        if (mode_ != PM_PHRASE || isAudio(i)) {
                             moveToNextPhrase(i);
                         } else {
                             updatePhrasePos(0, i);

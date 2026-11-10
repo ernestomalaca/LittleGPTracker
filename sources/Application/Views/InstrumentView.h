@@ -33,6 +33,7 @@ private:
 	GUIPoint bpmInfoPos_ ;   // trk2als: dónde dibujar '85>100 +2.8st'
 	// trk2als: forma de onda del sample (picos precalculados por barra)
 	void drawWaveform() ;
+	void resetFocusedField() ;
 	int wfSample_ ;
 	int wfSize_ ;
 	enum { WF_BARS=76 } ;   // barras de 5 px cada 8 px = 608 px

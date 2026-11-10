@@ -384,6 +384,13 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
                 v->SetInt(-1) ;
                 isDirty_=true ;
 		   } ;
+
+		   // trk2als: B+A en cualquier otro campo lo regresa a su valor por defecto
+		   if (GetFocus()!=T_SimpleList<UIField>::GetFirst() &&
+		       GetFocus()!=T_SimpleList<UIField>::GetLast() &&
+		       !GetFocus()->IsStatic()) {
+				resetFocusedField() ;
+		   }
         }
         if (mask&EPBM_L) {
             viewMode_=VM_CLONE ;
@@ -461,6 +468,47 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
     }
 
 } ;
+
+/************************************************************
+ trk2als: regresar el campo con el foco a su valor por defecto (B+A)
+ ************************************************************/
+
+void InstrumentView::resetFocusedField() {
+	UIIntVarField *field=(UIIntVarField *)GetFocus() ;
+	Variable &v=field->GetVariable() ;
+	FourCC id=v.GetID() ;
+	if (current_->GetType()==IT_SAMPLE) {
+		SampleInstrument *si=(SampleInstrument *)current_ ;
+		switch (id) {
+			case SIP_LOOPBPM:       // el bpm se vuelve a detectar
+				v.SetInt(si->DetectLoopBpm()) ;
+				isDirty_=true ;
+				return ;
+			case SIP_LOOPBARS: {    // de 'from bar' hasta el final del sample
+				float total=si->GetSampleBars() ;
+				if (total>0) {
+					v.SetInt(int(total+0.5f)-si->FindVariable(SIP_FROMBAR)->GetInt()+1) ;
+					si->ApplyBarRegion() ;
+					isDirty_=true ;
+					return ;
+				}
+				break ;
+			}
+			case SIP_END:           // el final del sample, no 0
+				v.SetInt(si->GetSampleSize()) ;
+				isDirty_=true ;
+				return ;
+			default:
+				break ;
+		}
+	}
+	v.Reset() ;
+	v.SetInt(v.GetInt()) ;          // Reset() no avisa; así se entera quien escucha
+	if (current_->GetType()==IT_SAMPLE && (id==SIP_FROMBAR || id==SIP_LOOPBARS)) {
+		((SampleInstrument *)current_)->ApplyBarRegion() ;
+	}
+	isDirty_=true ;
+}
 
 void InstrumentView::DrawView() {
 
