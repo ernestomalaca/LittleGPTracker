@@ -115,6 +115,8 @@ class AppWindow : public GUIWindow, I_Observer, Status {
     std::vector<Shape> _shapes;
     bool _shapeCells[1200];     // celdas tapadas por figuras en este cuadro
     bool _prevShapeCells[1200]; // ... y en el anterior (hay que redibujarlas)
+    bool _shapesDirty;          // las figuras cambiaron: redibujar sus celdas
+    bool _prevShapesOn;
 
     static GUIColor backgroundColor_;
     static GUIColor normalColor_;

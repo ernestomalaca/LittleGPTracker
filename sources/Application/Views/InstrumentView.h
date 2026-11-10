@@ -15,6 +15,7 @@ public:
 	virtual void DrawView() ;
 	virtual void OnPlayerUpdate(PlayerEventType,unsigned int) {} ;
 	virtual void OnFocus() ;
+	virtual void AnimationUpdate() ;
 
 protected:
 	void warpToNext(int offset) ;
@@ -36,5 +37,10 @@ private:
 	int wfSize_ ;
 	enum { WF_BARS=76 } ;   // barras de 5 px cada 8 px = 608 px
 	unsigned char wfPeaks_[WF_BARS] ;
+	int playheadPx_ ;        // dónde se dibujó el cursor de reproducción (-1 = no)
+	bool audioMode_ ;        // loop de pista de audio: pantalla simplificada
+	int labelCount_ ;        // etiquetas de los bloques de campos
+	int labelRow_[8] ;
+	const char *labelText_[8] ;
 } ;
 #endif

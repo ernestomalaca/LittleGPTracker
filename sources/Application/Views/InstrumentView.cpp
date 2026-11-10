@@ -27,6 +27,9 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data) {
 	lastSampleIdx_=-2 ;
 	wfSample_=-1 ;
 	wfSize_=0 ;
+	playheadPx_=-1 ;
+	audioMode_=false ;
+	labelCount_=0 ;
 	onInstrumentChange() ;
 }
 
@@ -97,126 +100,117 @@ void InstrumentView::fillSampleParameters() {
 
 	// trk2als: pantalla reacomodada. Arriba (filas 1-9) va la forma de onda
 	// dibujada con pinceles; los campos van en dos columnas (x=1 y x=21) por
-	// bloques: LOOP, SOUND, COLOR / FILTER y FINE TUNE. Las etiquetas de los
-	// bloques se dibujan en drawWaveform(). "church wet / pad" ya no se muestra
-	// pero sigue guardado en el proyecto.
+	// bloques con etiqueta. Si el instrumento es un loop de una pista de audio
+	// (siempre en looper sync, el tono lo pone el bpm) se esconde lo que ahí no
+	// hace nada: loop mode, slices, root note, detune y el ajuste fino.
+	// "church wet / pad" ya no se muestra. Todo sigue guardado en el proyecto.
 	int i=viewData_->currentInstrument_ ;
 	InstrumentBank *bank=viewData_->project_->GetInstrumentBank() ;
 	I_Instrument *instr=bank->GetInstrument(i) ;
 	SampleInstrument *instrument=(SampleInstrument *)instr  ;
+	audioMode_=viewData_->instrumentFromSong_ || viewData_->project_->IsAudioInstrument(i) ;
 	const int L=1, R=21 ;
-	GUIPoint p(L,10) ;
+	int row=10 ;
+	labelCount_=0 ;
 	Variable *v ;
 	UIIntVarField *f1 ;
-	UIStaticField *sf ;
+	GUIPoint pt ;
 #define ADD(f) T_SimpleList<UIField>::Insert(f)
+#define AT(x) (pt=GUIPoint(x,row))
+#define LABEL(t) { labelRow_[labelCount_]=row ; labelText_[labelCount_++]=t ; row++ ; }
 
 	// el primero de la lista (A en él = vaciar instrumento)
 	v=instrument->FindVariable(SIP_SAMPLE) ;
 	SamplePool *sp=SamplePool::GetInstance() ;
-	f1=new UIIntVarField(p,*v,"sample: %s",0,sp->GetNameListSize()-1,1,0x10) ;
+	f1=new UIIntVarField(AT(L),*v,"sample: %s",0,sp->GetNameListSize()-1,1,0x10) ;
 	ADD(f1) ;
 	f1->SetFocus() ;
+	row++ ;
 
-	// LOOP
-	p=GUIPoint(L,12) ;
+	LABEL("LOOP") ;
 	v=instrument->FindVariable(SIP_FROMBAR) ;
-	ADD(new UIIntVarField(p,*v,"from bar: %d",1,64,1,4)) ;
-	p=GUIPoint(R,12) ;
+	ADD(new UIIntVarField(AT(L),*v,"from bar: %d",1,64,1,4)) ;
 	v=instrument->FindVariable(SIP_LOOPBARS) ;
-	ADD(new UIIntVarField(p,*v,"bars: %d",1,16,1,4)) ;
-
-	p=GUIPoint(L,13) ;
+	ADD(new UIIntVarField(AT(R),*v,"bars: %d",1,16,1,4)) ;
+	row++ ;
 	v=instrument->FindVariable(SIP_LOOPBPM) ;
-	ADD(new UIIntVarField(p,*v,"bpm: %3d",0,300,1,10)) ;
-	bpmInfoPos_=GUIPoint(L+10,13) ;
+	ADD(new UIIntVarField(AT(L),*v,"bpm: %3d",0,300,1,10)) ;
+	bpmInfoPos_=GUIPoint(L+10,row) ;
+	row++ ;
+	if (!audioMode_) {
+		v=instrument->FindVariable(SIP_LOOPMODE) ;
+		ADD(new UIIntVarField(AT(L),*v,"loop mode: %s",0,SILM_LAST-1,1,1)) ;
+		v=instrument->FindVariable(SIP_SLICES) ;
+		ADD(new UIIntVarField(AT(28),*v,"slices: %2.2X",1,0xFF,1,0x10)) ;
+		row++ ;
+	}
 
-	p=GUIPoint(L,14) ;
-	v=instrument->FindVariable(SIP_LOOPMODE) ;
-	ADD(new UIIntVarField(p,*v,"loop mode: %s",0,SILM_LAST-1,1,1)) ;
-	p=GUIPoint(28,14) ;
-	v=instrument->FindVariable(SIP_SLICES) ;
-	ADD(new UIIntVarField(p,*v,"slices: %2.2X",1,0xFF,1,0x10)) ;
-
-	// SOUND
-	p=GUIPoint(L,16) ;
+	LABEL("SOUND") ;
 	v=instrument->FindVariable(SIP_VOLUME) ;
-	ADD(new UIIntVarField(p,*v,"volume: %d [%2.2X]",0,255,1,10)) ;
-	p=GUIPoint(R,16) ;
+	ADD(new UIIntVarField(AT(L),*v,"volume: %d [%2.2X]",0,255,1,10)) ;
 	v=instrument->FindVariable(SIP_PAN) ;
-	ADD(new UIIntVarField(p,*v,"pan: %2.2X",0,0xFE,1,0x10)) ;
+	ADD(new UIIntVarField(AT(R),*v,"pan: %2.2X",0,0xFE,1,0x10)) ;
+	row++ ;
+	if (!audioMode_) {
+		v=instrument->FindVariable(SIP_ROOTNOTE) ;
+		ADD(new UINoteVarField(AT(L),*v,"root note: %s",0,0x7F,1,0x0C)) ;
+		v=instrument->FindVariable(SIP_FINETUNE) ;
+		ADD(new UIIntVarField(AT(R),*v,"detune: %2.2X",0,255,1,0x10)) ;
+		row++ ;
+	}
 
-	p=GUIPoint(L,17) ;
-	v=instrument->FindVariable(SIP_ROOTNOTE) ;
-	ADD(new UINoteVarField(p,*v,"root note: %s",0,0x7F,1,0x0C)) ;
-	p=GUIPoint(R,17) ;
-	v=instrument->FindVariable(SIP_FINETUNE) ;
-	ADD(new UIIntVarField(p,*v,"detune: %2.2X",0,255,1,0x10)) ;
-
-	// COLOR / FILTER
-	p=GUIPoint(L,19) ;
+	LABEL("COLOR / FILTER") ;
 	v=instrument->FindVariable(SIP_CRUSH) ;
-	ADD(new UIIntVarField(p,*v,"crush: %d",1,0x10,1,4)) ;
-	p=GUIPoint(L+10,19) ;
+	ADD(new UIIntVarField(AT(L),*v,"crush: %d",1,0x10,1,4)) ;
 	v=instrument->FindVariable(SIP_CRUSHVOL) ;
-	ADD(new UIIntVarField(p,*v,"drive: %2.2X",0,0xFF,1,0x10)) ;
-	p=GUIPoint(R,19) ;
+	ADD(new UIIntVarField(AT(L+10),*v,"drive: %2.2X",0,0xFF,1,0x10)) ;
 	v=instrument->FindVariable(SIP_DOWNSMPL) ;
-	ADD(new UIIntVarField(p,*v,"downsample: %d",0,8,1,4)) ;
-
-	p=GUIPoint(L,20) ;
-	sf=new UIStaticField(p,"flt cut/res:") ;
-	ADD(sf) ;
-	p=GUIPoint(L+13,20) ;
+	ADD(new UIIntVarField(AT(R),*v,"downsample: %d",0,8,1,4)) ;
+	row++ ;
+	ADD(new UIStaticField(AT(L),"flt cut/res:")) ;
 	v=instrument->FindVariable(SIP_FILTCUTOFF) ;
-	ADD(new UIIntVarField(p,*v,"%2.2X",0,0xFF,1,0x10)) ;
-	p=GUIPoint(L+16,20) ;
+	ADD(new UIIntVarField(AT(L+13),*v,"%2.2X",0,0xFF,1,0x10)) ;
 	v=instrument->FindVariable(SIP_FILTRESO) ;
-	ADD(new UIIntVarField(p,*v,"%2.2X",0,0xFF,1,0x10)) ;
-	p=GUIPoint(R,20) ;
+	ADD(new UIIntVarField(AT(L+16),*v,"%2.2X",0,0xFF,1,0x10)) ;
 	v=instrument->FindVariable(SIP_FILTMIX) ;
-	ADD(new UIIntVarField(p,*v,"type: %2.2X",0,0xFF,1,0x10)) ;
-
-	p=GUIPoint(L,21) ;
+	ADD(new UIIntVarField(AT(R),*v,"type: %2.2X",0,0xFF,1,0x10)) ;
+	row++ ;
 	v=instrument->FindVariable(SIP_FILTMODE) ;
-	ADD(new UIIntVarField(p,*v,"mode: %s",0,2,1,1)) ;
-	p=GUIPoint(R,21) ;
+	ADD(new UIIntVarField(AT(L),*v,"mode: %s",0,2,1,1)) ;
 	v=instrument->FindVariable(SIP_ATTENUATE) ;
-	ADD(new UIIntVarField(p,*v,"atten: %d [%2.2X]",1,0xFF,1,0x10)) ;
-
-	p=GUIPoint(L,22) ;
-	sf=new UIStaticField(p,"fb tune/mix:") ;
-	ADD(sf) ;
-	p=GUIPoint(L+13,22) ;
+	ADD(new UIIntVarField(AT(R),*v,"atten: %d [%2.2X]",1,0xFF,1,0x10)) ;
+	row++ ;
+	ADD(new UIStaticField(AT(L),"fb tune/mix:")) ;
 	v=instrument->FindVariable(SIP_FBTUNE) ;
-	ADD(new UIIntVarField(p,*v,"%2.2X",0,0xFF,1,0x10)) ;
-	p=GUIPoint(L+16,22) ;
+	ADD(new UIIntVarField(AT(L+13),*v,"%2.2X",0,0xFF,1,0x10)) ;
 	v=instrument->FindVariable(SIP_FBMIX) ;
-	ADD(new UIIntVarField(p,*v,"%2.2X",0,0xFF,1,0x10)) ;
-	p=GUIPoint(R,22) ;
+	ADD(new UIIntVarField(AT(L+16),*v,"%2.2X",0,0xFF,1,0x10)) ;
 	v=instrument->FindVariable(SIP_INTERPOLATION) ;
-	ADD(new UIIntVarField(p,*v,"interp: %s",0,1,1,1)) ;
+	ADD(new UIIntVarField(AT(R),*v,"interp: %s",0,1,1,1)) ;
+	row++ ;
 
-	// FINE TUNE
-	int last=instrument->GetSampleSize()-1 ;
-	p=GUIPoint(L,24) ;
-	v=instrument->FindVariable(SIP_START) ;
-	ADD(new UIBigHexVarField(p,*v,7,"start: %7.7X",0,last,16)) ;
-	p=GUIPoint(R,24) ;
-	v=instrument->FindVariable(SIP_LOOPSTART) ;
-	ADD(new UIBigHexVarField(p,*v,7,"lp start: %7.7X",0,last,16)) ;
-	p=GUIPoint(L,25) ;
-	v=instrument->FindVariable(SIP_END) ;
-	ADD(new UIBigHexVarField(p,*v,7,"loop end: %7.7X",0,last,16)) ;
+	if (!audioMode_) {
+		LABEL("FINE TUNE") ;
+		int last=instrument->GetSampleSize()-1 ;
+		v=instrument->FindVariable(SIP_START) ;
+		ADD(new UIBigHexVarField(AT(L),*v,7,"start: %7.7X",0,last,16)) ;
+		v=instrument->FindVariable(SIP_LOOPSTART) ;
+		ADD(new UIBigHexVarField(AT(R),*v,7,"lp start: %7.7X",0,last,16)) ;
+		row++ ;
+		v=instrument->FindVariable(SIP_END) ;
+		ADD(new UIBigHexVarField(AT(L),*v,7,"loop end: %7.7X",0,last,16)) ;
+		row++ ;
+	}
 
-	p=GUIPoint(L,27) ;
+	LABEL("TABLE") ;
 	v=instrument->FindVariable(SIP_TABLEAUTO) ;
-	ADD(new UIIntVarField(p,*v,"automation: %s",0,1,1,1)) ;
+	ADD(new UIIntVarField(AT(L),*v,"automation: %s",0,1,1,1)) ;
 	// el último de la lista (A en él = quitar la tabla)
-	p=GUIPoint(R,27) ;
 	v=instrument->FindVariable(SIP_TABLE) ;
-	ADD(new UIIntVarOffField(p,*v,"table: %2.2X",0x00,0x7F,1,0x10)) ;
+	ADD(new UIIntVarOffField(AT(R),*v,"table: %2.2X",0x00,0x7F,1,0x10)) ;
 #undef ADD
+#undef AT
+#undef LABEL
 } ;
 
 void InstrumentView::fillMidiParameters() {
@@ -491,7 +485,7 @@ void InstrumentView::DrawView() {
         int bpm=si->FindVariable(SIP_LOOPBPM)->GetInt() ;
         int bars=si->FindVariable(SIP_LOOPBARS)->GetInt() ;
         float secs=si->GetLoopSeconds() ;
-        bool sync=viewData_->instrumentFromSong_ ||
+        bool sync=audioMode_ || viewData_->instrumentFromSong_ ||
                   si->FindVariable(SIP_LOOPMODE)->GetInt()==SILM_LOOPSYNC ;
         if (sync && bpm>0 && secs>0 && bars>0) {
             int tempo=viewData_->project_->GetTempo() ;
@@ -525,10 +519,9 @@ void InstrumentView::drawWaveform() {
 	GUIColor dim2=Mix(bg,fg,55) ;
 
 	// etiquetas de los bloques
-	DrawText(16,11*16+4,"LOOP",dim2,0) ;
-	DrawText(16,15*16+4,"SOUND",dim2,0) ;
-	DrawText(16,18*16+4,"COLOR / FILTER",dim2,0) ;
-	DrawText(16,23*16+4,"FINE TUNE",dim2,0) ;
+	for (int i=0;i<labelCount_;i++) {
+		DrawText(16,labelRow_[i]*16+4,labelText_[i],dim2,0) ;
+	}
 
 	const int X=16, Y=22, W=WF_BARS*8, H=124 ;
 	FillRect(X-8,Y-4,W+16,H+8,Mix(bg,fg,9),8) ;
@@ -623,9 +616,33 @@ void InstrumentView::drawWaveform() {
 	}
 
 	FrameRect(s0,Y-4,s1-s0,H+8,hi,8,2) ;
-	// dónde arranca el sample
-	int sx=X+int((long long)st*W/size) ;
-	FillRect(sx-1,Y-4,2,H+8,ColorOf(CD_PLAY)) ;
+	// dónde arranca el sample (en las pistas de audio siempre es loop start)
+	if (!audioMode_ && st!=ls) {
+		int sx=X+int((long long)st*W/size) ;
+		FillRect(sx-1,Y+18,2,H-20,hi2) ;
+	}
+	// cursor de reproducción: la línea verde sigue a la voz que suena
+	playheadPx_=-1 ;
+	int pos=si->GetPlayPosition() ;
+	if (pos>=0 && pos<=size) {
+		playheadPx_=X+int((long long)pos*W/size) ;
+		FillRect(playheadPx_-1,Y-4,3,H+8,ColorOf(CD_PLAY),1) ;
+	}
+}
+
+// trk2als: ~25 veces por segundo; si el cursor se movió, redibujar las figuras
+void InstrumentView::AnimationUpdate() {
+	if (!current_ || current_->GetType()!=IT_SAMPLE || HasModal()) return ;
+	SampleInstrument *si=(SampleInstrument *)current_ ;
+	int pos=si->GetPlayPosition() ;
+	int px=-1 ;
+	if (pos>=0 && wfSize_>0 && pos<=wfSize_) {
+		px=16+int((long long)pos*(WF_BARS*8)/wfSize_) ;
+	}
+	if (px!=playheadPx_) {
+		ClearShapes() ;
+		drawWaveform() ;
+	}
 }
 
 void InstrumentView::OnFocus() { onInstrumentChange(); }

@@ -3,6 +3,7 @@
 
 FieldView::FieldView(GUIWindow &w,ViewData *data):View(w,data),T_SimpleList<UIField>(true) {
 	focus_=0 ;	
+	prefX_=-1 ;
 } ;
 
 void FieldView::SetFocus(UIField *field) {
@@ -11,6 +12,7 @@ void FieldView::SetFocus(UIField *field) {
 		focus_->ClearFocus() ;
 	}
 	focus_=field ;
+	prefX_=-1 ;
 
 //  Empty field view, we don't have anything to do
 
@@ -47,7 +49,8 @@ void FieldView::Redraw() {
 
 // trk2als: ¿a está más cerca que b de la columna del campo con el foco?
 bool FieldView::closerX(UIField &a,UIField &b) {
-	int fx=focus_->GetPosition()._x ;
+	// la columna "deseada" se recuerda al subir y bajar, así no se pasa de lado
+	int fx=(prefX_>=0)?prefX_:focus_->GetPosition()._x ;
 	int da=a.GetPosition()._x-fx ; if (da<0) da=-da ;
 	int db=b.GetPosition()._x-fx ; if (db<0) db=-db ;
 	return da<db ;
@@ -155,6 +158,7 @@ void FieldView::ProcessButtonMask(unsigned short mask) {
 					}
 
 					focus_->ClearFocus() ;
+					if (prefX_<0) prefX_=focus_->GetPosition()._x ;
 					focus_=next ;
 					focus_->SetFocus() ;
 					isDirty_=true ;
@@ -197,6 +201,7 @@ void FieldView::ProcessButtonMask(unsigned short mask) {
 					}
 
 					focus_->ClearFocus() ;
+					if (prefX_<0) prefX_=focus_->GetPosition()._x ;
  					focus_=prev ;
 					focus_->SetFocus() ;
 					isDirty_=true ;
@@ -239,6 +244,7 @@ void FieldView::ProcessButtonMask(unsigned short mask) {
 
 					focus_->ClearFocus() ;
 					focus_=next ;
+					prefX_=focus_->GetPosition()._x ;
 					focus_->SetFocus() ;
 					isDirty_=true ;
 				}
@@ -279,6 +285,7 @@ void FieldView::ProcessButtonMask(unsigned short mask) {
 
 					focus_->ClearFocus() ;
  					focus_=prev ;
+					prefX_=focus_->GetPosition()._x ;
 					focus_->SetFocus() ;
 					isDirty_=true ;
 				}

@@ -165,6 +165,17 @@ int Project::GetTranspose() {
 	return result ;
 } ;
 
+bool Project::IsAudioInstrument(int instrument) {
+	for (int row=0;row<256;row++) {
+		for (int ch=0;ch<SONG_CHANNEL_COUNT;ch++) {
+			if (IsAudioChannel(ch) && song_->data_[row*SONG_CHANNEL_COUNT+ch]==instrument) {
+				return true ;
+			}
+		}
+	}
+	return false ;
+}
+
 bool Project::Wrap() {
 	Variable *v=FindVariable(VAR_WRAP) ;
 	NAssert(v) ;

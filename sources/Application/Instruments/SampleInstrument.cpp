@@ -10,6 +10,7 @@
 #include "Application/Model/Table.h"
 #include "Services/Audio/Audio.h"
 #include "SampleVariable.h"
+#include "System/System/System.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -71,6 +72,8 @@ int SampleInstrument::lastMidiNote_[SONG_CHANNEL_COUNT]= {
 #define KRATE_SAMPLE_COUNT 100
 
 SampleInstrument::SampleInstrument() {
+	 for (int ch=0;ch<SONG_CHANNEL_COUNT;ch++) voiceClock_[ch]=0 ; // trk2als
+
 
 // Initialize instruments settings
 
@@ -443,6 +446,17 @@ void SampleInstrument::Stop(int channel) {
 
 	 renderParams *rp=renderParams_+channel ;
 	 running_=false ;
+	 voiceClock_[channel]=0 ;
+}
+
+int SampleInstrument::GetPlayPosition() {
+	unsigned long now=System::GetInstance()->GetClock() ;
+	for (int ch=0;ch<SONG_CHANNEL_COUNT;ch++) {
+		if (voiceClock_[ch] && now-voiceClock_[ch]<250) {
+			return int(renderParams_[ch].position_) ;
+		}
+	}
+	return -1 ;
 }
 
 void SampleInstrument::doTickUpdate(int channel) {
@@ -514,6 +528,7 @@ void SampleInstrument::updateFeedback(renderParams *rp) {
 
 bool SampleInstrument::Render(int channel, fixed *buffer, int size, int flags) {
 
+    voiceClock_[channel] = System::GetInstance()->GetClock(); // trk2als: cursor de reproducción
     bool somethingToMix = false;
     bool updateTick = flags & 1;
 

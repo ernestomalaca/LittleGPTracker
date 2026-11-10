@@ -144,6 +144,8 @@ AppWindow::AppWindow(I_GUIWindowImp &imp) : GUIWindow(imp) {
 
     memset(_shapeCells, 0, sizeof(_shapeCells));
     memset(_prevShapeCells, 0, sizeof(_prevShapeCells));
+    _shapesDirty = true;
+    _prevShapesOn = false;
     memset(_charScreen, ' ', 1200);
     memset(_preScreen, ' ', 1200);
     memset(_charScreenProp, 0, 1200);
@@ -258,6 +260,20 @@ void AppWindow::Flush() {
         }
     }
 
+    // Las celdas tapadas solo se redibujan si las figuras cambiaron o si cambió
+    // el texto de alguna de ellas (entonces se repinta todo el bloque de figuras)
+    if (shapesOn != _prevShapesOn) _shapesDirty = true;
+    if (!_shapesDirty) {
+        for (int cell = 0; cell < 1200; cell++) {
+            if ((_shapeCells[cell] || _prevShapeCells[cell]) &&
+                (_charScreen[cell] != _preScreen[cell] ||
+                 _charScreenProp[cell] != _preScreenProp[cell])) {
+                _shapesDirty = true;
+                break;
+            }
+        }
+    }
+
     unsigned char *current = _charScreen;
     unsigned char *previous = _preScreen;
     unsigned char *currentProp = _charScreenProp;
@@ -267,7 +283,7 @@ void AppWindow::Flush() {
             int cell = x + 40 * y;
             bool covered = _shapeCells[cell];
             bool dirty = (*current != *previous) || (*currentProp != *previousProp) ||
-                         covered || _prevShapeCells[cell];
+                         ((covered || _prevShapeCells[cell]) && _shapesDirty);
 #ifdef _LGPT_NO_SCREEN_CACHE_
             dirty = true;
 #endif
@@ -298,7 +314,7 @@ void AppWindow::Flush() {
         pos._x = 0;
     }
 
-    if (shapesOn) {
+    if (shapesOn && _shapesDirty) {
         for (size_t i = 0; i < _shapes.size(); i++) {
             Shape &sh = _shapes[i];
             if (sh.type == 0) {
@@ -332,6 +348,8 @@ void AppWindow::Flush() {
         }
     }
     memcpy(_prevShapeCells, _shapeCells, sizeof(_shapeCells));
+    _shapesDirty = false;
+    _prevShapesOn = shapesOn;
 
     long flushEnd = System::GetInstance()->GetClock();
     GUIWindow::Flush();
@@ -617,6 +635,7 @@ void AppWindow::Update(Observable &o, I_ObservableData *d) {
             break;
         }
         _shapes.clear(); // trk2als: las figuras son de la pantalla anterior
+        _shapesDirty = true;
         _currentView->SetFocus(*vt);
         _isDirty = true;
         GUIWindow::Clear(backgroundColor_, true);
@@ -721,7 +740,10 @@ GUIColor AppWindow::GetColor(ColorDefinition cd) {
 
 bool AppWindow::SupportsShapes() { return GUIWindow::SupportsShapes(); }
 
-void AppWindow::ClearShapes() { _shapes.clear(); }
+void AppWindow::ClearShapes() {
+    _shapes.clear();
+    _shapesDirty = true;
+}
 
 void AppWindow::AddRect(int x, int y, int w, int h, GUIColor color, int radius,
                         int thick) {
@@ -731,6 +753,7 @@ void AppWindow::AddRect(int x, int y, int w, int h, GUIColor color, int radius,
     sh.radius = radius; sh.thick = thick;
     sh.color = color;
     _shapes.push_back(sh);
+    _shapesDirty = true;
 }
 
 void AppWindow::AddText(int x, int y, const char *text, GUIColor color, int scale) {
@@ -741,6 +764,7 @@ void AppWindow::AddText(int x, int y, const char *text, GUIColor color, int scal
     sh.scale = scale;
     sh.color = color;
     _shapes.push_back(sh);
+    _shapesDirty = true;
 }
 
 Path AppWindow::GetLastProjectPath() {

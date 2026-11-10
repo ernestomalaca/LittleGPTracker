@@ -21,6 +21,7 @@ private:
 	T_SimpleList<UIField> fieldList_ ;
 	UIField *focus_ ;
 	bool closerX(UIField &a,UIField &b) ;
+	int prefX_ ; // trk2als: columna a la que se quiere llegar al subir/bajar
 } ;
 
 #endif

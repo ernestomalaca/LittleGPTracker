@@ -50,6 +50,7 @@ public:
   int GetRenderMode();
   int GetAudioTrackCount();
   bool IsAudioChannel(int channel); // canal de audio: sus celdas son loops, no chains
+  bool IsAudioInstrument(int instrument); // ¿algún loop de una pista de audio usa este instrumento?
   void Trigger();
 
   static const unsigned int MAX_RENDER_MODE = 3;

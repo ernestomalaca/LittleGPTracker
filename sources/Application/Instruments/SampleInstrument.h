@@ -100,6 +100,7 @@ public:
 	   float GetBarSamples() ;    // muestras por compás de 4/4; 0 si no hay bpm
 	   float GetSampleBars() ;    // cuántos compases dura el sample completo
 	   void ApplyBarRegion() ;    // start/loop start/loop end según from bar y bars
+	   int GetPlayPosition() ;    // dónde va la voz que suena (muestras); -1 si no suena
 	   // El Player avisa si el canal es pista de audio: entonces la voz toca en
 	   // looper sync sin cambiar el loop mode del instrumento (que puede usarse en MIDI)
 	   static void SetChannelSync(int channel, bool sync) ;
@@ -127,6 +128,7 @@ private:
 	   
 	   static int lastMidiNote_[SONG_CHANNEL_COUNT] ;
 	   static bool syncRequest_[SONG_CHANNEL_COUNT] ; // trk2als
+	   unsigned long voiceClock_[SONG_CHANNEL_COUNT] ; // trk2als: último render de cada voz (ms)
 	   SampleInstrumentLoopMode effectiveLoopMode(renderParams *rp) ;
 	   void snapshotLive(renderParams *rp) ;  // trk2als
 	   void applyLive(renderParams *rp) ;     // trk2als
