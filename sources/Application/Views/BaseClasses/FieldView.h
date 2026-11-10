@@ -20,6 +20,7 @@ public:
 private:
 	T_SimpleList<UIField> fieldList_ ;
 	UIField *focus_ ;
+	bool closerX(UIField &a,UIField &b) ;
 } ;
 
 #endif

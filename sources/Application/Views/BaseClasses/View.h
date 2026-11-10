@@ -126,9 +126,9 @@ class View : public Observable {
     void FillRect(int x, int y, int w, int h, GUIColor c, int radius = 0);
     void FrameRect(int x, int y, int w, int h, GUIColor c, int radius = 0,
                    int thick = 2);
-    void DrawText(int x, int y, const char *txt, GUIColor c, int scale = 1);
+    void DrawText(int x, int y, const char *txt, GUIColor c, int scale = 1); // scale 0 = letra chica 8x12
     GUIColor ColorOf(ColorDefinition cd);
-    static GUIColor Mix(GUIColor a, GUIColor b, int amount); // 0=a .. 255=b
+    static GUIColor Mix(GUIColor a,GUIColor b,int amount); // amount en % (0 = a, 100 = b)
 
     virtual void DrawString(int x, int y, const char *txt,
                             GUITextProperties &props);

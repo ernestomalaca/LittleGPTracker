@@ -247,8 +247,8 @@ void AppWindow::Flush() {
             Shape &sh = _shapes[i];
             int w = sh.w, h = sh.h;
             if (sh.type == 1) {
-                w = 16 * sh.scale * (int)sh.text.size();
-                h = 16 * sh.scale;
+                w = (sh.scale > 0 ? 16 * sh.scale : 8) * (int)sh.text.size();
+                h = sh.scale > 0 ? 16 * sh.scale : 12;
             }
             int cx0 = MAX(0, sh.x / 16), cy0 = MAX(0, sh.y / 16);
             int cx1 = MIN(39, (sh.x + w - 1) / 16), cy1 = MIN(29, (sh.y + h - 1) / 16);

@@ -1,4 +1,5 @@
 #include "View.h"
+#include <string.h>
 #include "System/Console/Trace.h"
 #include "Application/Player/Player.h"
 #include "Application/Utils/char.h"
@@ -75,6 +76,14 @@ void View::Unlock() {
 }
 
 void View::drawMap() {
+    // trk2als: el mapa de pantallas se quitó para ganar espacio;
+    // SCREENMAP=YES en config.xml lo vuelve a mostrar
+    static int showMap=-1 ;
+    if (showMap<0) {
+        const char *s=Config::GetInstance()->GetValue("SCREENMAP") ;
+        showMap=(s && !strcmp(s,"YES"))?1:0 ;
+    }
+    if (!showMap) return ;
     if (!miniLayout_) {
         GUIPoint anchor=GetAnchor() ;
 		GUIPoint pos(View::margin_,anchor._y);
@@ -255,8 +264,9 @@ void View::DrawText(int x, int y, const char *txt, GUIColor c, int scale) {
 }
 GUIColor View::ColorOf(ColorDefinition cd) { return ((AppWindow &)w_).GetColor(cd); }
 GUIColor View::Mix(GUIColor a, GUIColor b, int t) {
-	return GUIColor((a._r * (255 - t) + b._r * t) / 255, (a._g * (255 - t) + b._g * t) / 255,
-	                (a._b * (255 - t) + b._b * t) / 255);
+	// t en porcentaje: 0 = a, 100 = b
+	return GUIColor((a._r * (100 - t) + b._r * t) / 100, (a._g * (100 - t) + b._g * t) / 100,
+	                (a._b * (100 - t) + b._b * t) / 100);
 }
 
 void View::DrawString(int x,int y,const char *txt,GUITextProperties &props) {

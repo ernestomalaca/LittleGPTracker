@@ -145,6 +145,9 @@ SampleInstrument::SampleInstrument() {
 	 Insert(loopBpm_) ;
 	 loopBpm_->AddObserver(*this) ;
 
+	 fromBar_=new Variable("from bar",SIP_FROMBAR,1) ;
+	 Insert(fromBar_) ;
+
 	 loopStart_=new WatchedVariable("loopstart",SIP_LOOPSTART,0) ;
 	 Insert(loopStart_) ;
 	 loopStart_->AddObserver(*this) ;
@@ -1090,6 +1093,53 @@ void SampleInstrument::UpdateLoopBars() {
 	if (bpm<=0 || secs<=0) return ;          // 0 = compases a mano
 	int bars=int(secs*bpm/240.0f+0.5f) ;
 	loopBars_->SetInt(bars<1?1:(bars>16?16:bars)) ;
+	float bar=GetBarSamples() ;
+	if (bar>0) {
+		int from=int(loopStart_->GetInt()/bar+0.5f)+1 ;
+		fromBar_->SetInt(from<1?1:from) ;
+	}
+}
+
+float SampleInstrument::GetBarSamples() {
+	int bpm=loopBpm_->GetInt() ;
+	int index=GetSampleIndex() ;
+	if (bpm<=0 || index<0) return 0 ;
+	SoundSource *src=SamplePool::GetInstance()->GetSource(index) ;
+	if (!src || src->GetSampleRate(-1)<=0) return 0 ;
+	return src->GetSampleRate(-1)*240.0f/bpm ;
+}
+
+float SampleInstrument::GetSampleBars() {
+	float bar=GetBarSamples() ;
+	int index=GetSampleIndex() ;
+	if (bar<=0 || index<0) return 0 ;
+	SoundSource *src=SamplePool::GetInstance()->GetSource(index) ;
+	return src ? src->GetSize(-1)/bar : 0 ;
+}
+
+// El usuario movió "from bar" o "bars": la región salta a esos compases
+void SampleInstrument::ApplyBarRegion() {
+	float bar=GetBarSamples() ;
+	if (bar<=0) return ;
+	SoundSource *src=SamplePool::GetInstance()->GetSource(GetSampleIndex()) ;
+	int size=src->GetSize(-1) ;
+	int total=int(size/bar+0.5f) ;          // compases completos (con tolerancia)
+	if (total<1) total=1 ;
+	int from=fromBar_->GetInt() ;
+	if (from>total) from=total ;
+	if (from<1) from=1 ;
+	int bars=loopBars_->GetInt() ;
+	if (from-1+bars>total) bars=total-from+1 ;
+	if (bars<1) bars=1 ;
+	int a=int((from-1)*bar+0.5f) ;
+	int b=int((from-1+bars)*bar+0.5f) ;
+	if (b>size) b=size ;
+	if (a>=b) return ;
+	fromBar_->SetInt(from) ;
+	start_->SetInt(a) ;
+	loopEnd_->SetInt(b) ;          // primero el final para que loop start < end
+	loopStart_->SetInt(a) ;
+	loopBars_->SetInt(bars) ;
 }
 
 // Busca "85bpm" o un número 60–200 suelto en el nombre ("loop_85_Am");

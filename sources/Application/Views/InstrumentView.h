@@ -34,6 +34,7 @@ private:
 	void drawWaveform() ;
 	int wfSample_ ;
 	int wfSize_ ;
-	unsigned char wfPeaks_[64] ;
+	enum { WF_BARS=76 } ;   // barras de 5 px cada 8 px = 608 px
+	unsigned char wfPeaks_[WF_BARS] ;
 } ;
 #endif

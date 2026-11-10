@@ -8,6 +8,7 @@
 #include "UIFramework/BasicDatas/GUIEvent.h"
 #include "UIFramework/SimpleBaseClasses/GUIWindow.h"
 #include "Resources/hdfont.h"
+#include "Resources/hdfont_small.h"
 #include <math.h>
 #include <assert.h>
 #include <string.h>
@@ -475,9 +476,13 @@ void SDLGUIWindowImp::FrameRoundRect(GUIRect &r, int radius, int thick,
 // Texto sin fondo: cada pixel de la letra se mezcla con lo que ya hay debajo
 void SDLGUIWindowImp::BlendText(const char *s, GUIPoint &pos, GUIColor &c,
                                 int scale) {
-    if (scale < 1) scale = 1;
-    int size = hdToWin(HDFONT_SIZE * scale);
-    if (size < 1) return;
+    if (scale < 0) scale = 0;
+    // scale 0: letra chica (8x12); si no, la de 16x16 ampliada
+    int gw = scale ? HDFONT_SIZE : SMALLFONT_W;
+    int gh = scale ? HDFONT_SIZE : SMALLFONT_H;
+    int size = hdToWin(scale ? HDFONT_SIZE * scale : SMALLFONT_W);
+    int sizeY = hdToWin(scale ? HDFONT_SIZE * scale : SMALLFONT_H);
+    if (size < 1 || sizeY < 1) return;
     int x = appAnchorX_ + hdToWin(pos._x);
     int y = appAnchorY_ + hdToWin(pos._y);
     int x0 = x;
@@ -485,12 +490,12 @@ void SDLGUIWindowImp::BlendText(const char *s, GUIPoint &pos, GUIColor &c,
     for (; *s; s++, x += size) {
         unsigned char ch = ((unsigned char)*s) & 127;
         if (ch == ' ') continue;
-        if (x + size > maxX || y + size > maxY || x < 0 || y < 0) continue;
-        const unsigned char *g = hdfont[ch];
-        for (int dy = 0; dy < size; dy++) {
-            int sy = dy * HDFONT_SIZE / size;
+        if (x + size > maxX || y + sizeY > maxY || x < 0 || y < 0) continue;
+        const unsigned char *g = scale ? hdfont[ch] : hdfont_small[ch];
+        for (int dy = 0; dy < sizeY; dy++) {
+            int sy = dy * gh / sizeY;
             for (int dx = 0; dx < size; dx++) {
-                int a = g[sy * HDFONT_SIZE + dx * HDFONT_SIZE / size];
+                int a = g[sy * gw + dx * gw / size];
                 if (a == 0) continue;
                 Uint8 br, bgc, bb;
                 if (a < 255) {
@@ -505,7 +510,7 @@ void SDLGUIWindowImp::BlendText(const char *s, GUIPoint &pos, GUIColor &c,
             }
         }
     }
-    markUpdate(x0, y, x - x0, size);
+    markUpdate(x0, y, x - x0, sizeY);
 }
 
 void SDLGUIWindowImp::transform(const GUIRect &srcRect, SDL_Rect *dstRect) {

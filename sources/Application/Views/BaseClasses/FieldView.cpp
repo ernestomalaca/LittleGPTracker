@@ -45,6 +45,14 @@ void FieldView::Redraw() {
 	} ;
 };
 
+// trk2als: ¿a está más cerca que b de la columna del campo con el foco?
+bool FieldView::closerX(UIField &a,UIField &b) {
+	int fx=focus_->GetPosition()._x ;
+	int da=a.GetPosition()._x-fx ; if (da<0) da=-da ;
+	int db=b.GetPosition()._x-fx ; if (db<0) db=-db ;
+	return da<db ;
+}
+
 void FieldView::ProcessButtonMask(unsigned short mask) {
 
 	if (focus_==0) {
@@ -131,8 +139,9 @@ void FieldView::ProcessButtonMask(unsigned short mask) {
 								if (next) {
 									if (current.GetPosition()._y<next->GetPosition()._y) {
 										next=&current ;
-									} else {
-										// if both target at same height
+									} else if (current.GetPosition()._y==next->GetPosition()._y &&
+									           closerX(current,*next)) {
+										next=&current ; // trk2als: misma fila, la columna más cercana
 									} ;
 								} else {
 									next=&current ;
@@ -172,8 +181,9 @@ void FieldView::ProcessButtonMask(unsigned short mask) {
 								if (prev) {
 									if (current.GetPosition()._y>prev->GetPosition()._y) {
 										prev=&current ;
-									} else {
-										// if both target at same height
+									} else if (current.GetPosition()._y==prev->GetPosition()._y &&
+									           closerX(current,*prev)) {
+										prev=&current ; // trk2als: misma fila, la columna más cercana
 									} ;
 								} else {
 									prev=&current ;

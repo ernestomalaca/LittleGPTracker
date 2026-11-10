@@ -53,6 +53,8 @@ enum SampleInstrumentLoopMode {
 #define SIP_LOOPBARS MAKE_FOURCC('L', 'B', 'A', 'R')
 // trk2als: BPM original del loop (0 = compases a mano)
 #define SIP_LOOPBPM MAKE_FOURCC('L', 'B', 'P', 'M')
+// trk2als: compás del sample donde empieza el loop (1 = el primero)
+#define SIP_FROMBAR MAKE_FOURCC('L', 'F', 'R', 'M')
 
 #define FB_BUFFER_LENGTH 3500 // (in samples)
 
@@ -94,6 +96,10 @@ public:
 	   // name: nombre del archivo; secs: duración; allowGuess: adivinar si el nombre no dice
 	   static int DetectBpm(const char *name, float secs, bool allowGuess) ;
 	   void UpdateLoopBars() ;    // compases = duración x BPM / 240
+	   // Elegir el loop por compases (necesita el bpm del loop)
+	   float GetBarSamples() ;    // muestras por compás de 4/4; 0 si no hay bpm
+	   float GetSampleBars() ;    // cuántos compases dura el sample completo
+	   void ApplyBarRegion() ;    // start/loop start/loop end según from bar y bars
 	   // El Player avisa si el canal es pista de audio: entonces la voz toca en
 	   // looper sync sin cambiar el loop mode del instrumento (que puede usarse en MIDI)
 	   static void SetChannelSync(int channel, bool sync) ;
@@ -150,6 +156,7 @@ private:
 	   Variable *slices_ ;
 	   Variable *loopBars_ ;
 	   WatchedVariable *loopBpm_ ;
+	   Variable *fromBar_ ;
 	   Variable *interpolation_ ;
        Variable *printFx_;
        Variable *irPad_;

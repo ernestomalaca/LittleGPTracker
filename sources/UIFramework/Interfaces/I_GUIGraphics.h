@@ -23,7 +23,7 @@ public:
 	virtual bool SupportsShapes() { return false ; } ;
 	virtual void FillRoundRect(GUIRect &,int radius,GUIColor &) {} ;
 	virtual void FrameRoundRect(GUIRect &,int radius,int thick,GUIColor &) {} ;
-	// texto encima de lo que ya está dibujado (sin fondo); scale 1 = celda de 16
+	// texto encima de lo que ya está dibujado (sin fondo); scale 1 = celda de 16; 0 = letra chica de 8x12
 	virtual void BlendText(const char *,GUIPoint &,GUIColor &,int scale) {} ;
 
 	virtual GUIRect GetRect()=0 ;
