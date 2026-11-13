@@ -41,6 +41,8 @@ void PlayerChannel::StartInstrument(I_Instrument *instr,unsigned char note,bool 
 void PlayerChannel::StopInstrument() {
      if (instr_) {
        instr_->Stop(index_) ;
+       // trk2als: si la voz tiene cola (release), se sigue mezclando
+       if (instr_->Releasing(index_)) return ;
      }
      instr_=0 ;
 } ;

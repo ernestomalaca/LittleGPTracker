@@ -37,6 +37,18 @@ struct renderParams {
     int complexLatency_ ;    // trk2als: cuadros que el time-stretch va adelantado
     int warpMode_ ;          // trk2als: warp con el que suena la voz (el cambio espera al inicio del loop)
     bool justWrapped_ ;      // trk2als: el loop acaba de volver al principio
+    // trk2als: sampler estilo Simpler (pistas MIDI)
+    bool simpler_ ;          // la voz usa los parámetros del Sampler
+    int simplerLoop_ ;       // loop mode efectivo (ONESHOT o LOOP)
+    int filterMix_ ;         // tipo de filtro (lp/bp/hp como mezcla de LGPT)
+    int envStage_ ;          // 0 ataque, 1 decay, 2 sustain, 3 release, 4 fin
+    float envLevel_ ;        // 0..1
+    float envReleaseFrom_ ;  // nivel al soltar
+    int envClock_ ;          // muestras dentro de la etapa
+    bool gate_ ;             // false: la nota suena completa aunque se suelte
+    fixed glideFrom_ ;       // velocidad de la nota anterior
+    int glideLeft_, glideLen_ ; // muestras de glide que faltan / totales
+    int sLive_[5] ;          // últimos valores aplicados (vol, pan, tipo, freq, res)
 	fixed baseVolume_ ;  // Base volume the instrument was triggered with
 	fixed volume_ ;     // Current volume
 	bool reverse_ ;     // true if we we go backwards in stream

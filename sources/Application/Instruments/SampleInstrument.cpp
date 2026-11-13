@@ -32,7 +32,9 @@ void SampleInstrument::SetChannelSync(int channel, bool sync) {
 }
 
 SampleInstrumentLoopMode SampleInstrument::effectiveLoopMode(renderParams *rp) {
-	return rp->forceSync_ ? SILM_LOOPSYNC : (SampleInstrumentLoopMode)loopMode_->GetInt() ;
+	if (rp->forceSync_) return SILM_LOOPSYNC ;
+	if (rp->simpler_) return (SampleInstrumentLoopMode)rp->simplerLoop_ ;
+	return (SampleInstrumentLoopMode)loopMode_->GetInt() ;
 }
 
 // trk2als: parámetros en vivo. Start() copia los valores del instrumento a la
@@ -75,6 +77,11 @@ SampleInstrument::SampleInstrument() {
 	 for (int ch=0;ch<SONG_CHANNEL_COUNT;ch++) {   // trk2als
 		 voiceClock_[ch]=0 ;
 		 stretch_[ch]=0 ;
+		 renderParams_[ch].simpler_=false ;
+		 renderParams_[ch].finished_=true ;
+		 renderParams_[ch].envStage_=4 ;
+		 renderParams_[ch].envLevel_=0 ;
+		 renderParams_[ch].glideLeft_=0 ;
 	 }
 
 
@@ -161,6 +168,37 @@ SampleInstrument::SampleInstrument() {
 	 Insert(transpose_) ;
 	 clipBars_=new Variable("length",SIP_CLIPBARS,0) ;
 	 Insert(clipBars_) ;
+
+	 // trk2als: Sampler estilo Simpler (pistas MIDI). Se guardan aparte de los
+	 // de LGPT; InitSimpler() los deduce de ellos la primera vez
+	 static const char *simplerModes[3]={"classic","one-shot","slice"} ;
+	 static const char *offOn[2]={"off","on"} ;
+	 static const char *trigModes[2]={"trigger","gate"} ;
+	 static const char *filterTypes[3]={"LP","BP","HP"} ;
+	 Insert(new Variable("s init",SIP_S_INIT,0)) ;
+	 Insert(new Variable("s mode",SIP_S_MODE,simplerModes,3,SM_CLASSIC)) ;
+	 Insert(new Variable("s start",SIP_S_START,0)) ;
+	 Insert(new Variable("s end",SIP_S_END,100)) ;
+	 Insert(new Variable("s loop",SIP_S_LOOP,offOn,2,0)) ;
+	 Insert(new Variable("s loop len",SIP_S_LLEN,100)) ;
+	 Insert(new Variable("s trigger",SIP_S_TRIG,trigModes,2,0)) ;
+	 Insert(new Variable("s slices",SIP_S_SLICES,4)) ;
+	 Insert(new Variable("s transpose",SIP_S_TRANSP,0)) ;
+	 Insert(new Variable("s detune",SIP_S_DETUNE,0)) ;
+	 Insert(new Variable("s glide",SIP_S_GLIDE,0)) ;
+	 Insert(new Variable("s filter",SIP_S_FTYPE,filterTypes,3,0)) ;
+	 Insert(new Variable("s freq",SIP_S_FFREQ,127)) ;
+	 Insert(new Variable("s res",SIP_S_FRES,0)) ;
+	 Insert(new Variable("s env",SIP_S_FENV,0)) ;
+	 Insert(new Variable("s volume",SIP_S_VOL,0)) ;
+	 Insert(new Variable("s pan",SIP_S_PAN,0)) ;
+	 Insert(new Variable("s attack",SIP_S_ATK,0)) ;
+	 Insert(new Variable("s decay",SIP_S_DEC,600)) ;
+	 Insert(new Variable("s sustain",SIP_S_SUS,0)) ;
+	 Insert(new Variable("s release",SIP_S_REL,50)) ;
+	 Insert(new Variable("s fade in",SIP_S_FIN,0)) ;
+	 Insert(new Variable("s fade out",SIP_S_FOUT,0)) ;
+	 Insert(new Variable("s velocity",SIP_S_VEL,35)) ;
 
 	 loopStart_=new WatchedVariable("loopstart",SIP_LOOPSTART,0) ;
 	 Insert(loopStart_) ;
@@ -288,6 +326,22 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 		 } ;
 	 } 
      rp->forceSync_=syncRequest_[channel] ; // trk2als: pista de audio
+     // trk2als: en las pistas MIDI el instrumento es el Sampler estilo Simpler
+     // (salvo instrumentos viejos en looper sync)
+     bool wasSounding=rp->simpler_ && !rp->finished_ && rp->envStage_<4 &&
+                     voiceClock_[channel]!=0 ;
+     fixed prevSpeed=rp->speed_ ;
+     rp->simpler_=!rp->forceSync_ && loopMode_->GetInt()!=SILM_LOOPSYNC &&
+                  !source_->IsMulti() ;
+     int firstPos=start_->GetInt() ;
+     bool simplerSliced=false ;
+     float simplerOffset=0 ;
+     if (rp->simpler_) {
+         InitSimpler() ;
+         if (!startSimpler(rp,channel,midinote,firstPos,simplerSliced,simplerOffset)) {
+             return false ;   // nota fuera de las rebanadas
+         }
+     }
      SampleInstrumentLoopMode loopmode=effectiveLoopMode(rp) ;
 
 /*	 if (loopmode==SILM_OSCFINE) {
@@ -298,7 +352,7 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 	 rp->reverse_=false ;
 
      float driverRate = float(Audio::GetInstance()->GetSampleRate());
-     int isSliced = slices_->GetInt() > 1;
+     int isSliced = !rp->simpler_ && slices_->GetInt() > 1;
      if (isSliced) {
 		 if (rp->midiNote_ > slices_->GetInt() - 1) return false; // No sound outside of slice range
 		 int slice = rp->rendLoopEnd_ / slices_->GetInt();
@@ -315,7 +369,7 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
              // travel slower in sample
 
              rp->rendFirst_ =
-                 (isSliced) ? rp->rendLoopStart_ : start_->GetInt();
+                 (isSliced) ? rp->rendLoopStart_ : firstPos;
              rp->position_ = float(rp->rendFirst_);
              rp->baseSpeed_ =
                  fl2fp(source_->GetSampleRate(rp->midiNote_) / driverRate);
@@ -384,9 +438,19 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
         offset -= 12;
     }
 
-    fixed freqFactor=fl2fp(float(pow(2.0,(offset+fineTune)/12.0))) ;
+    float semis=offset+fineTune ;
+    if (rp->simpler_) semis=simplerOffset ;   // trk2als: transpose/detune del Sampler
+    fixed freqFactor=fl2fp(float(pow(2.0,semis/12.0))) ;
 	rp->baseSpeed_=fp_mul(rp->baseSpeed_,freqFactor) ;
     rp->speed_=rp->baseSpeed_ ;
+
+    // trk2als: glide desde la nota anterior (si seguía sonando)
+    rp->glideLeft_=0 ;
+    if (rp->simpler_ && wasSounding && GetSimpler(SIP_S_GLIDE)>0) {
+        rp->glideFrom_=prevSpeed ;
+        rp->glideLen_=rp->glideLeft_=int(GetSimpler(SIP_S_GLIDE)*44.1f) ;
+        rp->speed_=prevSpeed ;
+    }
     
   // Init k rate counter
  
@@ -451,6 +515,19 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 
 		rp->activeUpdaters_.clear() ;
 	}	
+	if (rp->simpler_) {
+		// trk2als: el Sampler no tiene crush, drive, downsample ni feedback
+		rp->crush_=16 ;
+		rp->drive_=0xFF ;
+		rp->downsample_=0 ;
+		rp->fbMix_=rp->baseFbMix_=0 ;
+		rp->attenuate_=i2fp(0xFF) ;
+		rp->envStage_=0 ;
+		rp->envLevel_=0 ;
+		rp->envClock_=0 ;
+		for (int k=0;k<5;k++) rp->sLive_[k]=-9999 ;
+		simplerBlock(rp,0) ;
+	}
 	snapshotLive(rp) ; // trk2als
 	return true ;
 }
@@ -461,7 +538,22 @@ void SampleInstrument::Stop(int channel) {
 
 	 renderParams *rp=renderParams_+channel ;
 	 running_=false ;
+	 // trk2als: el Sampler suelta la nota con su release (o la deja sonar
+	 // completa en modo trigger)
+	 if (rp->simpler_ && !rp->finished_) {
+		 if (rp->gate_ && rp->envStage_<3) {
+			 rp->envReleaseFrom_=rp->envLevel_ ;
+			 rp->envStage_=3 ;
+			 rp->envClock_=0 ;
+		 }
+		 return ;
+	 }
 	 voiceClock_[channel]=0 ;
+}
+
+bool SampleInstrument::Releasing(int channel) {
+	renderParams *rp=renderParams_+channel ;
+	return rp->simpler_ && !rp->finished_ && rp->envStage_<4 ;
 }
 
 int SampleInstrument::GetPlayPosition() {
@@ -563,6 +655,7 @@ bool SampleInstrument::Render(int channel, fixed *buffer, int size, int flags) {
         SYS_MEMSET(buffer, 0, size * 2 * sizeof(fixed));
 
         applyLive(rp); // trk2als: cambios del instrumento en vivo
+        if (rp->simpler_) simplerBlock(rp, size); // envolvente -> filtro, glide
 
         // trk2als: looper sync sigue al tempo en tiempo real. Si cambió la
         // duración del tick, se reescala la velocidad (con su transposición)
@@ -578,8 +671,9 @@ bool SampleInstrument::Render(int channel, fixed *buffer, int size, int flags) {
 
         bool hasUpdaters = !(rp->activeUpdaters_.empty());
 
-        int filterMix = filterMix_->GetInt();
-        FilterMode filterMode = (FilterMode)filterMode_->GetInt();
+        int filterMix = rp->simpler_ ? rp->filterMix_ : filterMix_->GetInt();
+        FilterMode filterMode =
+            rp->simpler_ ? FM_ORIGINAL : (FilterMode)filterMode_->GetInt();
         bool filterBoost = (filterMode == FM_SCREAM);
         bool bassyFilter = (filterMode == FM_BASSY);
 
@@ -1123,6 +1217,7 @@ bool SampleInstrument::Render(int channel, fixed *buffer, int size, int flags) {
 		rp->feedbackIn_=(feedbackIn-feedbackStart)/2 ;
 		rp->feedbackOut_=(feedbackPick-feedbackStart)/2 ;
 		somethingToMix=true ;
+		if (rp->simpler_) simplerEnvelope(rp,buffer,size) ; // trk2als
     }
 
     return somethingToMix;
@@ -1222,6 +1317,191 @@ void SampleInstrument::renderComplex(int channel,renderParams *rp,int size) {
 		warpOut_[size*ch+c]=warpOut_[(size-1)*ch+c] ;
 		warpOut_[(size+1)*ch+c]=warpOut_[(size-1)*ch+c] ;
 	}
+}
+
+/************************************************************
+ trk2als: Sampler estilo Simpler
+ ************************************************************/
+
+// La primera vez que el instrumento se usa como Sampler, sus parámetros se
+// deducen de los de LGPT para que suene parecido a como sonaba
+void SampleInstrument::InitSimpler() {
+	if (GetSimpler(SIP_S_INIT)) return ;
+	FindVariable(SIP_S_INIT)->SetInt(1) ;
+	int size=(source_ && source_->GetSize(-1)>0)?source_->GetSize(-1):0 ;
+	int lm=loopMode_->GetInt() ;
+	if (slices_->GetInt()>1) {
+		FindVariable(SIP_S_MODE)->SetInt(SM_SLICE) ;
+		FindVariable(SIP_S_SLICES)->SetInt(slices_->GetInt()) ;
+	} else if (lm==SILM_LOOP || lm==SILM_LOOP_PINGPONG) {
+		FindVariable(SIP_S_MODE)->SetInt(SM_CLASSIC) ;
+		FindVariable(SIP_S_LOOP)->SetInt(1) ;
+	} else {
+		FindVariable(SIP_S_MODE)->SetInt(SM_ONESHOT) ;
+	}
+	if (size>0) {
+		int end=loopEnd_->GetInt() ;
+		if (end<=0 || end>size) end=size ;
+		FindVariable(SIP_S_START)->SetInt(int(start_->GetInt()*100.0f/size)) ;
+		FindVariable(SIP_S_END)->SetInt(int(end*100.0f/size+0.5f)) ;
+		int len=end-loopStart_->GetInt() ;
+		if (len>0) FindVariable(SIP_S_LLEN)->SetInt(int(len*100.0f/size+0.5f)) ;
+	}
+	FindVariable(SIP_S_TRANSP)->SetInt(60-rootNote_->GetInt()) ;
+	FindVariable(SIP_S_DETUNE)->SetInt(int((fineTune_->GetInt()-0x7F)*100.0f/128.0f)) ;
+	int vol=volume_->GetInt() ;
+	FindVariable(SIP_S_VOL)->SetInt(vol>0?int(20.0f*log10f(vol/128.0f)-0.5f*(vol<128)):-36) ;
+	FindVariable(SIP_S_PAN)->SetInt(int((pan_->GetInt()-0x7F)*50/127)) ;
+	FindVariable(SIP_S_FFREQ)->SetInt(cutoff_->GetInt()/2) ;
+	FindVariable(SIP_S_FRES)->SetInt(reso_->GetInt()/2) ;
+	int mix=filterMix_->GetInt() ;
+	FindVariable(SIP_S_FTYPE)->SetInt(mix<0x40?0:(mix<0xC0?1:2)) ;
+	// LGPT no tiene envolvente: que suene igual, sin cola
+	FindVariable(SIP_S_SUS)->SetInt(0) ;
+	FindVariable(SIP_S_REL)->SetInt(0) ;
+}
+
+// Región, modo de loop y afinación de la nota que empieza
+bool SampleInstrument::startSimpler(renderParams *rp,int channel,unsigned char note,
+                                    int &first,bool &sliced,float &offset) {
+	int size=source_->GetSize(rp->midiNote_) ;
+	int mode=GetSimpler(SIP_S_MODE) ;
+	int a=int((long long)size*GetSimpler(SIP_S_START)/100) ;
+	int b=int((long long)size*GetSimpler(SIP_S_END)/100) ;
+	if (b>size) b=size ;
+	if (b<=a) b=(a+1<size)?a+1:size ;
+	offset=GetSimpler(SIP_S_TRANSP)+GetSimpler(SIP_S_DETUNE)/100.0f ;
+	rp->simplerLoop_=SILM_ONESHOT ;
+	rp->gate_=true ;
+	switch (mode) {
+		case SM_CLASSIC: {
+			offset+=note-60 ;          // C3 = tono original, como Simpler
+			first=a ;
+			if (GetSimpler(SIP_S_LOOP)) {
+				int len=int((long long)size*GetSimpler(SIP_S_LLEN)/100) ;
+				int ls=b-len ;
+				if (ls<a) ls=a ;
+				if (ls>=b) ls=b-1 ;
+				rp->rendLoopStart_=ls ;
+				rp->simplerLoop_=SILM_LOOP ;
+			} else {
+				rp->rendLoopStart_=a ;
+			}
+			rp->rendLoopEnd_=b ;
+			break ;
+		}
+		case SM_ONESHOT:
+			offset+=note-60 ;
+			first=a ;
+			rp->rendLoopStart_=a ;
+			rp->rendLoopEnd_=b ;
+			rp->gate_=(GetSimpler(SIP_S_TRIG)==1) ;
+			break ;
+		case SM_SLICE: {
+			int n=GetSimpler(SIP_S_SLICES) ;
+			if (n<1) n=1 ;
+			int idx=int(note)-36 ;     // C1 = rebanada 1, como Simpler
+			if (idx<0 || idx>=n) return false ;
+			int len=(b-a)/n ;
+			if (len<1) return false ;
+			rp->rendLoopStart_=a+idx*len ;
+			rp->rendLoopEnd_=a+(idx+1)*len ;
+			first=rp->rendLoopStart_ ;
+			rp->gate_=(GetSimpler(SIP_S_TRIG)==1) ;
+			break ;
+		}
+	}
+	sliced=(mode==SM_SLICE) ;
+	return true ;
+}
+
+float SampleInstrument::envMs(FourCC id) {
+	int v=GetSimpler(id) ;
+	return v<0?0:float(v) ;
+}
+
+// Una vez por bloque: parámetros en vivo, glide y la envolvente sobre el filtro
+void SampleInstrument::simplerBlock(renderParams *rp,int size) {
+	// solo lo que cambió en la pantalla, para no pisar los comandos de la phrase
+	int v ;
+	if ((v=GetSimpler(SIP_S_VOL))!=rp->sLive_[0]) {
+		rp->sLive_[0]=v ;
+		float lin=128.0f*powf(10.0f,v/20.0f) ;
+		if (lin>255) lin=255 ;
+		rp->volume_=rp->baseVolume_=fl2fp(lin) ;
+	}
+	if ((v=GetSimpler(SIP_S_PAN))!=rp->sLive_[1]) {
+		rp->sLive_[1]=v ;
+		int pan=0x7F+v*127/50 ;
+		rp->pan_=rp->basePan_=i2fp(pan<0?0:(pan>254?254:pan)) ;
+	}
+	if ((v=GetSimpler(SIP_S_FTYPE))!=rp->sLive_[2]) {
+		static const int mixes[3]={0x00,0x80,0xFF} ;
+		rp->sLive_[2]=v ;
+		rp->filterMix_=mixes[(v<0||v>2)?0:v] ;
+	}
+	if ((v=GetSimpler(SIP_S_FRES))!=rp->sLive_[4]) {
+		rp->sLive_[4]=v ;
+		rp->reso_=rp->baseFRes_=fl2fp(v/127.0f) ;
+	}
+	int env=GetSimpler(SIP_S_FENV) ;
+	if ((v=GetSimpler(SIP_S_FFREQ))!=rp->sLive_[3] || env!=0) {
+		rp->sLive_[3]=v ;
+		float cut=v/127.0f+env/127.0f*rp->envLevel_ ;
+		if (cut<0) cut=0 ;
+		if (cut>1) cut=1 ;
+		rp->cutoff_=rp->baseFCut_=fl2fp(cut) ;
+	}
+	if (rp->glideLeft_>0 && size>0) {
+		rp->glideLeft_-=size ;
+		if (rp->glideLeft_<0) rp->glideLeft_=0 ;
+		float k=1.0f-float(rp->glideLeft_)/rp->glideLen_ ;
+		float from=fp2fl(rp->glideFrom_), to=fp2fl(rp->baseSpeed_) ;
+		rp->speed_=fl2fp(from+(to-from)*k) ;
+	}
+}
+
+// Envolvente de amplitud, muestra por muestra. Classic y slice: ADSR;
+// one-shot: fade in y fade out (al soltar, en modo gate)
+void SampleInstrument::simplerEnvelope(renderParams *rp,fixed *buffer,int size) {
+	const float msr=44.1f ;   // muestras por milisegundo
+	bool oneShot=(GetSimpler(SIP_S_MODE)==SM_ONESHOT) ;
+	float atk=(oneShot?envMs(SIP_S_FIN):envMs(SIP_S_ATK))*msr ;
+	float dec=oneShot?0:envMs(SIP_S_DEC)*msr ;
+	float sus=1.0f ;
+	if (!oneShot) {
+		int db=GetSimpler(SIP_S_SUS) ;
+		sus=(db<=-60)?0:powf(10.0f,db/20.0f) ;
+	}
+	float rel=(oneShot?envMs(SIP_S_FOUT):envMs(SIP_S_REL))*msr ;
+	for (int i=0;i<size;i++) {
+		float l=rp->envLevel_ ;
+		switch (rp->envStage_) {
+			case 0:   // ataque
+				l=(atk<1)?1:float(rp->envClock_)/atk ;
+				if (l>=1) { l=1 ; rp->envStage_=1 ; rp->envClock_=0 ; }
+				break ;
+			case 1:   // decay hacia el sustain
+				l=(dec<1)?sus:1.0f-(1.0f-sus)*float(rp->envClock_)/dec ;
+				if (l<=sus || dec<1) { l=sus ; rp->envStage_=2 ; rp->envClock_=0 ; }
+				break ;
+			case 2:
+				l=sus ;
+				break ;
+			case 3:   // release
+				l=(rel<1)?0:rp->envReleaseFrom_*(1.0f-float(rp->envClock_)/rel) ;
+				if (l<=0) { l=0 ; rp->envStage_=4 ; }
+				break ;
+			default:
+				l=0 ;
+		}
+		rp->envLevel_=l ;
+		rp->envClock_++ ;
+		fixed f=fl2fp(l) ;
+		buffer[2*i]=fp_mul(buffer[2*i],f) ;
+		buffer[2*i+1]=fp_mul(buffer[2*i+1],f) ;
+	}
+	if (rp->envStage_>=4) rp->finished_=true ;   // terminó la cola
 }
 
 void SampleInstrument::AssignSample(int i) {

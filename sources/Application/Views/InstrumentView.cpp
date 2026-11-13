@@ -27,6 +27,8 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data) {
 	lastSampleIdx_=-2 ;
 	wfSample_=-1 ;
 	wfSize_=0 ;
+	simplerView_=false ;
+	ampLabelRow_=-1 ;
 	playheadPx_=-1 ;
 	audioMode_=false ;
 	labelCount_=0 ;
@@ -133,6 +135,94 @@ void InstrumentView::fillSampleParameters() {
 	ADD(f1) ;
 	f1->SetFocus() ;
 	row++ ;
+
+	// Sampler estilo Simpler: el instrumento de las pistas MIDI (salvo los
+	// viejos en looper sync, que siguen con la pantalla de LGPT)
+	simplerView_=!audioMode_ && !sync ;
+	if (simplerView_) {
+		instrument->InitSimpler() ;
+		int mode=instrument->GetSimpler(SIP_S_MODE) ;
+		gaps=4 ;
+		v=instrument->FindVariable(SIP_S_MODE) ;
+		ADD(new UIIntVarField(AT(L),*v,"mode: %s",0,2,1,1)) ;
+		row++ ;
+
+		LABEL("PLAYBACK") ;
+		if (mode==SM_SLICE) {
+			v=instrument->FindVariable(SIP_S_SLICES) ;
+			ADD(new UIIntVarField(AT(L),*v,"slices: %d",2,64,1,4)) ;
+			v=instrument->FindVariable(SIP_S_TRIG) ;
+			ADD(new UIIntVarField(AT(R),*v,"trigger: %s",0,1,1,1)) ;
+			row++ ;
+		}
+		v=instrument->FindVariable(SIP_S_START) ;
+		ADD(new UIIntVarField(AT(L),*v,"start: %d%%",0,99,1,10)) ;
+		v=instrument->FindVariable(SIP_S_END) ;
+		ADD(new UIIntVarField(AT(R),*v,"end: %d%%",1,100,1,10)) ;
+		row++ ;
+		if (mode==SM_CLASSIC) {
+			v=instrument->FindVariable(SIP_S_LOOP) ;
+			ADD(new UIIntVarField(AT(L),*v,"loop: %s",0,1,1,1)) ;
+			if (instrument->GetSimpler(SIP_S_LOOP)) {
+				v=instrument->FindVariable(SIP_S_LLEN) ;
+				ADD(new UIIntVarField(AT(R),*v,"loop len: %d%%",1,100,1,10)) ;
+			}
+			row++ ;
+		} else if (mode==SM_ONESHOT) {
+			v=instrument->FindVariable(SIP_S_TRIG) ;
+			ADD(new UIIntVarField(AT(L),*v,"trigger: %s",0,1,1,1)) ;
+			row++ ;
+		}
+
+		LABEL("PITCH") ;
+		v=instrument->FindVariable(SIP_S_TRANSP) ;
+		ADD(new UIIntVarField(AT(L),*v,"transpose: %+d",-48,48,1,12)) ;
+		v=instrument->FindVariable(SIP_S_DETUNE) ;
+		ADD(new UIIntVarField(AT(R),*v,"detune: %+dct",-50,50,1,10)) ;
+		row++ ;
+		v=instrument->FindVariable(SIP_S_GLIDE) ;
+		ADD(new UIIntVarField(AT(L),*v,"glide: %dms",0,2000,10,100)) ;
+		row++ ;
+
+		LABEL("FILTER") ;
+		v=instrument->FindVariable(SIP_S_FTYPE) ;
+		ADD(new UIIntVarField(AT(L),*v,"type: %s",0,2,1,1)) ;
+		v=instrument->FindVariable(SIP_S_FFREQ) ;
+		ADD(new UIIntVarField(AT(R),*v,"freq: %d",0,127,1,16)) ;
+		row++ ;
+		v=instrument->FindVariable(SIP_S_FRES) ;
+		ADD(new UIIntVarField(AT(L),*v,"res: %d",0,127,1,16)) ;
+		v=instrument->FindVariable(SIP_S_FENV) ;
+		ADD(new UIIntVarField(AT(R),*v,"env: %+d",-127,127,1,16)) ;
+		row++ ;
+
+		LABEL("AMP") ;
+		ampLabelRow_=row-1 ;
+		v=instrument->FindVariable(SIP_S_VOL) ;
+		ADD(new UIIntVarField(AT(L),*v,"volume: %+ddB",-36,6,1,6)) ;
+		v=instrument->FindVariable(SIP_S_PAN) ;
+		ADD(new UIIntVarField(AT(R),*v,"pan: %+d",-50,50,1,10)) ;
+		row++ ;
+		if (mode==SM_ONESHOT) {
+			v=instrument->FindVariable(SIP_S_FIN) ;
+			ADD(new UIIntVarField(AT(L),*v,"fade in: %dms",0,2000,5,50)) ;
+			v=instrument->FindVariable(SIP_S_FOUT) ;
+			ADD(new UIIntVarField(AT(R),*v,"fade out: %dms",0,2000,5,50)) ;
+			row++ ;
+		} else {
+			v=instrument->FindVariable(SIP_S_ATK) ;
+			ADD(new UIIntVarField(AT(L),*v,"attack: %dms",0,5000,5,100)) ;
+			v=instrument->FindVariable(SIP_S_DEC) ;
+			ADD(new UIIntVarField(AT(R),*v,"decay: %dms",0,10000,10,100)) ;
+			row++ ;
+			v=instrument->FindVariable(SIP_S_SUS) ;
+			ADD(new UIIntVarField(AT(L),*v,"sustain: %ddB",-60,0,1,6)) ;
+			v=instrument->FindVariable(SIP_S_REL) ;
+			ADD(new UIIntVarField(AT(R),*v,"release: %dms",0,10000,10,100)) ;
+			row++ ;
+		}
+		return ;
+	}
 
 	if (audioMode_) {
 		LABEL("LOOP") ;
@@ -385,7 +475,8 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 	}
 	// cambiar el warp muestra u oculta 'transpose'
 	// ... y el loop mode (en pistas de tracker) muestra u oculta bars y bpm
-	if ((editedID==SIP_WARP || editedID==SIP_LOOPMODE) &&
+	if ((editedID==SIP_WARP || editedID==SIP_LOOPMODE || editedID==SIP_S_MODE ||
+	     editedID==SIP_S_LOOP) &&
 	    current_->FindVariable(editedID)->GetInt()!=editedBefore) {
 		lastFocusID_=editedID ;
 		onInstrumentChange() ;
@@ -414,7 +505,9 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
            }
 
 		   // Check if on table
-		   if (GetFocus()==T_SimpleList<UIField>::GetLast()) {
+		   bool onTable=!GetFocus()->IsStatic() &&
+		       ((UIIntVarField *)GetFocus())->GetVariableID()==SIP_TABLE ;
+		   if (onTable) {
 	            int i=viewData_->currentInstrument_ ;
 	            InstrumentBank *bank=viewData_->project_->GetInstrumentBank() ;
 	            I_Instrument *instr=bank->GetInstrument(i) ;
@@ -424,8 +517,7 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 		   } ;
 
 		   // trk2als: B+A en cualquier otro campo lo regresa a su valor por defecto
-		   if (GetFocus()!=T_SimpleList<UIField>::GetFirst() &&
-		       GetFocus()!=T_SimpleList<UIField>::GetLast() &&
+		   if (GetFocus()!=T_SimpleList<UIField>::GetFirst() && !onTable &&
 		       !GetFocus()->IsStatic()) {
 				resetFocusedField() ;
 		   }
@@ -561,7 +653,8 @@ void InstrumentView::DrawView() {
 
     char title[20];
     SetColor(CD_NORMAL);
-    sprintf(title, "Instrument %2.2X", viewData_->currentInstrument_);
+    sprintf(title, simplerView_ ? "Sampler %2.2X" : "Instrument %2.2X",
+            viewData_->currentInstrument_);
     DrawString(pos._x, pos._y, title, props);
 
     // Draw fields
@@ -646,6 +739,11 @@ void InstrumentView::drawWaveform() {
 		wfSize_=size ;
 	}
 
+	if (simplerView_) {
+		drawSimplerWave(si,X,Y,W,H,size) ;
+		return ;
+	}
+
 	int st=si->FindVariable(SIP_START)->GetInt() ;
 	int ls=si->FindVariable(SIP_LOOPSTART)->GetInt() ;
 	int le=si->FindVariable(SIP_END)->GetInt() ;
@@ -723,6 +821,114 @@ void InstrumentView::drawWaveform() {
 		DrawText(sx+5,Y+1,"start",hi2,0) ;
 	}
 	// cursor de reproducción: la línea verde sigue a la voz que suena
+	playheadPx_=-1 ;
+	int pos=si->GetPlayPosition() ;
+	if (pos>=0 && pos<=size) {
+		playheadPx_=X+int((long long)pos*W/size) ;
+		FillRect(playheadPx_-1,Y-4,3,H+8,ColorOf(CD_PLAY),1) ;
+	}
+}
+
+// trk2als: onda del Sampler: start/end, región del loop (classic), rebanadas
+// (slice), la envolvente junto a la etiqueta AMP y el cursor de reproducción
+void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int H,int size) {
+	GUIColor bg=ColorOf(CD_BACKGROUND) ;
+	GUIColor fg=ColorOf(CD_NORMAL) ;
+	GUIColor hi=ColorOf(CD_HILITE1) ;
+	GUIColor hi2=ColorOf(CD_HILITE2) ;
+	GUIColor dim=Mix(bg,fg,27) ;
+	GUIColor dim2=Mix(bg,fg,55) ;
+	int mode=si->GetSimpler(SIP_S_MODE) ;
+	int a=X+W*si->GetSimpler(SIP_S_START)/100 ;
+	int b=X+W*si->GetSimpler(SIP_S_END)/100 ;
+	if (b<=a) b=a+2 ;
+
+	SoundSource *src=SamplePool::GetInstance()->GetSource(si->GetSampleIndex()) ;
+	int rate=src?src->GetSampleRate(-1):0 ;
+	if (rate>0) {
+		char info[16] ;
+		int cs=int((long long)size*100/rate) ;
+		sprintf(info,"%d.%02ds",cs/100,cs%100) ;
+		DrawText(632-8*int(strlen(info)),3,info,dim2,0) ;
+	}
+
+	bool loop=(mode==SM_CLASSIC && si->GetSimpler(SIP_S_LOOP)) ;
+	int l0=b-W*si->GetSimpler(SIP_S_LLEN)/100 ;
+	if (l0<a) l0=a ;
+	if (loop) FillRect(l0,Y-4,b-l0,H+8,Mix(bg,hi,20),8) ;
+
+	int mid=Y+20+(H-20)/2 ;
+	for (int k=0;k<WF_BARS;k++) {
+		int c=X+k*8+4 ;
+		int h=(wfPeaks_[k]*(H-30))/255 ;
+		if (h<4) h=4 ;
+		FillRect(c-3,mid-h/2,5,h,(c>=a && c<b)?hi:dim,2) ;
+	}
+
+	if (mode==SM_SLICE) {
+		int n=si->GetSimpler(SIP_S_SLICES) ;
+		if (n<1) n=1 ;
+		int every=1 ;
+		while ((b-a)*every/n<14) every*=2 ;   // numerar sin amontonar
+		for (int k=0;k<n;k++) {
+			int x=a+(b-a)*k/n ;
+			FillRect(x-1,Y-4,2,H+8,hi2) ;
+			if (k%every==0) {
+				char num[8] ;
+				sprintf(num,"%d",k+1) ;
+				DrawText(x+4,Y+1,num,hi2,0) ;
+			}
+		}
+		FillRect(b-1,Y-4,2,H+8,hi2) ;
+	} else {
+		FillRect(a-1,Y-4,2,H+8,hi2) ;
+		DrawText(a+5,Y+1,"start",hi2,0) ;
+		FillRect(b-1,Y-4,2,H+8,hi2) ;
+		DrawText(b-30,Y+1,"end",hi2,0) ;
+		if (loop) {
+			FrameRect(l0,Y-4,b-l0,H+8,hi,8,2) ;
+			DrawText(l0+5,Y+H-10,"loop",hi,0) ;
+		}
+	}
+
+	// la envolvente de volumen, a la derecha de la etiqueta AMP
+	if (ampLabelRow_>=0) {
+		int ex=16*8, ey=ampLabelRow_*16+3, ew=200, eh=11 ;
+		float atk,dec,rel,sus=1.0f ;
+		if (mode==SM_ONESHOT) {
+			atk=float(si->GetSimpler(SIP_S_FIN)) ; dec=0 ;
+			rel=float(si->GetSimpler(SIP_S_FOUT)) ;
+		} else {
+			atk=float(si->GetSimpler(SIP_S_ATK)) ;
+			dec=float(si->GetSimpler(SIP_S_DEC)) ;
+			rel=float(si->GetSimpler(SIP_S_REL)) ;
+			int db=si->GetSimpler(SIP_S_SUS) ;
+			sus=(db<=-60)?0:powf(10.0f,db/20.0f) ;
+		}
+		// tiempos comprimidos (raíz) para que los cortos se vean
+		float wa=sqrtf(atk), wd=sqrtf(dec), wr=sqrtf(rel), hold=20 ;
+		float total=wa+wd+wr+hold ;
+		if (total<1) total=1 ;
+		float k=ew/total ;
+		int x0=ex, x1=ex+int(wa*k), x2=x1+int(wd*k), x3=x2+int(hold*k), x4=x3+int(wr*k) ;
+		int top=ey, base=ey+eh, ys=ey+int((1.0f-sus)*eh) ;
+		// segmentos con rectángulos de 2 px (rectas aproximadas)
+		struct { int xa,ya,xb,yb ; } seg[4]={{x0,base,x1,top},{x1,top,x2,ys},{x2,ys,x3,ys},{x3,ys,x4,base}} ;
+		for (int q=0;q<4;q++) {
+			int dx=seg[q].xb-seg[q].xa ;
+			if (dx<=0) {
+				int y0=seg[q].ya<seg[q].yb?seg[q].ya:seg[q].yb ;
+				FillRect(seg[q].xa,y0,2,abs(seg[q].yb-seg[q].ya)+2,hi) ;
+				continue ;
+			}
+			for (int x=0;x<=dx;x+=2) {
+				int y=seg[q].ya+(seg[q].yb-seg[q].ya)*x/dx ;
+				FillRect(seg[q].xa+x,y,2,2,hi) ;
+			}
+		}
+	}
+
+	// cursor de reproducción
 	playheadPx_=-1 ;
 	int pos=si->GetPlayPosition() ;
 	if (pos>=0 && pos<=size) {

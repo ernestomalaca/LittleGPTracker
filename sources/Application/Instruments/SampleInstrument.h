@@ -63,6 +63,32 @@ enum SampleInstrumentLoopMode {
 #define SIP_TRANSPOSE MAKE_FOURCC('T', 'R', 'N', 'S')
 // trk2als: cuántos compases dura la celda en la Song (0 = los mismos que el loop)
 #define SIP_CLIPBARS MAKE_FOURCC('C', 'L', 'E', 'N')
+// trk2als: Sampler estilo Simpler (instrumentos de pistas MIDI)
+#define SIP_S_INIT  MAKE_FOURCC('S', 'I', 'N', 'I')
+#define SIP_S_MODE  MAKE_FOURCC('S', 'M', 'O', 'D')
+#define SIP_S_START MAKE_FOURCC('S', 'S', 'T', 'A')
+#define SIP_S_END   MAKE_FOURCC('S', 'E', 'N', 'D')
+#define SIP_S_LOOP  MAKE_FOURCC('S', 'L', 'O', 'N')
+#define SIP_S_LLEN  MAKE_FOURCC('S', 'L', 'L', 'E')
+#define SIP_S_TRIG  MAKE_FOURCC('S', 'T', 'R', 'G')
+#define SIP_S_SLICES MAKE_FOURCC('S', 'S', 'L', 'N')
+#define SIP_S_TRANSP MAKE_FOURCC('S', 'T', 'R', 'N')
+#define SIP_S_DETUNE MAKE_FOURCC('S', 'D', 'E', 'T')
+#define SIP_S_GLIDE MAKE_FOURCC('S', 'G', 'L', 'D')
+#define SIP_S_FTYPE MAKE_FOURCC('S', 'F', 'T', 'Y')
+#define SIP_S_FFREQ MAKE_FOURCC('S', 'F', 'F', 'Q')
+#define SIP_S_FRES  MAKE_FOURCC('S', 'F', 'R', 'S')
+#define SIP_S_FENV  MAKE_FOURCC('S', 'F', 'E', 'N')
+#define SIP_S_VOL   MAKE_FOURCC('S', 'V', 'O', 'L')
+#define SIP_S_PAN   MAKE_FOURCC('S', 'P', 'A', 'N')
+#define SIP_S_ATK   MAKE_FOURCC('S', 'A', 'T', 'K')
+#define SIP_S_DEC   MAKE_FOURCC('S', 'D', 'E', 'C')
+#define SIP_S_SUS   MAKE_FOURCC('S', 'S', 'U', 'S')
+#define SIP_S_REL   MAKE_FOURCC('S', 'R', 'E', 'L')
+#define SIP_S_FIN   MAKE_FOURCC('S', 'F', 'I', 'N')
+#define SIP_S_FOUT  MAKE_FOURCC('S', 'F', 'O', 'U')
+#define SIP_S_VEL   MAKE_FOURCC('S', 'V', 'E', 'L')
+enum SimplerMode { SM_CLASSIC = 0, SM_ONESHOT, SM_SLICE };
 
 #define FB_BUFFER_LENGTH 3500 // (in samples)
 
@@ -75,6 +101,10 @@ public:
 	   virtual bool Init() ;
        virtual bool Start(int channel, unsigned char note, int flags = 1);
        virtual void Stop(int channel) ;
+       virtual bool Releasing(int channel) ;
+       // trk2als: Sampler estilo Simpler
+       void InitSimpler() ;       // la primera vez: traducir lo de LGPT
+       int GetSimpler(FourCC id) { return FindVariable(id)->GetInt() ; } ;
        virtual bool Render(int channel, fixed *buffer, int size, int flags);
        virtual bool IsInitialized() ;
 	   virtual bool IsEmpty() ;
@@ -143,6 +173,10 @@ private:
 	   // trk2als: warp complex; deja size cuadros estirados en warpOut_
 	   void renderComplex(int channel,renderParams *rp,int size) ;
 	   void readLoop(renderParams *rp,int n) ;
+	   bool startSimpler(renderParams *rp,int channel,unsigned char note,int &first,bool &sliced,float &offset) ;
+	   void simplerBlock(renderParams *rp,int size) ; // envolvente -> corte, glide
+	   void simplerEnvelope(renderParams *rp,fixed *buffer,int size) ;
+	   float envMs(FourCC id) ;
 	   WarpStretch *stretch_[SONG_CHANNEL_COUNT] ;
 	   std::vector<float> warpIn_[2], warpOut2_[2] ;
 	   std::vector<short> warpOut_ ;

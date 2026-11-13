@@ -6,6 +6,8 @@
 #include "Foundation/Observable.h"
 #include "ViewData.h"
 
+class SampleInstrument ;
+
 class InstrumentView: public FieldView, public I_Observer {
 public:
 	InstrumentView(GUIWindow &w,ViewData *data) ;
@@ -40,6 +42,9 @@ private:
 	unsigned char wfPeaks_[WF_BARS] ;
 	int playheadPx_ ;        // dónde se dibujó el cursor de reproducción (-1 = no)
 	bool audioMode_ ;        // loop de pista de audio: pantalla simplificada
+	bool simplerView_ ;      // Sampler estilo Simpler (pistas MIDI)
+	int ampLabelRow_ ;       // dónde va el dibujo de la envolvente
+	void drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int H,int size) ;
 	int labelCount_ ;        // etiquetas de los bloques de campos
 	int labelRow_[8] ;
 	const char *labelText_[8] ;

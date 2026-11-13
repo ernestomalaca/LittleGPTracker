@@ -28,6 +28,8 @@ public:
       // flags & 2 indicates muting (i.e. no trigger)
       virtual bool Start(int channel,unsigned char note,int flags=1)=0 ;
       virtual void Stop(int channel)=0 ;
+      // trk2als: después de Stop la voz sigue sonando (cola de release)
+      virtual bool Releasing(int channel) { return false ; } ;
 
 	  // Engine playback  start callback
 
