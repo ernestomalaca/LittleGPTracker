@@ -90,6 +90,11 @@ enum SampleInstrumentLoopMode {
 #define SIP_S_VEL   MAKE_FOURCC('S', 'V', 'E', 'L')
 #define SIP_S_WARP  MAKE_FOURCC('S', 'W', 'R', 'P')
 #define SIP_S_BPM   MAKE_FOURCC('S', 'B', 'P', 'M')
+#define SIP_S_VOICES MAKE_FOURCC('S', 'V', 'O', 'I')
+
+// trk2als: cada canal tiene su voz y, con 'voices: 2', una voz más para la
+// cola de la nota anterior (índice canal+SONG_CHANNEL_COUNT)
+#define SI_VOICE_COUNT (SONG_CHANNEL_COUNT*2)
 enum SimplerMode { SM_CLASSIC = 0, SM_ONESHOT, SM_SLICE };
 // trk2als: warp del Sampler (como en Simpler): sin warp, re-pitch o complex
 enum SimplerWarp { SW_OFF = 0, SW_REPITCH, SW_COMPLEX };
@@ -165,14 +170,14 @@ protected:
 
 private:
        SoundSource *source_ ;
-       struct renderParams renderParams_[SONG_CHANNEL_COUNT] ;
+       struct renderParams renderParams_[SI_VOICE_COUNT] ;
        bool running_ ;
        bool dirty_ ;
 	   TableSaveState tableState_ ;
 	   
-	   static int lastMidiNote_[SONG_CHANNEL_COUNT] ;
+	   static int lastMidiNote_[SI_VOICE_COUNT] ;
 	   static bool syncRequest_[SONG_CHANNEL_COUNT] ; // trk2als
-	   unsigned long voiceClock_[SONG_CHANNEL_COUNT] ; // trk2als: último render de cada voz (ms)
+	   unsigned long voiceClock_[SI_VOICE_COUNT] ; // trk2als: último render de cada voz (ms)
 	   SampleInstrumentLoopMode effectiveLoopMode(renderParams *rp) ;
 	   void snapshotLive(renderParams *rp) ;  // trk2als
 	   void applyLive(renderParams *rp) ;     // trk2als
@@ -183,12 +188,16 @@ private:
 	   void simplerBlock(renderParams *rp,int size) ; // envolvente -> corte, glide
 	   void simplerEnvelope(renderParams *rp,fixed *buffer,int size) ;
 	   float envMs(FourCC id) ;
-	   WarpStretch *stretch_[SONG_CHANNEL_COUNT] ;
-	   float lastWarpT_[SONG_CHANNEL_COUNT], warpTarget_[SONG_CHANNEL_COUNT] ; // glide con warp complex
+	   WarpStretch *stretch_[SI_VOICE_COUNT] ;
+	   float lastWarpT_[SI_VOICE_COUNT], warpTarget_[SI_VOICE_COUNT] ; // glide con warp complex
 	   std::vector<float> warpIn_[2], warpOut2_[2] ;
 	   std::vector<short> warpOut_ ;
-	   static fixed lastSample_[SONG_CHANNEL_COUNT][2] ;
-	   static fixed feedback_[SONG_CHANNEL_COUNT][FB_BUFFER_LENGTH*2] ;
+	   static fixed lastSample_[SI_VOICE_COUNT][2] ;
+	   static fixed feedback_[SI_VOICE_COUNT][FB_BUFFER_LENGTH*2] ;
+	   bool renderVoice(int voice, fixed *buffer, int size, int flags) ;
+	   void startTail(int channel) ;      // la nota que sonaba pasa a la voz de cola
+	   bool tailActive(int channel) ;
+	   std::vector<fixed> tailBuffer_ ;
 
 	   Variable *volume_ ;
 	   Variable *crush_ ;

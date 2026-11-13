@@ -19,7 +19,7 @@
 #include "SampleInstrumentDatas.h"
 #include "Application/Player/SyncMaster.h"
 
-fixed SampleInstrument::feedback_[SONG_CHANNEL_COUNT][FB_BUFFER_LENGTH*2] ;
+fixed SampleInstrument::feedback_[SI_VOICE_COUNT][FB_BUFFER_LENGTH*2] ;
 
 bool SampleInstrument::useDirtyDownsampling_ = false;
 
@@ -67,14 +67,14 @@ void SampleInstrument::applyLive(renderParams *rp) {
 	if ((v=fbMix_->GetInt())!=rp->liveFbMix_) { rp->liveFbMix_=v ; rp->fbMix_=rp->baseFbMix_=fl2fp(v/255.0f) ; }
 }
 
-int SampleInstrument::lastMidiNote_[SONG_CHANNEL_COUNT]= {
-	-1,-1,-1,-1,-1,-1,-1,-1
+int SampleInstrument::lastMidiNote_[SI_VOICE_COUNT]= {
+	-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1
 } ;
 
 #define KRATE_SAMPLE_COUNT 100
 
 SampleInstrument::SampleInstrument() {
-	 for (int ch=0;ch<SONG_CHANNEL_COUNT;ch++) {   // trk2als
+	 for (int ch=0;ch<SI_VOICE_COUNT;ch++) {   // trk2als
 		 voiceClock_[ch]=0 ;
 		 stretch_[ch]=0 ;
 		 lastWarpT_[ch]=warpTarget_[ch]=1.0f ;
@@ -203,6 +203,7 @@ SampleInstrument::SampleInstrument() {
 	 static const char *simplerWarps[3]={"off","re-pitch","complex"} ;
 	 Insert(new Variable("s warp",SIP_S_WARP,simplerWarps,3,SW_OFF)) ;
 	 Insert(new Variable("s bpm",SIP_S_BPM,0)) ;
+	 Insert(new Variable("s voices",SIP_S_VOICES,1)) ;
 
 	 loopStart_=new WatchedVariable("loopstart",SIP_LOOPSTART,0) ;
 	 Insert(loopStart_) ;
@@ -235,7 +236,7 @@ SampleInstrument::SampleInstrument() {
 
      // Initalize instrument's voices update list
 
-     for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
+     for (int i = 0; i < SI_VOICE_COUNT; i++) {
          renderParams *rp = renderParams_ + i;
          rp->updaters_.push_back(&rp->volumeRamp_);
          rp->updaters_.push_back(&rp->panner_);
@@ -255,7 +256,7 @@ SampleInstrument::SampleInstrument() {
 }
 
 SampleInstrument::~SampleInstrument() {
-	for (int ch=0;ch<SONG_CHANNEL_COUNT;ch++) delete stretch_[ch] ; // trk2als
+	for (int ch=0;ch<SI_VOICE_COUNT;ch++) delete stretch_[ch] ; // trk2als
 }
 
 bool SampleInstrument::Init() {
@@ -335,6 +336,21 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
      bool wasSounding=rp->simpler_ && !rp->finished_ && rp->envStage_<4 &&
                      voiceClock_[channel]!=0 ;
      fixed prevSpeed=rp->speed_ ;
+     // trk2als: con 2 voces, la nota que sonaba sigue como cola (su release,
+     // o completa en trigger) en vez de cortarse; con glide no: se desliza
+     if (channel<SONG_CHANNEL_COUNT) {
+         int t=channel+SONG_CHANNEL_COUNT ;
+         unsigned long now=System::GetInstance()->GetClock() ;
+         // una cola que nadie renderiza hace rato (cambió el instrumento del
+         // canal) no debe reaparecer
+         if (!renderParams_[t].finished_ && (voiceClock_[t]==0 || now-voiceClock_[t]>200)) {
+             renderParams_[t].finished_=true ;
+         }
+         if (wasSounding && GetSimpler(SIP_S_VOICES)>=2 && GetSimpler(SIP_S_GLIDE)==0) {
+             startTail(channel) ;
+             wasSounding=false ;
+         }
+     }
      rp->simpler_=!rp->forceSync_ && loopMode_->GetInt()!=SILM_LOOPSYNC &&
                   !source_->IsMulti() ;
      int firstPos=start_->GetInt() ;
@@ -589,6 +605,7 @@ void SampleInstrument::Stop(int channel) {
 
 bool SampleInstrument::Releasing(int channel) {
 	renderParams *rp=renderParams_+channel ;
+	if (channel<SONG_CHANNEL_COUNT && tailActive(channel)) return true ;
 	return rp->simpler_ && !rp->finished_ && rp->envStage_<4 ;
 }
 
@@ -669,7 +686,51 @@ void SampleInstrument::updateFeedback(renderParams *rp) {
 
 // Size in samples
 
+// trk2als: la voz del canal y, si la hay, la cola de la nota anterior
 bool SampleInstrument::Render(int channel, fixed *buffer, int size, int flags) {
+    bool main=renderVoice(channel,buffer,size,flags) ;
+    if (channel>=SONG_CHANNEL_COUNT || !tailActive(channel)) return main ;
+    int t=channel+SONG_CHANNEL_COUNT ;
+    if ((int)tailBuffer_.size()<size*2) tailBuffer_.resize(size*2) ;
+    bool tail=renderVoice(t,&tailBuffer_[0],size,flags) ;
+    if (!tail) return main ;
+    if (!main) {
+        memcpy(buffer,&tailBuffer_[0],size*2*sizeof(fixed)) ;
+    } else {
+        for (int i=0;i<size*2;i++) buffer[i]+=tailBuffer_[i] ;
+    }
+    return true ;
+}
+
+bool SampleInstrument::tailActive(int channel) {
+    renderParams *tp=renderParams_+channel+SONG_CHANNEL_COUNT ;
+    return tp->simpler_ && !tp->finished_ && tp->envStage_<4 ;
+}
+
+void SampleInstrument::startTail(int channel) {
+    int t=channel+SONG_CHANNEL_COUNT ;
+    renderParams *rp=renderParams_+channel ;
+    renderParams *tp=renderParams_+t ;
+    std::vector<I_SRPUpdater *> own=tp->updaters_ ;   // los de la cola apuntan a la cola
+    *tp=*rp ;
+    tp->updaters_=own ;
+    tp->activeUpdaters_.clear() ;   // los comandos de la phrase siguen con la nota nueva
+    memcpy(feedback_[t],feedback_[channel],sizeof(feedback_[t])) ;
+    copy_filter(channel,t) ;
+    WarpStretch *ws=stretch_[t] ;   // el time-stretch con su historia se va con la cola
+    stretch_[t]=stretch_[channel] ;
+    stretch_[channel]=ws ;
+    lastWarpT_[t]=lastWarpT_[channel] ;
+    warpTarget_[t]=warpTarget_[channel] ;
+    voiceClock_[t]=voiceClock_[channel] ;
+    if (tp->gate_ && tp->envStage_<3) {   // en trigger, la nota sigue completa
+        tp->envReleaseFrom_=tp->envLevel_ ;
+        tp->envStage_=3 ;
+        tp->envClock_=0 ;
+    }
+}
+
+bool SampleInstrument::renderVoice(int channel, fixed *buffer, int size, int flags) {
 
     voiceClock_[channel] = System::GetInstance()->GetClock(); // trk2als: cursor de reproducción
     bool somethingToMix = false;

@@ -222,6 +222,9 @@ void InstrumentView::fillSampleParameters() {
 		row++ ;
 		v=instrument->FindVariable(SIP_S_GLIDE) ;
 		ADD(new UIIntVarField(AT(L),*v,"glide: %dms",0,2000,10,100)) ;
+		// 2 voces: la nota anterior termina su cola en vez de cortarse
+		v=instrument->FindVariable(SIP_S_VOICES) ;
+		ADD(new UIIntVarField(AT(R),*v,"voices: %d",1,2,1,1)) ;
 		row++ ;
 
 		LABEL("FILTER") ;

@@ -8,7 +8,7 @@ hope it will work :D
 #include <math.h>
 #include "System/Console/Trace.h"
 
-static filter_t filter[8];
+static filter_t filter[16];   // trk2als: 8 canales + 8 colas del Sampler
 
 bool filters_inited=false;
 
@@ -17,7 +17,7 @@ fixed fp_inv_255 ;
 void init_filters(void)
 {
 
-	for(int i=0;i<8;i++)
+	for(int i=0;i<16;i++)
 	{	//set sensible default values
 		//lowpass filter where everything passes with no resonance
 		set_filter(i,FLT_LOWPASS,i2fp(1),i2fp(0),i2fp(0),false);
@@ -74,6 +74,10 @@ void set_filter(int channel, filterType_t type, fixed param1,fixed param2,int mi
   }
 }
 
+
+void copy_filter(int from, int to) {
+	filter[to]=filter[from] ;
+}
 
 filter_t *get_filter(int channel) {
 	return &filter[channel];

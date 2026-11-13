@@ -42,3 +42,4 @@ void init_filters(void) ;
 
 
 filter_t *get_filter(int channel) ;
+void copy_filter(int from, int to) ;   // trk2als: la cola sigue con el estado del filtro
