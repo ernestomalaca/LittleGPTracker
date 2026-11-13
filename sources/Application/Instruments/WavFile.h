@@ -33,6 +33,7 @@ private:
 	int sampleRate_ ; // sample rate
 	int channelCount_ ; // mono / stereo
 	int bytePerSample_ ; // original file is in 8/16bit
+	bool isFloat_ ;      // trk2als: 32 bits float
 	int dataPosition_ ; // offset in file to get to data
 
 	static int bufferChunkSize_ ;

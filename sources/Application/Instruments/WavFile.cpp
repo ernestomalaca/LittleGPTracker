@@ -45,6 +45,7 @@ WavFile::WavFile(I_File *file) {
 		initChunkSize_=false;
 	}
 	samples_=0 ;
+	isFloat_=false ; // trk2als
 	size_=0 ;
 	readBuffer_=0 ;
 	readBufferSize_=0 ;
@@ -164,7 +165,9 @@ WavFile *WavFile::Open(const char *path) {
 	memcpy(&comp,wav->readBuffer_,2) ;
 	comp = Swap16(comp);
 
-	if (comp!=1) {
+	// trk2als: PCM (1), float (3) o "extensible" (0xFFFE, el formato real
+	// viene más adelante en el chunk)
+	if (comp!=1 && comp!=3 && comp!=0xFFFE) {
 		Trace::Error("Unsupported compression") ;
 		delete wav ;
 		return 0 ;
@@ -194,8 +197,20 @@ WavFile *WavFile::Open(const char *path) {
 	memcpy(&bitPerSample,wav->readBuffer_,2) ;
 	bitPerSample = Swap16(bitPerSample);
 		
-	if ((bitPerSample!=16)&&(bitPerSample!=8)) {
-		Trace::Error("Only 8/16 bit supported") ;
+	// trk2als: el resto del chunk fmt; en "extensible" trae el formato real
+	if (comp==0xFFFE && offset>=10) {
+		wav->readBlock(position,offset) ;
+		unsigned char *ext=(unsigned char *)wav->readBuffer_ ;
+		comp=(unsigned short)(ext[8]|(ext[9]<<8)) ;
+	}
+	wav->isFloat_=(comp==3) ;
+	// trk2als: 24 y 32 bits (entero o float) se leen y se pasan a 16 bits
+	// en memoria; el archivo no se toca (Live sigue usando el original)
+	bool ok=(comp==1 && (bitPerSample==8 || bitPerSample==16 ||
+	                     bitPerSample==24 || bitPerSample==32)) ||
+	        (comp==3 && bitPerSample==32) ;
+	if (!ok) {
+		Trace::Error("Unsupported WAV: %d bits, format %d",bitPerSample,comp) ;
 		delete wav ;
 		return 0 ;
 	} ;
@@ -302,6 +317,42 @@ bool WavFile::GetBuffer(long start,long size) {
 
 	// Read the buffer but in small chunk to let the system breathe
 	// if the files are big
+
+	// trk2als: 24/32 bits -> 16 bits, por bloques
+	if (bytePerSample_>2) {
+		int frameBytes=channelCount_*bytePerSample_ ;
+		int chunkFrames=4096/frameBytes ;
+		if (chunkFrames<1) chunkFrames=1 ;
+		short *dst=samples_ ;
+		int left=size ;
+		while (left>0) {
+			int n=left>chunkFrames?chunkFrames:left ;
+			readBlock(bufferStart,n*frameBytes) ;
+			unsigned char *p=(unsigned char *)readBuffer_ ;
+			for (int i=0;i<n*channelCount_;i++) {
+				int v ;
+				if (isFloat_) {
+					unsigned int u=p[0]|(p[1]<<8)|(p[2]<<16)|((unsigned int)p[3]<<24) ;
+					float f ;
+					memcpy(&f,&u,4) ;
+					float x=f*32767.0f ;
+					v=(x>32767.0f)?32767:((x<-32768.0f)?-32768:int(x+(x>=0?0.5f:-0.5f))) ;
+				} else if (bytePerSample_==3) {
+					v=(signed char)p[2] ;
+					v=(v<<8)|p[1] ;          // los 16 bits altos
+				} else {
+					v=(signed char)p[3] ;
+					v=(v<<8)|p[2] ;
+				}
+				*dst++=(short)v ;
+				p+=bytePerSample_ ;
+			}
+			bufferStart+=n*frameBytes ;
+			left-=n ;
+			if (bufferChunkSize_>0) TimeService::GetInstance()->Sleep(1) ;
+		}
+		return true ;
+	}
 
 	int count=bufferSize ;
 	int offset=0 ;
