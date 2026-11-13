@@ -49,9 +49,10 @@ struct renderParams {
     bool gate_ ;             // false: la nota suena completa aunque se suelte
     fixed glideFrom_ ;       // velocidad de la nota anterior
     int glideLeft_, glideLen_ ; // muestras de glide que faltan / totales
-    bool choke_ ;
+    float chokeMs_ ;         // trk2als: >0 = release corto (STOP 10 ms, nota cortada 4 ms)
     float svfIc1_[2], svfIc2_[2] ; // trk2als: estado del filtro del Sampler
     float svfG_, svfK_ ;     // coeficientes del bloque
+    float svfHz_, svfSt_ ;   // corte base (con key tracking) y semitonos de la envolvente
     int svfType_ ;
     int fenvStage_ ;         // trk2als: envolvente del filtro (0..4 como la de volumen)
     float fenvLevel_, fenvReleaseFrom_ ;

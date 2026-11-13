@@ -359,8 +359,19 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
          if (!renderParams_[t].finished_ && (voiceClock_[t]==0 || now-voiceClock_[t]>200)) {
              renderParams_[t].finished_=true ;
          }
-         if (wasSounding && GetSimpler(SIP_S_VOICES)>=2 && GetSimpler(SIP_S_GLIDE)==0) {
+         if (wasSounding && GetSimpler(SIP_S_GLIDE)==0) {
              startTail(channel) ;
+             if (GetSimpler(SIP_S_VOICES)<2) {
+                 // una voz: la nota anterior no se corta de golpe (click),
+                 // se apaga en 4 ms mientras entra la nueva
+                 renderParams *tp=renderParams_+channel+SONG_CHANNEL_COUNT ;
+                 if (tp->envStage_<3) {
+                     tp->envReleaseFrom_=tp->envLevel_ ;
+                     tp->envStage_=3 ;
+                     tp->envClock_=0 ;
+                 }
+                 tp->chokeMs_=4 ;
+             }
              wasSounding=false ;
          }
      }
@@ -590,7 +601,7 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 		rp->envStage_=0 ;
 		rp->envLevel_=0 ;
 		rp->envClock_=0 ;
-		rp->choke_=false ;
+		rp->chokeMs_=0 ;
 		rp->fenvStage_=0 ;
 		rp->fenvLevel_=0 ;
 		rp->fenvClock_=0 ;
@@ -638,7 +649,7 @@ void SampleInstrument::Choke(int channel) {
 			rp->fenvReleaseFrom_=rp->fenvLevel_ ;
 			rp->fenvStage_=3 ;
 			rp->fenvClock_=0 ;
-			rp->choke_=true ;
+			rp->chokeMs_=10 ;
 		}
 	}
 }
@@ -1617,28 +1628,39 @@ bool SampleInstrument::startSimpler(renderParams *rp,int channel,unsigned char n
 // pasabajos, pasabanda o pasaaltos de verdad, en Hz
 void SampleInstrument::simplerFilter(renderParams *rp,fixed *buffer,int size) {
 	if (rp->svfType_<0) return ;
-	float g=rp->svfG_, k=rp->svfK_ ;
-	float a1=1.0f/(1.0f+g*(g+k)), a2=g*a1, a3=g*a2 ;
+	float k=rp->svfK_ ;
 	int type=rp->svfType_ ;
-	for (int c=0;c<2;c++) {
-		float ic1=rp->svfIc1_[c], ic2=rp->svfIc2_[c] ;
-		fixed *p=buffer+c ;
-		for (int i=0;i<size;i++,p+=2) {
-			float v0=fp2fl(*p) ;
-			float v3=v0-ic2 ;
-			float v1=a1*ic1+a2*v3 ;
-			float v2=ic2+a2*ic1+a3*v3 ;
-			ic1=2*v1-ic1 ;
-			ic2=2*v2-ic2 ;
-			// pasabanda normalizado: 0 dB en la frecuencia de corte
-			float out=(type==0)?v2:((type==1)?k*v1:v0-k*v1-v2) ;
-			*p=fl2fp(out) ;
+	// por tramos de 32 muestras (< 1 ms): la envolvente mueve el corte sin
+	// escalones audibles
+	for (int at=0;at<size;at+=32) {
+		int n=(size-at<32)?size-at:32 ;
+		filterEnvBlock(rp,n) ;
+		float hz=rp->svfHz_ ;
+		if (rp->svfSt_!=0) hz*=powf(2.0f,rp->svfSt_*rp->fenvLevel_/12.0f) ;
+		if (hz<20) hz=20 ;
+		if (hz>20000) hz=20000 ;
+		float g=tanf(3.14159265f*hz/44100.0f) ;
+		float a1=1.0f/(1.0f+g*(g+k)), a2=g*a1, a3=g*a2 ;
+		for (int c=0;c<2;c++) {
+			float ic1=rp->svfIc1_[c], ic2=rp->svfIc2_[c] ;
+			fixed *p=buffer+2*at+c ;
+			for (int i=0;i<n;i++,p+=2) {
+				float v0=fp2fl(*p) ;
+				float v3=v0-ic2 ;
+				float v1=a1*ic1+a2*v3 ;
+				float v2=ic2+a2*ic1+a3*v3 ;
+				ic1=2*v1-ic1 ;
+				ic2=2*v2-ic2 ;
+				// pasabanda normalizado: 0 dB en la frecuencia de corte
+				float out=(type==0)?v2:((type==1)?k*v1:v0-k*v1-v2) ;
+				*p=fl2fp(out) ;
+			}
+			// sin ruido de números diminutos
+			if (fabsf(ic1)<1e-12f) ic1=0 ;
+			if (fabsf(ic2)<1e-12f) ic2=0 ;
+			rp->svfIc1_[c]=ic1 ;
+			rp->svfIc2_[c]=ic2 ;
 		}
-		// sin ruido de números diminutos
-		if (fabsf(ic1)<1e-12f) ic1=0 ;
-		if (fabsf(ic2)<1e-12f) ic2=0 ;
-		rp->svfIc1_[c]=ic1 ;
-		rp->svfIc2_[c]=ic2 ;
 	}
 }
 
@@ -1711,22 +1733,21 @@ void SampleInstrument::simplerBlock(renderParams *rp,int size) {
 		float q=GetSimpler(SIP_S_FQ)/100.0f ;
 		if (q<0) q=0 ;
 		if (q>1) q=1 ;
-		filterEnvBlock(rp,size) ;
-		if (st!=0) hz*=powf(2.0f,st*rp->fenvLevel_/12.0f) ;
 		// key tracking: 100 % = el corte sube un semitono por semitono (C3 = 0)
 		int key=GetSimpler(SIP_S_FKEY) ;
 		if (key!=0) hz*=powf(2.0f,(rp->midiNote_-60)*key/100.0f/12.0f) ;
-		if (hz<20) hz=20 ;
-		if (hz>20000) hz=20000 ;
 		// sin filtro si no cambia nada (pasabajos abierto, sin resonancia)
 		if (type==0 && hz>=19000 && q<=0 && st<=0 && key<=0) {
 			rp->svfType_=-1 ;
+			filterEnvBlock(rp,size) ;   // la envolvente sigue corriendo
 		} else {
 			rp->svfType_=(type<0||type>2)?0:type ;
-			rp->svfG_=tanf(3.14159265f*hz/44100.0f) ;
+			rp->svfHz_=hz ;
+			rp->svfSt_=float(st) ;
 			// Q de 0.707 (0 %) a ~25 (100 %), exponencial
 			float Q=0.7071f*powf(25.0f/0.7071f,q) ;
 			rp->svfK_=1.0f/Q ;
+			// el corte se calcula en simplerFilter cada 32 muestras
 		}
 	}
 	int ch=int(rp-renderParams_) ;
@@ -1752,6 +1773,9 @@ void SampleInstrument::simplerEnvelope(renderParams *rp,fixed *buffer,int size) 
 	const float msr=44.1f ;   // muestras por milisegundo
 	bool oneShot=(GetSimpler(SIP_S_MODE)==SM_ONESHOT) ;
 	float atk=(oneShot?envMs(SIP_S_FIN):envMs(SIP_S_ATK))*msr ;
+	// el sample casi nunca empieza en silencio (sobre todo con 'start' a media
+	// onda): 1.5 ms de entrada como mínimo, para que no haga click
+	if (atk<1.5f*msr) atk=1.5f*msr ;
 	float dec=oneShot?0:envMs(SIP_S_DEC)*msr ;
 	float sus=1.0f ;
 	if (!oneShot) {
@@ -1759,7 +1783,8 @@ void SampleInstrument::simplerEnvelope(renderParams *rp,fixed *buffer,int size) 
 		sus=(db<=-60)?0:powf(10.0f,db/20.0f) ;
 	}
 	float rel=(oneShot?envMs(SIP_S_FOUT):envMs(SIP_S_REL))*msr ;
-	if (rp->choke_ && (rel<1 || rel>10*msr)) rel=10*msr ;   // STOP: 10 ms
+	// STOP o nota cortada: un release corto (no de golpe: eso es un click)
+	if (rp->chokeMs_>0 && (rel<1 || rel>rp->chokeMs_*msr)) rel=rp->chokeMs_*msr ;
 	// one-shot: el fade out cae al final de la región (como en Simpler);
 	// muestras de salida que le faltan a la voz al terminar este bloque
 	float fadeOut=oneShot?envMs(SIP_S_FOUT)*msr:0 ;
