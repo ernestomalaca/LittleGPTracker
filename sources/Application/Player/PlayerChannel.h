@@ -13,6 +13,7 @@ public:
 	virtual bool Render(fixed *buffer,int samplecount) ;
 	void StartInstrument(I_Instrument *instr,unsigned char note,bool cleanStart) ;
 	void StopInstrument() ;
+	void ChokeInstrument() ;
 	I_Instrument *GetInstrument() ;
 	void SetMute(bool muted) ;
 	bool IsMuted() ;

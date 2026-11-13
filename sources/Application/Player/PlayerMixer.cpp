@@ -74,6 +74,10 @@ void PlayerMixer::StartChannel(int channel) {
 	isChannelPlaying_[channel]=true ;
 } ;
 
+void PlayerMixer::ChokeChannel(int channel) {   // trk2als
+	channel_[channel]->ChokeInstrument() ;
+} ;
+
 void PlayerMixer::StopChannel(int channel) {
 
     StopInstrument(channel) ;

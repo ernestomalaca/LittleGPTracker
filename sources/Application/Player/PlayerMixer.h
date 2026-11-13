@@ -37,6 +37,7 @@ public:
 	
 	void StartChannel(int channel) ;
 	void StopChannel(int channel) ;
+	void ChokeChannel(int channel) ; // trk2als
 
 	bool IsChannelPlaying(int channel) ;
 	

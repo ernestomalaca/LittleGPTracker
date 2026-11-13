@@ -111,6 +111,7 @@ public:
        virtual bool Start(int channel, unsigned char note, int flags = 1);
        virtual void Stop(int channel) ;
        virtual bool Releasing(int channel) ;
+       virtual void Choke(int channel) ;
        // trk2als: Sampler estilo Simpler
        void InitSimpler() ;       // la primera vez: traducir lo de LGPT
        int GetSimpler(FourCC id) { return FindVariable(id)->GetInt() ; } ;

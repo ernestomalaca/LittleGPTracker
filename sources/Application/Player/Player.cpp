@@ -189,6 +189,7 @@ void Player::Stop() {
     mixer_->Lock();
 
     for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
+        mixer_->ChokeChannel(i);   // trk2als: que no siga sonando el one-shot
         mixer_->StopChannel(i);
     }
     MidiService::GetInstance()->OnPlayerStop();

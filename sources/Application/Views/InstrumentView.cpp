@@ -5,6 +5,7 @@
 #include "Application/Instruments/MidiInstrument.h"
 #include "Application/Instruments/SampleInstrument.h"
 #include "Application/Instruments/SamplePool.h"
+#include "Application/Player/SyncMaster.h"
 #include "Application/Model/Config.h"
 #include "BaseClasses/UIBigHexVarField.h"
 #include "BaseClasses/UIIntVarOffField.h"
@@ -895,8 +896,10 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 	GUIColor fg=ColorOf(CD_NORMAL) ;
 	GUIColor hi=ColorOf(CD_HILITE1) ;
 	GUIColor hi2=ColorOf(CD_HILITE2) ;
-	GUIColor dim=Mix(bg,fg,27) ;
+	GUIColor dim=Mix(bg,fg,22) ;
 	GUIColor dim2=Mix(bg,fg,55) ;
+	GUIColor ghost=Mix(bg,hi,28) ;
+	GUIColor panel=Mix(bg,fg,9) ;
 	int mode=si->GetSimpler(SIP_S_MODE) ;
 	int a=X+W*si->GetSimpler(SIP_S_START)/100 ;
 	int b=X+W*si->GetSimpler(SIP_S_END)/100 ;
@@ -904,40 +907,102 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 
 	SoundSource *src=SamplePool::GetInstance()->GetSource(si->GetSampleIndex()) ;
 	int rate=src?src->GetSampleRate(-1):0 ;
+	bool warped=(mode!=SM_SLICE && si->GetSimpler(SIP_S_WARP)!=SW_OFF) ;
 	if (rate>0) {
-		char info[40] ;
+		char info[48] ;
 		int cs=int((long long)size*100/rate) ;
 		sprintf(info,"%d.%02ds",cs/100,cs%100) ;
 		// con warp: cuántos compases dura la región a su tempo
 		int bpm=si->GetSimpler(SIP_S_BPM) ;
-		if (mode!=SM_SLICE && si->GetSimpler(SIP_S_WARP)!=SW_OFF && bpm>0) {
+		if (warped && bpm>0) {
 			float bars=float(size)*(si->GetSimpler(SIP_S_END)-si->GetSimpler(SIP_S_START))/100.0f/rate*bpm/240.0f ;
 			int b10=int(bars*10+0.5f) ;
 			sprintf(info+strlen(info)," %d.%d bar%s",b10/10,b10%10,b10==10?"":"s") ;
 		}
+		strcat(info," a C3") ;   // la envolvente dibujada es la de la nota original
 		DrawText(632-8*int(strlen(info)),3,info,dim2,0) ;
 	}
 
 	bool loop=(mode==SM_CLASSIC && si->GetSimpler(SIP_S_LOOP)) ;
 	int l0=b-W*si->GetSimpler(SIP_S_LLEN)/100 ;
 	if (l0<a) l0=a ;
-	if (loop) FillRect(l0,Y-4,b-l0,H+8,Mix(bg,hi,20),8) ;
+	if (loop) FillRect(l0,Y-4,b-l0,H+8,Mix(bg,hi,16),8) ;
 
-	int mid=Y+20+(H-20)/2 ;
+	// --- la envolvente de volumen sobre la onda, calculada a C3 ---
+	// px -> milisegundos: cuadros del sample por ms de salida (con warp, al
+	// tempo del proyecto)
+	float framesPerMs=rate/1000.0f ;
+	if (warped && rate>0) {
+		int bpm=si->GetSimpler(SIP_S_BPM) ;
+		float tick=SyncMaster::GetInstance()->GetTickSampleCount() ;
+		if (bpm>0 && tick>0) framesPerMs=(rate*60.0f/bpm/(24.0f*tick))*44.1f ;
+	}
+	float msPerPx=(framesPerMs>0)?float(size)/W/framesPerMs:0 ;
+	bool oneShot=(mode==SM_ONESHOT) ;
+	float atk=float(oneShot?si->GetSimpler(SIP_S_FIN):si->GetSimpler(SIP_S_ATK)) ;
+	float dec=oneShot?0:float(si->GetSimpler(SIP_S_DEC)) ;
+	float rel=float(si->GetSimpler(oneShot?SIP_S_FOUT:SIP_S_REL)) ;
+	float sus=1.0f ;
+	if (!oneShot) {
+		int db=si->GetSimpler(SIP_S_SUS) ;
+		sus=(db<=-60)?0:powf(10.0f,db/20.0f) ;
+	}
+	int nSl=(mode==SM_SLICE)?si->GetSimpler(SIP_S_SLICES):1 ;
+	if (nSl<1) nSl=1 ;
+	// ganancia en el px x (dentro de la región; en slice, cada rebanada empieza
+	// su propia envolvente)
+	#define ENV_AT(xx,out) { \
+		int s0=a, s1=b ; \
+		if (nSl>1) { int k=((xx)-a)*nSl/(b-a) ; if (k>=nSl) k=nSl-1 ; \
+		             s0=a+(b-a)*k/nSl ; s1=a+(b-a)*(k+1)/nSl ; } \
+		float t=((xx)-s0)*msPerPx ; float gg ; \
+		if (t<atk) gg=(atk<1)?1:t/atk ; \
+		else if (t<atk+dec) gg=1.0f-(1.0f-sus)*(t-atk)/dec ; \
+		else gg=sus ; \
+		if (oneShot && rel>=1) { float left=(s1-(xx))*msPerPx ; if (left<rel) gg*=left/rel ; } \
+		out=(gg<0)?0:(gg>1?1:gg) ; }
+
+	int mid=Y+12+(H-12)/2 ;
 	for (int k=0;k<WF_BARS;k++) {
 		int c=X+k*8+4 ;
-		int h=(wfPeaks_[k]*(H-30))/255 ;
+		int h=(wfPeaks_[k]*(H-24))/255 ;
 		if (h<4) h=4 ;
-		FillRect(c-3,mid-h/2,5,h,(c>=a && c<b)?hi:dim,2) ;
+		if (c>=a && c<b) {
+			float g ;
+			ENV_AT(c,g)
+			FillRect(c-3,mid-h/2,5,h,ghost,2) ;          // la onda original, tenue
+			int he=int(h*g) ;
+			if (he>=2) FillRect(c-3,mid-he/2,5,he,hi,2) ; // lo que suena
+		} else {
+			FillRect(c-3,mid-h/2,5,h,dim,2) ;
+		}
 	}
+	// la curva encima de las barras
+	for (int x=a;x<b;x+=3) {
+		float g ;
+		ENV_AT(x,g)
+		FillRect(x,Y+6+int((1.0f-g)*(H-14)),3,2,hi2) ;
+	}
+	// classic: el release después del final (empieza cuando sueltas la nota)
+	if (mode==SM_CLASSIC && rel>=1 && msPerPx>0 && sus>0) {
+		int len=int(rel/msPerPx) ;
+		if (len>X+W-b) len=X+W-b ;
+		for (int x=0;x<len;x+=4) {
+			float g=sus*(1.0f-float(x)/(rel/msPerPx)) ;
+			FillRect(b+x,Y+6+int((1.0f-g)*(H-14)),2,2,Mix(panel,hi2,int(90*(1.0f-float(x)/len)))) ;
+		}
+	}
+	#undef ENV_AT
 
+	// banderas: start y end apuntan hacia la parte que suena
+	#define FLAG(xx,dir) { FillRect((xx)-1,Y-4,2,H+8,hi2) ; \
+		for (int q=0;q<10;q++) { int w=(q<5)?2*q+3:21-2*q ; \
+			FillRect((dir)>0?(xx):(xx)-w,Y-4+q,w,1,hi2) ; } }
 	if (mode==SM_SLICE) {
-		int n=si->GetSimpler(SIP_S_SLICES) ;
-		if (n<1) n=1 ;
 		int every=1 ;
-		while ((b-a)*every/n<14) every*=2 ;   // numerar sin amontonar
-		for (int k=0;k<n;k++) {
-			int x=a+(b-a)*k/n ;
+		while ((b-a)*every/nSl<14) every*=2 ;   // numerar sin amontonar
+		for (int k=0;k<nSl;k++) {
+			int x=a+(b-a)*k/nSl ;
 			FillRect(x-1,Y-4,2,H+8,hi2) ;
 			if (k%every==0) {
 				char num[8] ;
@@ -947,52 +1012,11 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 		}
 		FillRect(b-1,Y-4,2,H+8,hi2) ;
 	} else {
-		FillRect(a-1,Y-4,2,H+8,hi2) ;
-		DrawText(a+5,Y+1,"start",hi2,0) ;
-		FillRect(b-1,Y-4,2,H+8,hi2) ;
-		DrawText(b-30,Y+1,"end",hi2,0) ;
-		if (loop) {
-			FrameRect(l0,Y-4,b-l0,H+8,hi,8,2) ;
-			DrawText(l0+5,Y+H-10,"loop",hi,0) ;
-		}
+		FLAG(a,1)
+		FLAG(b,-1)
+		if (loop) FrameRect(l0,Y-4,b-l0,H+8,hi,8,2) ;
 	}
-
-	// la envolvente de volumen, a la derecha de la etiqueta AMP
-	if (ampLabelRow_>=0) {
-		int ex=16*8, ey=ampLabelRow_*16+3, ew=200, eh=11 ;
-		float atk,dec,rel,sus=1.0f ;
-		if (mode==SM_ONESHOT) {
-			atk=float(si->GetSimpler(SIP_S_FIN)) ; dec=0 ;
-			rel=float(si->GetSimpler(SIP_S_FOUT)) ;
-		} else {
-			atk=float(si->GetSimpler(SIP_S_ATK)) ;
-			dec=float(si->GetSimpler(SIP_S_DEC)) ;
-			rel=float(si->GetSimpler(SIP_S_REL)) ;
-			int db=si->GetSimpler(SIP_S_SUS) ;
-			sus=(db<=-60)?0:powf(10.0f,db/20.0f) ;
-		}
-		// tiempos comprimidos (raíz) para que los cortos se vean
-		float wa=sqrtf(atk), wd=sqrtf(dec), wr=sqrtf(rel), hold=20 ;
-		float total=wa+wd+wr+hold ;
-		if (total<1) total=1 ;
-		float k=ew/total ;
-		int x0=ex, x1=ex+int(wa*k), x2=x1+int(wd*k), x3=x2+int(hold*k), x4=x3+int(wr*k) ;
-		int top=ey, base=ey+eh, ys=ey+int((1.0f-sus)*eh) ;
-		// segmentos con rectángulos de 2 px (rectas aproximadas)
-		struct { int xa,ya,xb,yb ; } seg[4]={{x0,base,x1,top},{x1,top,x2,ys},{x2,ys,x3,ys},{x3,ys,x4,base}} ;
-		for (int q=0;q<4;q++) {
-			int dx=seg[q].xb-seg[q].xa ;
-			if (dx<=0) {
-				int y0=seg[q].ya<seg[q].yb?seg[q].ya:seg[q].yb ;
-				FillRect(seg[q].xa,y0,2,abs(seg[q].yb-seg[q].ya)+2,hi) ;
-				continue ;
-			}
-			for (int x=0;x<=dx;x+=2) {
-				int y=seg[q].ya+(seg[q].yb-seg[q].ya)*x/dx ;
-				FillRect(seg[q].xa+x,y,2,2,hi) ;
-			}
-		}
-	}
+	#undef FLAG
 
 	// cursor de reproducción
 	playheadPx_=-1 ;

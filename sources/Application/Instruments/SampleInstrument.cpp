@@ -577,6 +577,7 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 		rp->envStage_=0 ;
 		rp->envLevel_=0 ;
 		rp->envClock_=0 ;
+		rp->choke_=false ;
 		for (int k=0;k<5;k++) rp->sLive_[k]=-9999 ;
 		simplerBlock(rp,0) ;
 	}
@@ -601,6 +602,20 @@ void SampleInstrument::Stop(int channel) {
 		 return ;
 	 }
 	 voiceClock_[channel]=0 ;
+}
+
+void SampleInstrument::Choke(int channel) {
+	for (int v=0;v<2;v++) {
+		int idx=channel+v*SONG_CHANNEL_COUNT ;
+		if (idx>=SI_VOICE_COUNT) break ;
+		renderParams *rp=renderParams_+idx ;
+		if (rp->simpler_ && !rp->finished_ && rp->envStage_<4) {
+			rp->envReleaseFrom_=rp->envLevel_ ;
+			rp->envStage_=3 ;
+			rp->envClock_=0 ;
+			rp->choke_=true ;
+		}
+	}
 }
 
 bool SampleInstrument::Releasing(int channel) {
@@ -1604,6 +1619,15 @@ void SampleInstrument::simplerEnvelope(renderParams *rp,fixed *buffer,int size) 
 		sus=(db<=-60)?0:powf(10.0f,db/20.0f) ;
 	}
 	float rel=(oneShot?envMs(SIP_S_FOUT):envMs(SIP_S_REL))*msr ;
+	if (rp->choke_ && (rel<1 || rel>10*msr)) rel=10*msr ;   // STOP: 10 ms
+	// one-shot: el fade out cae al final de la región (como en Simpler);
+	// muestras de salida que le faltan a la voz al terminar este bloque
+	float fadeOut=oneShot?envMs(SIP_S_FOUT)*msr:0 ;
+	float leftEnd=0 ;
+	if (fadeOut>=1) {
+		float sp=fp2fl(rp->speed_) ;
+		leftEnd=(sp>0)?(rp->rendLoopEnd_-rp->position_)/sp:0 ;
+	}
 	for (int i=0;i<size;i++) {
 		float l=rp->envLevel_ ;
 		switch (rp->envStage_) {
@@ -1627,6 +1651,10 @@ void SampleInstrument::simplerEnvelope(renderParams *rp,fixed *buffer,int size) 
 		}
 		rp->envLevel_=l ;
 		rp->envClock_++ ;
+		if (fadeOut>=1) {
+			float left=leftEnd+(size-i) ;
+			if (left<fadeOut) l*=(left>0)?left/fadeOut:0 ;
+		}
 		fixed f=fl2fp(l) ;
 		buffer[2*i]=fp_mul(buffer[2*i],f) ;
 		buffer[2*i+1]=fp_mul(buffer[2*i+1],f) ;

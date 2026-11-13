@@ -30,6 +30,8 @@ public:
       virtual void Stop(int channel)=0 ;
       // trk2als: después de Stop la voz sigue sonando (cola de release)
       virtual bool Releasing(int channel) { return false ; } ;
+      // trk2als: al detener la reproducción, callar la voz (con un fade corto)
+      virtual void Choke(int channel) {} ;
 
 	  // Engine playback  start callback
 

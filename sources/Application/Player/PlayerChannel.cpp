@@ -38,6 +38,11 @@ void PlayerChannel::StartInstrument(I_Instrument *instr,unsigned char note,bool 
    };
 } ;
 
+// trk2als: STOP: las voces que siguen sonando solas (one-shot, colas) se callan
+void PlayerChannel::ChokeInstrument() {
+     if (instr_) instr_->Choke(index_) ;
+} ;
+
 void PlayerChannel::StopInstrument() {
      if (instr_) {
        instr_->Stop(index_) ;
