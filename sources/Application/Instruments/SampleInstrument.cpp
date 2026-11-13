@@ -397,6 +397,8 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 	rp->finished_=false ;
 	if (loopmode!=SILM_LOOPSYNC) rp->syncTickSamples_=0 ;
 	rp->complexPrimed_=false ; // trk2als
+	rp->warpMode_=warp_->GetInt() ;
+	rp->justWrapped_=false ;
 
   // Initialize feedback data
 
@@ -753,7 +755,14 @@ bool SampleInstrument::Render(int channel, fixed *buffer, int size, int flags) {
     // trk2als: warp complex. El time-stretch deja 'size' cuadros ya estirados
     // (y transpuestos) en warpOut_; el resto del camino (feedback, crush,
     // filtro, volumen) los lee como si fueran el sample a velocidad 1.
-    bool complex=(loopMode==SILM_LOOPSYNC && warp_->GetInt()==1 &&
+    // Cambiar el warp mientras suena brincaría: el cambio espera a que el
+    // loop vuelva a empezar
+    float posBefore=rp->position_ ;
+    if (rp->warpMode_!=warp_->GetInt() && rp->justWrapped_) {
+        rp->warpMode_=warp_->GetInt() ;
+        rp->complexPrimed_=false ;   // el time-stretch arranca desde aquí
+    }
+    bool complex=(loopMode==SILM_LOOPSYNC && rp->warpMode_==1 &&
                   WarpStretch::Available() && !rpReverse) ;
     if (complex) {
         renderComplex(channel,rp,size) ;
@@ -1107,6 +1116,7 @@ bool SampleInstrument::Render(int channel, fixed *buffer, int size, int flags) {
         while (len>0 && p<rp->rendLoopStart_) p+=len ;
         rp->position_=float(p) ;
     }
+    rp->justWrapped_=(rp->position_<posBefore) ;
 
 		// Update feedback position
 

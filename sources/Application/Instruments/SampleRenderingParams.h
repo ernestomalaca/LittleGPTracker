@@ -35,6 +35,8 @@ struct renderParams {
     int complexPos_ ;        // trk2als: siguiente cuadro del sample que se le da al time-stretch
     double complexAcc_ ;     // trk2als: fracción de cuadro pendiente
     int complexLatency_ ;    // trk2als: cuadros que el time-stretch va adelantado
+    int warpMode_ ;          // trk2als: warp con el que suena la voz (el cambio espera al inicio del loop)
+    bool justWrapped_ ;      // trk2als: el loop acaba de volver al principio
 	fixed baseVolume_ ;  // Base volume the instrument was triggered with
 	fixed volume_ ;     // Current volume
 	bool reverse_ ;     // true if we we go backwards in stream
