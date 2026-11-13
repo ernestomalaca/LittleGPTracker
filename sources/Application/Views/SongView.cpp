@@ -918,7 +918,7 @@ void SongView::processNormalButtonMask(unsigned int mask) {
    cambia de columna, abajo regresa a las celdas
  ******************************************************/
 
-static const char *trackTypeNames[3] = {"Tracker", "Audio", "MIDI"};
+static const char *trackTypeNames[3] = {"MIDI", "Audio", "MIDI"};
 
 static void TrackTypeCallback(View &v, ModalView &dialog) {
     SongView &sv = (SongView &)v;
@@ -1209,11 +1209,10 @@ void SongView::DrawView() {
     char chbuf[4];
     short dx = 3;
     for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
-        // trk2als: tipo de pista + número: T0 tracker, A6 audio, M2 midi
+        // trk2als: tipo de pista + número: M2 midi, A6 audio
         TrackType type = viewData_->project_->GetTrackType(i);
-        snprintf(chbuf, sizeof(chbuf), "%c%d", "TAM"[type], i);
-        SetColor(type == TT_AUDIO ? CD_HILITE1
-                                  : (type == TT_MIDI ? CD_HILITE2 : CD_COL_TITLE));
+        snprintf(chbuf, sizeof(chbuf), "%c%d", type == TT_AUDIO ? 'A' : 'M', i);
+        SetColor(type == TT_AUDIO ? CD_HILITE1 : CD_COL_TITLE);
         bool here = headerMode_ && i == viewData_->songX_;
         if (here) SetColor(CD_CURSOR);
         props.invert_ = here;

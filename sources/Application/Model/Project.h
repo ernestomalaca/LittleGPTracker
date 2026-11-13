@@ -22,6 +22,8 @@
 #define VAR_AUDIOTRACKS MAKE_FOURCC('A', 'U', 'D', 'T') // trk2als: solo para abrir proyectos viejos
 // trk2als: tipo de cada pista (TYP0..TYP7)
 #define VAR_TRACKTYPE(ch) MAKE_FOURCC('T', 'Y', 'P', '0' + (ch))
+// TT_TRACKER solo existe para leer proyectos guardados con él: al abrirlos
+// pasa a TT_MIDI (las pistas MIDI se escriben con chains y phrases)
 enum TrackType { TT_TRACKER = 0, TT_AUDIO = 1, TT_MIDI = 2 };
 
 #define PROJECT_NUMBER "1"

@@ -49,13 +49,13 @@ tempoNudge_(0)
         new Variable("scale", VAR_SCALE, scaleNames, scaleCount, 0);
     this->Insert(scale);
     scale->SetInt(0);
-    // trk2als: tipo de cada pista; se cambia en la cabecera de la Song.
-    // Proyectos nuevos: todas de tracker
+    // trk2als: tipo de cada pista (MIDI o audio, como en Live); se cambia en
+    // la cabecera de la Song. Proyectos nuevos: todas MIDI
     static const char *trackTypes[3] = {"TRK", "AUD", "MID"};
     for (int ch = 0; ch < SONG_CHANNEL_COUNT; ch++) {
         char name[16];
         sprintf(name, "track%d", ch + 1);
-        Variable *t = new Variable(name, VAR_TRACKTYPE(ch), trackTypes, 3, TT_TRACKER);
+        Variable *t = new Variable(name, VAR_TRACKTYPE(ch), trackTypes, 3, TT_MIDI);
         this->Insert(t);
     }
     // proyectos de antes de los tipos guardaban cuántas pistas de audio había
@@ -157,8 +157,8 @@ void Project::Trigger() {
 
 TrackType Project::GetTrackType(int channel) {
     Variable *v = FindVariable(VAR_TRACKTYPE(channel));
-    int t = v ? v->GetInt() : TT_TRACKER;
-    return (t < TT_TRACKER || t > TT_MIDI) ? TT_TRACKER : (TrackType)t;
+    int t = v ? v->GetInt() : TT_MIDI;
+    return (t == TT_AUDIO) ? TT_AUDIO : TT_MIDI;
 }
 
 bool Project::IsAudioChannel(int channel) {
@@ -376,7 +376,7 @@ void Project::RestoreContent(TiXmlElement *element) {
 	// todas de tracker, salvo las de audio que diga 'audiotracks' (las últimas)
 	FindVariable(VAR_AUDIOTRACKS)->SetInt(0) ;
 	for (int ch=0;ch<SONG_CHANNEL_COUNT;ch++) {
-		FindVariable(VAR_TRACKTYPE(ch))->SetInt(TT_TRACKER) ;
+		FindVariable(VAR_TRACKTYPE(ch))->SetInt(TT_MIDI) ;
 	}
 
 	// Now loop on all variables
@@ -397,6 +397,11 @@ void Project::RestoreContent(TiXmlElement *element) {
 		if (ch>=0) FindVariable(VAR_TRACKTYPE(ch))->SetInt(TT_AUDIO) ;
 	}
 	FindVariable(VAR_AUDIOTRACKS)->SetInt(0) ;
+	// las pistas TRK de antes ahora son MIDI
+	for (int ch=0;ch<SONG_CHANNEL_COUNT;ch++) {
+		Variable *t=FindVariable(VAR_TRACKTYPE(ch)) ;
+		if (t->GetInt()==TT_TRACKER) t->SetInt(TT_MIDI) ;
+	}
 };
 
 

@@ -3,16 +3,15 @@
 #include <stdio.h>
 #include <string.h>
 
-static const char *typeName[3] = {"Tracker", "Audio", "MIDI"} ;
-static const char *typeInfo[3] = {
-	"sampler de LGPT",
-	"loops al tempo",
-	"notas para Live",
-} ;
+// en la ventana solo hay dos tipos, como en Live
+static const int optionType[2] = {TT_MIDI, TT_AUDIO} ;
+static const char *optionName[2] = {"MIDI", "Audio"} ;
+static const char *optionInfo[2] = {"notas e instrumentos", "loops al tempo"} ;
 
 TrackTypeDialog::TrackTypeDialog(View &view, int channel, int current, bool hasContent)
 	: ModalView(view), channel_(channel), current_(current), hasContent_(hasContent),
-	  selected_(current), confirming_(false), yes_(false) {
+	  selected_(current == TT_AUDIO ? 1 : 0), confirming_(false), yes_(false) {
+	current_ = (current == TT_AUDIO) ? 1 : 0 ;   // índice de la opción
 }
 
 TrackTypeDialog::~TrackTypeDialog() {
@@ -23,14 +22,14 @@ void TrackTypeDialog::DrawView() {
 	GUITextProperties props ;
 	char line[48] ;
 	if (!confirming_) {
-		SetWindow(width, 8) ;
+		SetWindow(width, 7) ;
 		SetColor(CD_NORMAL) ;
 		snprintf(line, sizeof(line), "Tipo de la pista %d", channel_) ;
 		DrawString((width - strlen(line)) / 2, 0, line, props) ;
-		for (int t = 0; t < 3; t++) {
+		for (int t = 0; t < 2; t++) {
 			// el tipo actual lleva '*'; el elegido va resaltado
-			snprintf(line, sizeof(line), "%c %-8s%s", t == current_ ? '*' : ' ', typeName[t],
-			         typeInfo[t]) ;
+			snprintf(line, sizeof(line), "%c %-7s%s", t == current_ ? '*' : ' ', optionName[t],
+			         optionInfo[t]) ;
 			snprintf(line + strlen(line), sizeof(line) - strlen(line), "%*s",
 			         int(width - strlen(line)), "") ;
 			props.invert_ = (t == selected_) ;
@@ -38,13 +37,13 @@ void TrackTypeDialog::DrawView() {
 			props.invert_ = false ;
 		}
 		SetColor(CD_NORMAL) ;
-		DrawString((width - 23) / 2, 6, "A: elegir   B: cancelar", props) ;
+		DrawString((width - 23) / 2, 5, "A: elegir   B: cancelar", props) ;
 	} else {
 		SetWindow(width, 6) ;
 		SetColor(CD_NORMAL) ;
 		snprintf(line, sizeof(line), "La pista %d tiene celdas", channel_) ;
 		DrawString(0, 0, line, props) ;
-		snprintf(line, sizeof(line), "que no sirven como %s.", typeName[selected_]) ;
+		snprintf(line, sizeof(line), "que no sirven como %s.", optionName[selected_]) ;
 		DrawString(0, 1, line, props) ;
 		DrawString(0, 2, "Hay que borrarlas.", props) ;
 		props.invert_ = yes_ ;
@@ -66,17 +65,17 @@ void TrackTypeDialog::ProcessButtonMask(unsigned short mask, bool pressed) {
 		if (mask & EPBM_B) {
 			EndModal(-1) ;
 		} else if (mask & EPBM_UP) {
-			selected_ = (selected_ + 2) % 3 ;
+			selected_ = 1 - selected_ ;
 		} else if (mask & EPBM_DOWN) {
-			selected_ = (selected_ + 1) % 3 ;
+			selected_ = 1 - selected_ ;
 		} else if (mask & EPBM_A) {
 			if (selected_ == current_) {
 				EndModal(-1) ;
-			} else if (hasContent_ && ((current_ == TT_AUDIO) != (selected_ == TT_AUDIO))) {
+			} else if (hasContent_) {   // de chains a loops o al revés
 				confirming_ = true ;   // ahora sí: avisar antes de borrar
 				yes_ = false ;
 			} else {
-				EndModal(selected_) ;
+				EndModal(optionType[selected_]) ;
 			}
 		}
 	} else {
@@ -86,7 +85,7 @@ void TrackTypeDialog::ProcessButtonMask(unsigned short mask, bool pressed) {
 			yes_ = !yes_ ;
 		} else if (mask & EPBM_A) {
 			if (yes_) {
-				EndModal(selected_ | TTD_CLEAR) ;
+				EndModal(optionType[selected_] | TTD_CLEAR) ;
 			} else {
 				confirming_ = false ;
 			}
