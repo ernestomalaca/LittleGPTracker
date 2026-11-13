@@ -98,28 +98,31 @@ void InstrumentView::onInstrumentChange() {
 
 void InstrumentView::fillSampleParameters() {
 
-	// trk2als: pantalla reacomodada. Arriba (filas 1-9) va la forma de onda
-	// dibujada con pinceles; los campos van en dos columnas (x=1 y x=21) por
-	// bloques con etiqueta. Si el instrumento es un loop de una pista de audio
-	// (siempre en looper sync, el tono lo pone el bpm) se esconde lo que ahí no
-	// hace nada: loop mode, slices, root note, detune y el ajuste fino.
+	// trk2als: pantalla dibujada con pinceles: arriba (filas 1-9) la forma de
+	// onda; los campos en dos columnas (x=1 y x=21) por bloques con etiqueta.
+	// Hay dos variantes:
+	//  - loop de una pista de audio: LOOP primero (compases, length, warp);
+	//    no hay loop mode, root note, detune ni ajuste fino (ahí no hacen nada)
+	//  - pista de tracker: los campos de LGPT de siempre, LOOP al final; bars
+	//    y bpm solo en looper sync
 	// "church wet / pad" ya no se muestra. Todo sigue guardado en el proyecto.
 	int i=viewData_->currentInstrument_ ;
 	InstrumentBank *bank=viewData_->project_->GetInstrumentBank() ;
 	I_Instrument *instr=bank->GetInstrument(i) ;
 	SampleInstrument *instrument=(SampleInstrument *)instr  ;
 	audioMode_=viewData_->project_->IsAudioInstrument(i) ;
+	bool sync=instrument->FindVariable(SIP_LOOPMODE)->GetInt()==SILM_LOOPSYNC ;
 	const int L=1, R=21 ;
 	int row=10 ;
 	labelCount_=0 ;
 	Variable *v ;
 	UIIntVarField *f1 ;
 	GUIPoint pt ;
+	bpmInfoPos_=GUIPoint(-1,-1) ;
 #define ADD(f) T_SimpleList<UIField>::Insert(f)
 #define AT(x) (pt=GUIPoint(x,row))
-// un renglón vacío antes de cada bloque mientras quepa (en la pantalla completa
-// solo caben dos)
-	int gaps=audioMode_?4:2 ;
+	// un renglón vacío antes de cada bloque
+	int gaps=4 ;
 #define LABEL(t) { if (gaps>0) { row++ ; gaps-- ; } \
                    labelRow_[labelCount_]=row ; labelText_[labelCount_++]=t ; row++ ; }
 
@@ -131,13 +134,13 @@ void InstrumentView::fillSampleParameters() {
 	f1->SetFocus() ;
 	row++ ;
 
-	LABEL("LOOP") ;
-	v=instrument->FindVariable(SIP_FROMBAR) ;
-	ADD(new UIIntVarField(AT(L),*v,"from bar: %d",1,64,1,4)) ;
-	v=instrument->FindVariable(SIP_LOOPBARS) ;
-	ADD(new UIIntVarField(AT(R),*v,"bars: %d",1,16,1,4)) ;
-	row++ ;
 	if (audioMode_) {
+		LABEL("LOOP") ;
+		v=instrument->FindVariable(SIP_FROMBAR) ;
+		ADD(new UIIntVarField(AT(L),*v,"from bar: %d",1,64,1,4)) ;
+		v=instrument->FindVariable(SIP_LOOPBARS) ;
+		ADD(new UIIntVarField(AT(R),*v,"bars: %d",1,16,1,4)) ;
+		row++ ;
 		// cuánto dura la celda en la Song (el loop se repite adentro) y cómo
 		// sigue al tempo
 		v=instrument->FindVariable(SIP_CLIPBARS) ;
@@ -146,22 +149,15 @@ void InstrumentView::fillSampleParameters() {
 		v=instrument->FindVariable(SIP_WARP) ;
 		ADD(new UIIntVarField(AT(R),*v,"warp: %s",0,1,1,1)) ;
 		row++ ;
-	}
-	v=instrument->FindVariable(SIP_LOOPBPM) ;
-	ADD(new UIIntVarField(AT(L),*v,"bpm: %3d",0,300,1,10)) ;
-	bpmInfoPos_=GUIPoint(L+10,row) ;
-	row++ ;
-	if (audioMode_ && instrument->FindVariable(SIP_WARP)->GetInt()==1) {
-		v=instrument->FindVariable(SIP_TRANSPOSE) ;
-		ADD(new UIIntVarField(AT(L),*v,"transpose: %+d",-24,24,1,12)) ;
+		v=instrument->FindVariable(SIP_LOOPBPM) ;
+		ADD(new UIIntVarField(AT(L),*v,"bpm: %3d",0,300,1,10)) ;
+		bpmInfoPos_=GUIPoint(L+10,row) ;
 		row++ ;
-	}
-	if (!audioMode_) {
-		v=instrument->FindVariable(SIP_LOOPMODE) ;
-		ADD(new UIIntVarField(AT(L),*v,"loop mode: %s",0,SILM_LAST-1,1,1)) ;
-		v=instrument->FindVariable(SIP_SLICES) ;
-		ADD(new UIIntVarField(AT(28),*v,"slices: %2.2X",1,0xFF,1,0x10)) ;
-		row++ ;
+		if (instrument->FindVariable(SIP_WARP)->GetInt()==1) {
+			v=instrument->FindVariable(SIP_TRANSPOSE) ;
+			ADD(new UIIntVarField(AT(L),*v,"transpose: %+d",-24,24,1,12)) ;
+			row++ ;
+		}
 	}
 
 	LABEL("SOUND") ;
@@ -209,7 +205,20 @@ void InstrumentView::fillSampleParameters() {
 	row++ ;
 
 	if (!audioMode_) {
-		LABEL("FINE TUNE") ;
+		LABEL("LOOP") ;
+		v=instrument->FindVariable(SIP_LOOPMODE) ;
+		ADD(new UIIntVarField(AT(L),*v,"loop mode: %s",0,SILM_LAST-1,1,1)) ;
+		v=instrument->FindVariable(SIP_SLICES) ;
+		ADD(new UIIntVarField(AT(28),*v,"slices: %2.2X",1,0xFF,1,0x10)) ;
+		row++ ;
+		if (sync) {
+			v=instrument->FindVariable(SIP_LOOPBARS) ;
+			ADD(new UIIntVarField(AT(L),*v,"bars: %d",1,16,1,4)) ;
+			v=instrument->FindVariable(SIP_LOOPBPM) ;
+			ADD(new UIIntVarField(AT(L+10),*v,"bpm: %3d",0,300,1,10)) ;
+			bpmInfoPos_=GUIPoint(R,row) ;
+			row++ ;
+		}
 		int last=instrument->GetSampleSize()-1 ;
 		v=instrument->FindVariable(SIP_START) ;
 		ADD(new UIBigHexVarField(AT(L),*v,7,"start: %7.7X",0,last,16)) ;
@@ -363,7 +372,7 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 		}
 	}
 	FieldView::ProcessButtonMask(mask) ;
-	if ((editedID==SIP_FROMBAR || editedID==SIP_LOOPBARS) &&
+	if (audioMode_ && (editedID==SIP_FROMBAR || editedID==SIP_LOOPBARS) &&
 	    current_->FindVariable(editedID)->GetInt()!=editedBefore) {
 		Variable *len=current_->FindVariable(SIP_CLIPBARS) ;
 		int lenBefore=len->GetInt() ;
@@ -375,8 +384,10 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 		isDirty_=true ;
 	}
 	// cambiar el warp muestra u oculta 'transpose'
-	if (editedID==SIP_WARP && current_->FindVariable(editedID)->GetInt()!=editedBefore) {
-		lastFocusID_=SIP_WARP ;
+	// ... y el loop mode (en pistas de tracker) muestra u oculta bars y bpm
+	if ((editedID==SIP_WARP || editedID==SIP_LOOPMODE) &&
+	    current_->FindVariable(editedID)->GetInt()!=editedBefore) {
+		lastFocusID_=editedID ;
 		onInstrumentChange() ;
 		isDirty_=true ;
 	}
@@ -564,8 +575,8 @@ void InstrumentView::DrawView() {
         int bpm=si->FindVariable(SIP_LOOPBPM)->GetInt() ;
         int bars=si->FindVariable(SIP_LOOPBARS)->GetInt() ;
         float secs=si->GetLoopSeconds() ;
-        bool sync=audioMode_ || viewData_->instrumentFromSong_ ||
-                  si->FindVariable(SIP_LOOPMODE)->GetInt()==SILM_LOOPSYNC ;
+        bool sync=bpmInfoPos_._x>=0 && (audioMode_ ||
+                  si->FindVariable(SIP_LOOPMODE)->GetInt()==SILM_LOOPSYNC) ;
         if (sync && bpm>0 && secs>0 && bars>0) {
             int tempo=viewData_->project_->GetTempo() ;
             float ratio=secs/(bars*240.0f/tempo) ; // >1 = se acelera
@@ -643,9 +654,16 @@ void InstrumentView::drawWaveform() {
 	int s0=X+int((long long)ls*W/size) ;
 	int s1=X+int((long long)le*W/size) ;
 	if (s1<s0+2) s1=s0+2 ;
+	int sx=X+int((long long)st*W/size) ;
+	// en una pista de tracker: one-shot = suena de start a end, sin región
+	// de loop; los compases solo con looper sync
+	int lm=si->FindVariable(SIP_LOOPMODE)->GetInt() ;
+	bool oneShot=(!audioMode_ && lm==SILM_ONESHOT) ;
+	bool showBars=(audioMode_ || lm==SILM_LOOPSYNC) ;
+	int sound0=oneShot?sx:((!audioMode_ && sx<s0)?sx:s0) ;   // desde dónde suena
 
 	// duración y compases arriba a la derecha
-	float bar=si->GetBarSamples() ;
+	float bar=showBars?si->GetBarSamples():0 ;
 	int rate=src->GetSampleRate(-1) ;
 	if (rate>0) {
 		char info[32] ;
@@ -658,14 +676,14 @@ void InstrumentView::drawWaveform() {
 		DrawText(632-8*int(strlen(info)),3,info,dim2,0) ;
 	}
 
-	// región seleccionada (fondo)
-	FillRect(s0,Y-4,s1-s0,H+8,Mix(bg,hi,20),8) ;
+	// región del loop (fondo)
+	if (!oneShot) FillRect(s0,Y-4,s1-s0,H+8,Mix(bg,hi,20),8) ;
 
 	// barras de la onda
 	int mid=Y+20+(H-20)/2 ;
 	for (int b=0;b<WF_BARS;b++) {
 		int c=X+b*8+4 ;
-		bool inLoop=(c>=s0 && c<s1) ;
+		bool inLoop=(c>=sound0 && c<s1) ;
 		int h=(wfPeaks_[b]*(H-30))/255 ;
 		if (h<4) h=4 ;
 		FillRect(c-3,mid-h/2,5,h,inLoop?hi:dim,2) ;
@@ -698,11 +716,11 @@ void InstrumentView::drawWaveform() {
 		}
 	}
 
-	FrameRect(s0,Y-4,s1-s0,H+8,hi,8,2) ;
+	if (!oneShot) FrameRect(s0,Y-4,s1-s0,H+8,hi,8,2) ;
 	// dónde arranca el sample (en las pistas de audio siempre es loop start)
-	if (!audioMode_ && st!=ls) {
-		int sx=X+int((long long)st*W/size) ;
-		FillRect(sx-1,Y+18,2,H-20,hi2) ;
+	if (!audioMode_ && (oneShot || st!=ls)) {
+		FillRect(sx-1,Y-4,2,H+8,hi2) ;
+		DrawText(sx+5,Y+1,"start",hi2,0) ;
 	}
 	// cursor de reproducción: la línea verde sigue a la voz que suena
 	playheadPx_=-1 ;

@@ -125,13 +125,21 @@ void ImportSampleDialog::preview(Path &element) {
 	// y en fase: con la canción sonando entra en el siguiente tiempo, en el
 	// punto del loop que corresponde a ese tiempo del compás
 	Player *player=Player::GetInstance() ;
-	WavFile *wav=WavFile::Open(element.GetPath().c_str()) ;
+	// solo para loops: el instrumento de una pista de audio, o uno en looper
+	// sync. En una pista de tracker el sample se oye a su velocidad original
+	bool loopContext=viewData_->project_->IsAudioInstrument(toInstr_) ;
+	I_Instrument *instr=viewData_->project_->GetInstrumentBank()->GetInstrument(toInstr_) ;
+	if (instr && instr->GetType()==IT_SAMPLE &&
+	    instr->FindVariable(SIP_LOOPMODE)->GetInt()==SILM_LOOPSYNC) {
+		loopContext=true ;
+	}
+	WavFile *wav=loopContext?WavFile::Open(element.GetPath().c_str()):0 ;
 	if (wav) {
 		float secs=(wav->GetSampleRate(-1)>0)?float(wav->GetSize(-1))/wav->GetSampleRate(-1):0 ;
 		delete wav ;
 		// el nombre manda; si se abrió desde una pista de audio, también se adivina
 		int bpm=SampleInstrument::DetectBpm(element.GetName().c_str(),secs,
-		                                    viewData_->instrumentFromSong_) ;
+		                                    viewData_->project_->IsAudioInstrument(toInstr_)) ;
 		if (bpm>0) {
 			int tempo=viewData_->project_->GetTempo() ;
 			int bars=int(secs*bpm/240.0f+0.5f) ;
