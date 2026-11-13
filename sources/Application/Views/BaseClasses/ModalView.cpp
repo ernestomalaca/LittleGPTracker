@@ -32,7 +32,7 @@ void ModalView::SetWindow(int width, int height) {
     };
 
     left_ = 20 - width / 2;
-    top_ = 10 - height / 2;
+    top_ = 15 - (height + 1) / 2; // trk2als: centrado en la pantalla (30 filas)
     if (top_ < 2) {
         top_ = 2;
     }
