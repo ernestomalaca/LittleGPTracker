@@ -49,15 +49,13 @@ tempoNudge_(0)
         new Variable("scale", VAR_SCALE, scaleNames, scaleCount, 0);
     this->Insert(scale);
     scale->SetInt(0);
-    // trk2als: tipo de cada pista. Proyectos nuevos: 6 de tracker + 2 de audio
-    // (DEFAULT_AUDIO_TRACKS, las últimas)
+    // trk2als: tipo de cada pista; se cambia en la cabecera de la Song.
+    // Proyectos nuevos: todas de tracker
     static const char *trackTypes[3] = {"TRK", "AUD", "MID"};
     for (int ch = 0; ch < SONG_CHANNEL_COUNT; ch++) {
         char name[16];
         sprintf(name, "track%d", ch + 1);
-        Variable *t = new Variable(name, VAR_TRACKTYPE(ch), trackTypes, 3,
-                                   ch >= SONG_CHANNEL_COUNT - DEFAULT_AUDIO_TRACKS ? TT_AUDIO
-                                                                                  : TT_TRACKER);
+        Variable *t = new Variable(name, VAR_TRACKTYPE(ch), trackTypes, 3, TT_TRACKER);
         this->Insert(t);
     }
     // proyectos de antes de los tipos guardaban cuántas pistas de audio había

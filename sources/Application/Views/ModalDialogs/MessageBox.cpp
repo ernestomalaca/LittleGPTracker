@@ -61,6 +61,7 @@ void MessageBox::OnPlayerUpdate(PlayerEventType ,unsigned int currentTick) {
 void MessageBox::OnFocus() {
 } ;
 void MessageBox::ProcessButtonMask(unsigned short mask,bool pressed) {
+	if (!pressed) return ; // trk2als: soltar botones que abrieron el diálogo no lo cierra
 	if (mask&EPBM_A) {
 		EndModal(button_[selected_]) ;
 	}

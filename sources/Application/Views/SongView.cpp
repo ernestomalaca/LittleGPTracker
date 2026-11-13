@@ -8,6 +8,7 @@
 #include "Application/Model/Song.h"
 #include "System/Console/Trace.h"
 #include "System/System/System.h"
+#include "Application/Views/ModalDialogs/MessageBox.h"
 #include "UIController.h"
 #include "VuMeterUtil.h"
 #include <iostream>
@@ -25,6 +26,9 @@ SongView::SongView(GUIWindow &w, ViewData *viewData, const char *song)
     updatingChain_ = false;
     lastChain_ = 0;
     lastClip_ = 0xFF; // trk2als: sin loop todavía
+    headerMode_ = false;
+    pendingTypeCh_ = -1;
+    pendingType_ = 0;
     songname_ = song;
 
     for (int i = 0; i < 8; i++) {
@@ -674,6 +678,11 @@ void SongView::ProcessButtonMask(unsigned short mask, bool pressed) {
         return;
     };
 
+    if (headerMode_) { // trk2als: en la cabecera se cambia el tipo de pista
+        processHeaderButtonMask(mask);
+        return;
+    }
+
     if (viewMode_ == VM_NEW && isAudioColumn(viewData_->songX_)) {
         // trk2als: A otra vez = loop nuevo (un instrumento libre), como la chain nueva en MIDI
         if (mask == EPBM_A) {
@@ -872,8 +881,15 @@ void SongView::processNormalButtonMask(unsigned int mask) {
 
                     if (mask & EPBM_DOWN)
                         updateCursor(0, 1);
-                    if (mask & EPBM_UP)
-                        updateCursor(0, -1);
+                    if (mask & EPBM_UP) {
+                        // trk2als: desde la fila 00, arriba es la cabecera
+                        if (viewData_->songY_ == 0 && viewData_->songOffset_ == 0) {
+                            headerMode_ = true;
+                            isDirty_ = true;
+                        } else {
+                            updateCursor(0, -1);
+                        }
+                    }
                     if (mask & EPBM_LEFT)
                         updateCursor(-1, 0);
                     if (mask & EPBM_RIGHT)
@@ -894,6 +910,81 @@ void SongView::processNormalButtonMask(unsigned int mask) {
         updatingChain_ = false;
     }
 };
+
+/******************************************************
+ trk2als: cabecera de las columnas = tipo de pista
+   A+izq/der cambia el tipo (TRK, AUD, MID), izq/der
+   cambia de columna, abajo regresa a las celdas
+ ******************************************************/
+
+static const char *trackTypeNames[3] = {"tracker", "audio", "midi"};
+
+static void TrackTypeCallback(View &v, ModalView &dialog) {
+    SongView &sv = (SongView &)v;
+    if (dialog.GetReturnCode() == MBL_YES && sv.pendingTypeCh_ >= 0) {
+        sv.ApplyTrackType(sv.pendingTypeCh_, sv.pendingType_, true);
+    }
+    sv.pendingTypeCh_ = -1;
+}
+
+void SongView::ApplyTrackType(int channel, int type, bool clear) {
+    if (clear) {
+        unsigned char *data = viewData_->song_->data_;
+        for (int r = 0; r < SONG_ROW_COUNT; r++) {
+            data[r * SONG_CHANNEL_COUNT + channel] = 0xFF;
+        }
+    }
+    viewData_->project_->FindVariable(VAR_TRACKTYPE(channel))->SetInt(type);
+    char msg[32];
+    snprintf(msg, sizeof(msg), "Track %d: %s", channel, trackTypeNames[type]);
+    View::SetNotification(msg);
+    isDirty_ = true;
+}
+
+void SongView::processHeaderButtonMask(unsigned int mask) {
+    if (mask & (EPBM_R | EPBM_L | EPBM_B)) { // atajos de siempre: salir de la cabecera
+        headerMode_ = false;
+        isDirty_ = true;
+        processNormalButtonMask(mask);
+        return;
+    }
+    if (mask & EPBM_START) {
+        onStart();
+        return;
+    }
+    if (mask & EPBM_A) {
+        int dir = (mask & EPBM_RIGHT) ? 1 : ((mask & EPBM_LEFT) ? -1 : 0);
+        if (!dir) return;
+        int ch = viewData_->songX_;
+        int now = viewData_->project_->GetTrackType(ch);
+        int next = (now + dir + 3) % 3;
+        // de chains (TRK/MID) a loops (AUD) o al revés, las celdas cambian de
+        // significado: si hay algo, preguntar antes de vaciar la columna
+        bool empty = true;
+        unsigned char *data = viewData_->song_->data_;
+        for (int r = 0; r < SONG_ROW_COUNT; r++) {
+            if (data[r * SONG_CHANNEL_COUNT + ch] != 0xFF) empty = false;
+        }
+        if ((now == TT_AUDIO) != (next == TT_AUDIO) && !empty) {
+            pendingTypeCh_ = ch;
+            pendingType_ = next;
+            char msg[40];
+            snprintf(msg, sizeof(msg), "Clear track %d to make it %s?", ch,
+                     trackTypeNames[next]);
+            MessageBox *mb = new MessageBox(*this, msg, MBBF_YES | MBBF_NO);
+            DoModal(mb, TrackTypeCallback);
+            return;
+        }
+        ApplyTrackType(ch, next, false);
+        return;
+    }
+    if (mask & EPBM_LEFT) updateCursor(-1, 0);
+    if (mask & EPBM_RIGHT) updateCursor(1, 0);
+    if (mask & EPBM_DOWN) {
+        headerMode_ = false;
+        isDirty_ = true;
+    }
+}
 
 /******************************************************
  processSelectionButtonMask:
@@ -1133,7 +1224,11 @@ void SongView::DrawView() {
         snprintf(chbuf, sizeof(chbuf), "%c%d", "TAM"[type], i);
         SetColor(type == TT_AUDIO ? CD_HILITE1
                                   : (type == TT_MIDI ? CD_HILITE2 : CD_COL_TITLE));
+        bool here = headerMode_ && i == viewData_->songX_;
+        if (here) SetColor(CD_CURSOR);
+        props.invert_ = here;
         DrawString(pos._x + i * dx, pos._y, chbuf, props);
+        props.invert_ = false;
     }
 
     SetColor(CD_NORMAL);
