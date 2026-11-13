@@ -76,6 +76,17 @@ class AppWindow : public GUIWindow, I_Observer, Status {
 
   private:
     View *_currentView;
+    // trk2als: botones como en Joy2Live (LSDJ): Select para zonas y edición,
+    // B + Select / B + Start para mute y solo. Se traducen a lo que ya
+    // entienden las pantallas (R = zonas, L = marcar/pegar)
+    bool _bGesture;      // B se sostuvo antes de Select/Start
+    bool _selectFirst;   // Select se sostuvo antes que B
+    void joyButton(unsigned short v, bool pressed, bool repeat);
+    unsigned short joyLegacy(unsigned short phys);
+    void joyNavigate(unsigned short dir);
+    void joyStep(unsigned short dir);
+    void joySwitch(int viewType);
+    int joyCurrentType();
     ViewData *_viewData;
     SongView *_songView;
     ChainView *_chainView;

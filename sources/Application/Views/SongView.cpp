@@ -23,6 +23,8 @@
 
 SongView::SongView(GUIWindow &w, ViewData *viewData, const char *song)
     : View(w, viewData) {
+    aOpenPending_ = false;
+    bTap_ = false;
 
     updatingChain_ = false;
     lastChain_ = 0;
@@ -182,6 +184,52 @@ void SongView::cutPosition() {
         set current position to last chain value if
         current step is empty
  ******************************************************/
+
+// trk2als: abre lo que hay en la celda: la primera phrase de la chain (si la
+// chain está vacía, la chain) o, en una pista de audio, su clip
+void SongView::openCell() {
+    unsigned char *data = viewData_->GetCurrentSongPointer();
+    if (*data == 0xFF) return;
+    ViewType vt;
+    if (isAudioColumn(viewData_->songX_)) {
+        vt = VT_INSTRUMENT;
+        viewData_->currentInstrument_ = *data;
+        viewData_->instrumentFromSong_ = true;
+    } else {
+        viewData_->currentChain_ = *data;
+        viewData_->chainRow_ = 0;
+        unsigned char phrase = viewData_->song_->chain_->data_[16 * (*data)];
+        if (phrase != 0xFF) {
+            viewData_->currentPhrase_ = phrase;
+            vt = VT_PHRASE;
+        } else {
+            vt = VT_CHAIN;
+        }
+    }
+    ViewEvent ve(VET_SWITCH_VIEW, &vt);
+    SetChanged();
+    NotifyObservers(&ve);
+}
+
+// trk2als: celda vacía + A = un clip nuevo: chain nueva con una phrase nueva
+void SongView::createClip() {
+    unsigned short chain = viewData_->song_->chain_->GetNext();
+    if (chain == NO_MORE_CHAIN) {
+        View::SetNotification("No quedan chains libres");
+        return;
+    }
+    setChain((unsigned char)chain);
+    viewData_->song_->chain_->SetUsed((unsigned char)chain);
+    unsigned char *row0 = viewData_->song_->chain_->data_ + 16 * chain;
+    if (*row0 == 0xFF) {
+        unsigned short phrase = viewData_->song_->phrase_->GetNext();
+        if (phrase != NO_MORE_PHRASE) {
+            *row0 = (unsigned char)phrase;
+            viewData_->song_->phrase_->SetUsed((unsigned char)phrase);
+        }
+    }
+    isDirty_ = true;
+}
 
 void SongView::pasteLast() {
 
@@ -665,15 +713,41 @@ void SongView::jumpToNextSection(int direction) {
 
 void SongView::ProcessButtonMask(unsigned short mask, bool pressed) {
 
+    // trk2als: Joy2Live: A tocada sobre un clip lo abre al soltarla; B tocada
+    // sola quita los mute y solo fijos
+    if (pressed) {
+        if (mask != EPBM_A) aOpenPending_ = false;
+        bTap_ = (mask == EPBM_B && !clipboard_.active_ && viewMode_ != VM_MUTEON &&
+                 viewMode_ != VM_SOLOON);
+    } else {
+        if (aOpenPending_ && !(mask & EPBM_A)) {
+            aOpenPending_ = false;
+            if (!headerMode_) openCell();
+            return;
+        }
+        if (bTap_ && !(mask & EPBM_B)) {
+            bTap_ = false;
+            unMuteAll();
+            UIController::GetInstance()->SwitchSoloMode(0, SONG_CHANNEL_COUNT - 1, false);
+            if (viewMode_ == VM_SOLOON || viewMode_ == VM_MUTEON) viewMode_ = VM_NORMAL;
+            isDirty_ = true;
+            return;
+        }
+    }
+
     if (!pressed) {
         if (viewMode_ == VM_MUTEON) {
             if (mask & EPBM_R) {
                 toggleMute();
+            } else if (!(mask & (EPBM_B | EPBM_A))) {
+                viewMode_ = VM_NORMAL;   // trk2als: quedó fijo
             }
         };
         if (viewMode_ == VM_SOLOON) {
             if (mask & EPBM_R) {
                 switchSoloMode();
+            } else if (!(mask & (EPBM_B | EPBM_A))) {
+                viewMode_ = VM_NORMAL;   // trk2als: quedó fijo
             }
         };
         return;
@@ -807,9 +881,15 @@ void SongView::processNormalButtonMask(unsigned int mask) {
                 pasteClipboard();
             }
             if (mask == EPBM_A) {
-
-                pasteLast();
-                viewMode_ = VM_NEW;
+                unsigned char *cell = viewData_->GetCurrentSongPointer();
+                if (*cell != 0xFF) {
+                    aOpenPending_ = true;      // trk2als: se abre al soltar A
+                } else if (isAudioColumn(viewData_->songX_)) {
+                    pasteLast();
+                    viewMode_ = VM_NEW;
+                } else {
+                    createClip();              // trk2als: como en Live: un clip nuevo
+                }
             }
             if (mask & EPBM_R) {
                 switchSoloMode();
@@ -983,6 +1063,18 @@ void SongView::processHeaderButtonMask(unsigned int mask) {
  ******************************************************/
 
 void SongView::processSelectionButtonMask(unsigned int mask) {
+
+    // trk2als: como en Joy2Live: B + A corta lo marcado y A sola cancela la marca
+    if (mask == (EPBM_A | EPBM_B)) {
+        cutSelection();
+        return;
+    }
+    if (mask == EPBM_A) {
+        clipboard_.active_ = false;
+        viewMode_ = VM_NORMAL;
+        isDirty_ = true;
+        return;
+    }
 
     // B Modifier
 

@@ -92,6 +92,8 @@ AppWindow::AppWindow(I_GUIWindowImp &imp) : GUIWindow(imp) {
     _lastA = 0;
     _lastB = 0;
     _mask = 0;
+    _bGesture = false;
+    _selectFirst = false;
     colorIndex_ = CD_NORMAL;
 
     EventDispatcher *ed = EventDispatcher::GetInstance();
@@ -519,18 +521,19 @@ bool AppWindow::onEvent(GUIEvent &event) {
 
     switch (event.GetType()) {
 
-    case ET_PADBUTTONDOWN:
-
+    case ET_PADBUTTONDOWN: {
+        bool repeat = (_mask & v) != 0;
         _mask |= v;
         if (_currentView)
-            _currentView->ProcessButton(_mask, true);
+            joyButton(v, true, repeat);
         break;
+    }
 
     case ET_PADBUTTONUP:
 
         _mask &= (0xFFFF - v);
         if (_currentView)
-            _currentView->ProcessButton(_mask, false);
+            joyButton(v, false, false);
         break;
 
     case ET_SYSQUIT:
@@ -593,6 +596,114 @@ void AppWindow::onUpdate() {
 }
 
 void AppWindow::LayoutChildren() {};
+
+/************************************************************
+ trk2als: botones como en Joy2Live / LSDJ
+
+   Select + flechas   zonas: ↑ Song, ↓ instrumento, ← / → como siempre
+                      (en la Song, → abre la phrase)
+   Select + R         Project → Mixer → Song
+   Select + A         pegar          (L + A de LGPT)
+   Select, B          marcar / clonar (L + B de LGPT)
+   Select + Start     detener        (R + Start de LGPT)
+   ← + Start          tocar la fila  (L + Start de LGPT)
+   B, luego Select    mute (suelta B primero para dejarlo fijo)
+   B, luego Start     solo (igual)
+ Los atajos de LGPT con L y R siguen funcionando.
+ ************************************************************/
+
+int AppWindow::joyCurrentType() {
+    if (_currentView == _songView) return VT_SONG;
+    if (_currentView == _chainView) return VT_CHAIN;
+    if (_currentView == _phraseView) return VT_PHRASE;
+    if (_currentView == _instrumentView) return VT_INSTRUMENT;
+    if (_currentView == _projectView) return VT_PROJECT;
+    if (_currentView == _mixerView) return VT_MIXER;
+    if (_currentView == _tableView) return VT_TABLE;
+    return -1;
+}
+
+void AppWindow::joySwitch(int viewType) {
+    ViewType vt = (ViewType)viewType;
+    ViewEvent ve(VET_SWITCH_VIEW, &vt);
+    Update(*_currentView, &ve);
+}
+
+// un paso de LGPT: R + flecha (y soltar)
+void AppWindow::joyStep(unsigned short dir) {
+    _currentView->ProcessButton(EPBM_R | dir, true);
+    _currentView->ProcessButton(0, false);
+}
+
+void AppWindow::joyNavigate(unsigned short dir) {
+    int cur = joyCurrentType();
+    switch (dir) {
+    case EPBM_UP:
+        if (cur != VT_SONG) joySwitch(VT_SONG);
+        break;
+    case EPBM_DOWN:   // al instrumento: Song → chain → phrase → instrumento
+        for (int i = 0; i < 3 && (cur == VT_SONG || cur == VT_CHAIN || cur == VT_PHRASE); i++) {
+            joyStep(EPBM_RIGHT);
+            int now = joyCurrentType();
+            if (now == cur) break;
+            cur = now;
+        }
+        break;
+    case EPBM_RIGHT:
+        joyStep(EPBM_RIGHT);
+        if (cur == VT_SONG && joyCurrentType() == VT_CHAIN) joyStep(EPBM_RIGHT);
+        break;
+    case EPBM_LEFT:
+        joyStep(EPBM_LEFT);
+        break;
+    }
+}
+
+unsigned short AppWindow::joyLegacy(unsigned short phys) {
+    if (_bGesture) {   // B + Select = R + B (mute), B + Start = R + A (solo)
+        unsigned short m = phys & ~(EPBM_B | EPBM_SELECT | EPBM_START);
+        if (phys & EPBM_B) m |= EPBM_R;
+        if (phys & EPBM_SELECT) m |= EPBM_B;
+        if (phys & EPBM_START) m |= EPBM_A;
+        return m;
+    }
+    unsigned short m = phys & ~EPBM_SELECT;
+    if (phys & EPBM_SELECT) m |= (phys & EPBM_START) ? EPBM_R : EPBM_L;
+    if ((phys & EPBM_START) && (phys & EPBM_LEFT) && !(phys & EPBM_SELECT)) {
+        m &= ~EPBM_LEFT;   // ← + Start = la fila (L + Start)
+        m |= EPBM_L;
+    }
+    return m;
+}
+
+void AppWindow::joyButton(unsigned short v, bool pressed, bool repeat) {
+    unsigned short phys = _mask;
+    if (_currentView->HasModal()) {   // las ventanitas: A, B y flechas tal cual
+        _currentView->ProcessButton(phys & ~EPBM_SELECT, pressed);
+        return;
+    }
+    const unsigned short arrows = EPBM_UP | EPBM_DOWN | EPBM_LEFT | EPBM_RIGHT;
+    if (pressed && !repeat) {
+        if (v == EPBM_SELECT && !(phys & EPBM_B)) _selectFirst = true;
+        if ((v == EPBM_SELECT || v == EPBM_START) && (phys & EPBM_B) && !_selectFirst)
+            _bGesture = true;
+    }
+    // zonas: Select + flechas / Select + R (sin repetir al sostener)
+    if ((phys & EPBM_SELECT) && !_bGesture && (v & (arrows | EPBM_R))) {
+        if (pressed && !repeat) {
+            if (v == EPBM_R) {
+                int cur = joyCurrentType();
+                joySwitch(cur == VT_PROJECT ? VT_MIXER : (cur == VT_MIXER ? VT_SONG : VT_PROJECT));
+            } else {
+                joyNavigate(v);
+            }
+        }
+        return;
+    }
+    _currentView->ProcessButton(joyLegacy(phys), pressed);
+    if (!pressed && v == EPBM_B) _bGesture = false;
+    if (!pressed && v == EPBM_SELECT) _selectFirst = false;
+}
 
 void AppWindow::Update(Observable &o, I_ObservableData *d) {
 

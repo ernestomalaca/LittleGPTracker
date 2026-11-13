@@ -50,6 +50,11 @@ class SongView : public View {
 
   private:
     bool updatingChain_; // .Flag that tells we're updating chain
+    // trk2als: navegación de Joy2Live
+    bool aOpenPending_;  // A sobre un clip: al soltar (sin moverse) se abre
+    bool bTap_;          // B tocada sola: al soltar quita mute y solo
+    void openCell();     // abre la phrase (MIDI) o el clip (audio) de la celda
+    void createClip();   // celda vacía: clip nuevo (chain + phrase nuevas)
                          //  so we don't allocate chains while
                          //  doing multiple A+ARROWS
 

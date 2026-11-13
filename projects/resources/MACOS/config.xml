@@ -14,6 +14,7 @@
 	<KEY_RIGHT value="right" />
 
 	<KEY_START value="space" />
+	<KEY_SELECT value="z" /> <!-- trk2als: Select, como en Joy2Live -->
 
     <!-- Default colors below -->
     <BACKGROUND   value = "1D0A1F" />

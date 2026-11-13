@@ -1130,6 +1130,18 @@ int PhraseView::findClosestInstrumentFor(int row) {
 
 void PhraseView::processSelectionButtonMask(unsigned short mask) {
 
+    // trk2als: como en Joy2Live: B + A corta lo marcado y A sola cancela la marca
+    if (mask == (EPBM_A | EPBM_B)) {
+        cutSelection();
+        return;
+    }
+    if (mask == EPBM_A) {
+        clipboard_.active_ = false;
+        viewMode_ = VM_NORMAL;
+        isDirty_ = true;
+        return;
+    }
+
     Player *player = Player::GetInstance();
 
     // B modifier

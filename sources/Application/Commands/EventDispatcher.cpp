@@ -79,7 +79,11 @@ void EventDispatcher::Execute(FourCC id,float value) {
 			case TRIG_EVENT_START:
 				mapping=EPBT_START;
 				break ;
-				//	EPBT_SELECT
+			case TRIG_EVENT_SELECT:   // trk2als: Select, como en Joy2Live / LSDJ
+				mapping=EPBT_SELECT;
+				break ;
+			default:
+				return ;
 		}
 
 		// Compute mask and repeat if needed
