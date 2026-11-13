@@ -1,4 +1,6 @@
 #include "Project.h"
+#include <string.h>
+#include <stdio.h>
 #include "Application/Instruments/SampleInstrument.h"
 #include "Application/Instruments/SamplePool.h"
 #include "Application/Persistency/PersistencyService.h"
@@ -47,9 +49,19 @@ tempoNudge_(0)
         new Variable("scale", VAR_SCALE, scaleNames, scaleCount, 0);
     this->Insert(scale);
     scale->SetInt(0);
-    // trk2als: pistas de audio (proyectos nuevos: 6 MIDI + 2 audio)
-    Variable *audioTracks =
-        new Variable("audiotracks", VAR_AUDIOTRACKS, DEFAULT_AUDIO_TRACKS, 8);
+    // trk2als: tipo de cada pista. Proyectos nuevos: 6 de tracker + 2 de audio
+    // (DEFAULT_AUDIO_TRACKS, las últimas)
+    static const char *trackTypes[3] = {"TRK", "AUD", "MID"};
+    for (int ch = 0; ch < SONG_CHANNEL_COUNT; ch++) {
+        char name[16];
+        sprintf(name, "track%d", ch + 1);
+        Variable *t = new Variable(name, VAR_TRACKTYPE(ch), trackTypes, 3,
+                                   ch >= SONG_CHANNEL_COUNT - DEFAULT_AUDIO_TRACKS ? TT_AUDIO
+                                                                                  : TT_TRACKER);
+        this->Insert(t);
+    }
+    // proyectos de antes de los tipos guardaban cuántas pistas de audio había
+    Variable *audioTracks = new Variable("audiotracks", VAR_AUDIOTRACKS, 0, 8);
     this->Insert(audioTracks);
 
     Variable *renderMode =
@@ -145,14 +157,14 @@ void Project::Trigger() {
 	}
 } ;
 
-int Project::GetAudioTrackCount() {
-    Variable *v = FindVariable(VAR_AUDIOTRACKS);
-    int n = v ? v->GetInt() : 0;
-    return (n < 0) ? 0 : ((n > SONG_CHANNEL_COUNT) ? SONG_CHANNEL_COUNT : n);
+TrackType Project::GetTrackType(int channel) {
+    Variable *v = FindVariable(VAR_TRACKTYPE(channel));
+    int t = v ? v->GetInt() : TT_TRACKER;
+    return (t < TT_TRACKER || t > TT_MIDI) ? TT_TRACKER : (TrackType)t;
 }
 
 bool Project::IsAudioChannel(int channel) {
-    return channel >= SONG_CHANNEL_COUNT - GetAudioTrackCount();
+    return GetTrackType(channel) == TT_AUDIO;
 }
 
 int Project::GetTranspose() {
@@ -362,9 +374,12 @@ void Project::RestoreContent(TiXmlElement *element) {
 	}
 	SyncMaster::GetInstance()->SetTableRatio(tableRatio) ;
 
-	// trk2als: un proyecto guardado sin este ajuste es de antes de las pistas
-	// de audio, asi que todos sus canales siguen siendo MIDI
+	// trk2als: un proyecto guardado sin tipos de pista es de antes de ellos:
+	// todas de tracker, salvo las de audio que diga 'audiotracks' (las últimas)
 	FindVariable(VAR_AUDIOTRACKS)->SetInt(0) ;
+	for (int ch=0;ch<SONG_CHANNEL_COUNT;ch++) {
+		FindVariable(VAR_TRACKTYPE(ch))->SetInt(TT_TRACKER) ;
+	}
 
 	// Now loop on all variables
 
@@ -378,6 +393,12 @@ void Project::RestoreContent(TiXmlElement *element) {
 		} ;
 		current=current->NextSiblingElement() ;
 	} ;
+	// trk2als: pasar el 'audiotracks' viejo a tipos de pista
+	int audio=FindVariable(VAR_AUDIOTRACKS)->GetInt() ;
+	for (int ch=SONG_CHANNEL_COUNT-audio;ch<SONG_CHANNEL_COUNT;ch++) {
+		if (ch>=0) FindVariable(VAR_TRACKTYPE(ch))->SetInt(TT_AUDIO) ;
+	}
+	FindVariable(VAR_AUDIOTRACKS)->SetInt(0) ;
 };
 
 

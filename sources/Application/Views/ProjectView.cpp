@@ -157,11 +157,21 @@ ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
         new UIIntVarField(position, *v, "Scale: %s", 0, scaleCount - 1, 1, 10);
     T_SimpleList<UIField>::Insert(field);
 
-    // trk2als: cuántos canales (desde el último) son pistas de audio
-    v = project_->FindVariable(VAR_AUDIOTRACKS);
-    position._y += 1;
-    field = new UIIntVarField(position, *v, "Audio tracks: %d", 0, 8, 1, 2);
-    T_SimpleList<UIField>::Insert(field);
+    // trk2als: tipo de cada pista, en dos renglones de cuatro
+    for (int row = 0; row < 2; row++) {
+        position._y += 1;
+        UIStaticField *label = new UIStaticField(
+            position, row == 0 ? "Tracks 1-4:" : "Tracks 5-8:");
+        T_SimpleList<UIField>::Insert(label);
+        for (int k = 0; k < 4; k++) {
+            int ch = row * 4 + k;
+            GUIPoint p = position;
+            p._x += 12 + k * 4;
+            v = project_->FindVariable(VAR_TRACKTYPE(ch));
+            field = new UIIntVarField(p, *v, "%s", 0, 2, 1, 1);
+            T_SimpleList<UIField>::Insert(field);
+        }
+    }
 
     position._y += 2;
     UIActionField *a1 =
@@ -224,7 +234,41 @@ void ProjectView::ProcessButtonMask(unsigned short mask,bool pressed) {
     if (!pressed)
         return;
 
+    // trk2als: una pista con contenido no puede pasar de chains (TRK/MID) a
+    // loops (AUD) o al revés: sus celdas significarían otra cosa
+    int typeCh = -1, typeBefore = 0;
+    UIField *focus = GetFocus();
+    if (focus && !focus->IsStatic()) {
+        Variable &var = ((UIIntVarField *)focus)->GetVariable();
+        for (int ch = 0; ch < SONG_CHANNEL_COUNT; ch++) {
+            if (var.GetID() == VAR_TRACKTYPE(ch)) {
+                typeCh = ch;
+                typeBefore = var.GetInt();
+            }
+        }
+    }
+
     FieldView::ProcessButtonMask(mask);
+
+    if (typeCh >= 0) {
+        Variable *var = project_->FindVariable(VAR_TRACKTYPE(typeCh));
+        int now = var->GetInt();
+        bool wasAudio = (typeBefore == TT_AUDIO), isAudio = (now == TT_AUDIO);
+        if (now != typeBefore && wasAudio != isAudio) {
+            bool empty = true;
+            unsigned char *data = viewData_->song_->data_;
+            for (int r = 0; r < SONG_ROW_COUNT; r++) {
+                if (data[r * SONG_CHANNEL_COUNT + typeCh] != 0xFF) empty = false;
+            }
+            if (!empty) {
+                var->SetInt(typeBefore);
+                char msg[40];
+                sprintf(msg, "Empty track %d first", typeCh + 1);
+                View::SetNotification(msg);
+                isDirty_ = true;
+            }
+        }
+    }
 
     if (mask & EPBM_R) {
         if (mask&EPBM_DOWN) {

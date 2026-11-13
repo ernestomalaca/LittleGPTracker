@@ -1128,9 +1128,11 @@ void SongView::DrawView() {
     char chbuf[4];
     short dx = 3;
     for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
-        bool audio = isAudioColumn(i);
-        snprintf(chbuf, sizeof(chbuf), audio ? "A%d" : "%02d", i); // trk2als
-        SetColor(audio ? CD_HILITE1 : CD_COL_TITLE);
+        // trk2als: tipo de pista + número: T0 tracker, A6 audio, M2 midi
+        TrackType type = viewData_->project_->GetTrackType(i);
+        snprintf(chbuf, sizeof(chbuf), "%c%d", "TAM"[type], i);
+        SetColor(type == TT_AUDIO ? CD_HILITE1
+                                  : (type == TT_MIDI ? CD_HILITE2 : CD_COL_TITLE));
         DrawString(pos._x + i * dx, pos._y, chbuf, props);
     }
 

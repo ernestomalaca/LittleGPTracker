@@ -19,7 +19,10 @@
 #define VAR_SCALE 			MAKE_FOURCC('S', 'C', 'A', 'L')
 #define VAR_RENDER MAKE_FOURCC('R', 'N', 'D', 'R')
 // trk2als: cuantos de los 8 canales (contando desde el ultimo) son pistas de audio
-#define VAR_AUDIOTRACKS MAKE_FOURCC('A', 'U', 'D', 'T')
+#define VAR_AUDIOTRACKS MAKE_FOURCC('A', 'U', 'D', 'T') // trk2als: solo para abrir proyectos viejos
+// trk2als: tipo de cada pista (TYP0..TYP7)
+#define VAR_TRACKTYPE(ch) MAKE_FOURCC('T', 'Y', 'P', '0' + (ch))
+enum TrackType { TT_TRACKER = 0, TT_AUDIO = 1, TT_MIDI = 2 };
 #define DEFAULT_AUDIO_TRACKS 2
 
 #define PROJECT_NUMBER "1"
@@ -48,7 +51,7 @@ public:
   int GetSoftclipGain();
   int GetPregain();
   int GetRenderMode();
-  int GetAudioTrackCount();
+  TrackType GetTrackType(int channel); // TRK: tracker (sale como audio), AUD: loops, MID: notas
   bool IsAudioChannel(int channel); // canal de audio: sus celdas son loops, no chains
   bool IsAudioInstrument(int instrument); // ¿algún loop de una pista de audio usa este instrumento?
   void Trigger();
