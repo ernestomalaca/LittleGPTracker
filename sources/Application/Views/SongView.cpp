@@ -9,6 +9,7 @@
 #include "System/Console/Trace.h"
 #include "System/System/System.h"
 #include "Application/Views/ModalDialogs/MessageBox.h"
+#include "Application/Views/ModalDialogs/TrackTypeDialog.h"
 #include "UIController.h"
 #include "VuMeterUtil.h"
 #include <iostream>
@@ -913,16 +914,17 @@ void SongView::processNormalButtonMask(unsigned int mask) {
 
 /******************************************************
  trk2als: cabecera de las columnas = tipo de pista
-   A+izq/der cambia el tipo (TRK, AUD, MID), izq/der
+   A abre la ventana para elegir el tipo, izq/der
    cambia de columna, abajo regresa a las celdas
  ******************************************************/
 
-static const char *trackTypeNames[3] = {"tracker", "audio", "midi"};
+static const char *trackTypeNames[3] = {"Tracker", "Audio", "MIDI"};
 
 static void TrackTypeCallback(View &v, ModalView &dialog) {
     SongView &sv = (SongView &)v;
-    if (dialog.GetReturnCode() == MBL_YES && sv.pendingTypeCh_ >= 0) {
-        sv.ApplyTrackType(sv.pendingTypeCh_, sv.pendingType_, true);
+    int code = dialog.GetReturnCode();
+    if (code >= 0 && sv.pendingTypeCh_ >= 0) {
+        sv.ApplyTrackType(sv.pendingTypeCh_, code & 0xFF, (code & TTD_CLEAR) != 0);
     }
     sv.pendingTypeCh_ = -1;
 }
@@ -936,7 +938,7 @@ void SongView::ApplyTrackType(int channel, int type, bool clear) {
     }
     viewData_->project_->FindVariable(VAR_TRACKTYPE(channel))->SetInt(type);
     char msg[32];
-    snprintf(msg, sizeof(msg), "Track %d: %s", channel, trackTypeNames[type]);
+    snprintf(msg, sizeof(msg), "Pista %d: %s", channel, trackTypeNames[type]);
     View::SetNotification(msg);
     isDirty_ = true;
 }
@@ -952,32 +954,20 @@ void SongView::processHeaderButtonMask(unsigned int mask) {
         onStart();
         return;
     }
-    if (mask & EPBM_A) {
-        int dir = (mask & EPBM_RIGHT) ? 1 : ((mask & EPBM_LEFT) ? -1 : 0);
-        if (!dir) return;
+    if (mask == EPBM_A) { // A: ventana para elegir el tipo de esta pista
         int ch = viewData_->songX_;
-        int now = viewData_->project_->GetTrackType(ch);
-        int next = (now + dir + 3) % 3;
-        // de chains (TRK/MID) a loops (AUD) o al revés, las celdas cambian de
-        // significado: si hay algo, preguntar antes de vaciar la columna
         bool empty = true;
         unsigned char *data = viewData_->song_->data_;
         for (int r = 0; r < SONG_ROW_COUNT; r++) {
             if (data[r * SONG_CHANNEL_COUNT + ch] != 0xFF) empty = false;
         }
-        if ((now == TT_AUDIO) != (next == TT_AUDIO) && !empty) {
-            pendingTypeCh_ = ch;
-            pendingType_ = next;
-            char msg[40];
-            snprintf(msg, sizeof(msg), "Clear track %d to make it %s?", ch,
-                     trackTypeNames[next]);
-            MessageBox *mb = new MessageBox(*this, msg, MBBF_YES | MBBF_NO);
-            DoModal(mb, TrackTypeCallback);
-            return;
-        }
-        ApplyTrackType(ch, next, false);
+        pendingTypeCh_ = ch;
+        TrackTypeDialog *d = new TrackTypeDialog(
+            *this, ch, viewData_->project_->GetTrackType(ch), !empty);
+        DoModal(d, TrackTypeCallback);
         return;
     }
+    if (mask & EPBM_A) return;
     if (mask & EPBM_LEFT) updateCursor(-1, 0);
     if (mask & EPBM_RIGHT) updateCursor(1, 0);
     if (mask & EPBM_DOWN) {
