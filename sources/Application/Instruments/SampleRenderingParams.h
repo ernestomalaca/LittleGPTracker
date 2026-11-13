@@ -49,7 +49,10 @@ struct renderParams {
     bool gate_ ;             // false: la nota suena completa aunque se suelte
     fixed glideFrom_ ;       // velocidad de la nota anterior
     int glideLeft_, glideLen_ ; // muestras de glide que faltan / totales
-    bool choke_ ;            // trk2als: STOP: release corto
+    bool choke_ ;
+    float svfIc1_[2], svfIc2_[2] ; // trk2als: estado del filtro del Sampler
+    float svfG_, svfK_ ;     // coeficientes del bloque
+    int svfType_ ;           // 0 LP, 1 BP, 2 HP; -1 sin filtro            // trk2als: STOP: release corto
     int sWarp_ ;             // trk2als: warp del Sampler con el que arrancó la nota
     float warpTranspose_ ;   // trk2als: transposición del time-stretch (factor)
     float glideFromT_ ;      // trk2als: transposición de la que parte el glide con warp

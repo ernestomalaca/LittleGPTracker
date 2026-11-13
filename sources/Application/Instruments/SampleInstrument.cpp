@@ -204,6 +204,10 @@ SampleInstrument::SampleInstrument() {
 	 Insert(new Variable("s warp",SIP_S_WARP,simplerWarps,3,SW_OFF)) ;
 	 Insert(new Variable("s bpm",SIP_S_BPM,0)) ;
 	 Insert(new Variable("s voices",SIP_S_VOICES,1)) ;
+	 Insert(new Variable("s cutoff",SIP_S_FHZ,22000)) ;
+	 Insert(new Variable("s reso",SIP_S_FQ,0)) ;
+	 Insert(new Variable("s fenv",SIP_S_FST,0)) ;
+	 Insert(new Variable("s filter v",SIP_S_FVER,0)) ;
 
 	 loopStart_=new WatchedVariable("loopstart",SIP_LOOPSTART,0) ;
 	 Insert(loopStart_) ;
@@ -578,6 +582,9 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 		rp->envLevel_=0 ;
 		rp->envClock_=0 ;
 		rp->choke_=false ;
+		if (!wasSounding) {
+			rp->svfIc1_[0]=rp->svfIc1_[1]=rp->svfIc2_[0]=rp->svfIc2_[1]=0 ;
+		}
 		for (int k=0;k<5;k++) rp->sLive_[k]=-9999 ;
 		simplerBlock(rp,0) ;
 	}
@@ -1340,7 +1347,10 @@ bool SampleInstrument::renderVoice(int channel, fixed *buffer, int size, int fla
 		rp->feedbackIn_=(feedbackIn-feedbackStart)/2 ;
 		rp->feedbackOut_=(feedbackPick-feedbackStart)/2 ;
 		somethingToMix=true ;
-		if (rp->simpler_) simplerEnvelope(rp,buffer,size) ; // trk2als
+		if (rp->simpler_) {   // trk2als
+			simplerFilter(rp,buffer,size) ;
+			simplerEnvelope(rp,buffer,size) ;
+		}
     }
 
     return somethingToMix;
@@ -1463,6 +1473,20 @@ void SampleInstrument::renderComplex(int channel,renderParams *rp,int size) {
 // La primera vez que el instrumento se usa como Sampler, sus parámetros se
 // deducen de los de LGPT para que suene parecido a como sonaba
 void SampleInstrument::InitSimpler() {
+	initSimplerFromLGPT() ;
+	// trk2als: del filtro de LGPT (0..127) al nuevo (Hz, %, semitonos), con
+	// la misma conversión que ya usaba el export a Live
+	if (!GetSimpler(SIP_S_FVER)) {
+		FindVariable(SIP_S_FVER)->SetInt(1) ;
+		float f=float(GetSimpler(SIP_S_FFREQ)) ;
+		FindVariable(SIP_S_FHZ)->SetInt(int(30.0f*powf(22000.0f/30.0f,f/127.0f)+0.5f)) ;
+		FindVariable(SIP_S_FQ)->SetInt(GetSimpler(SIP_S_FRES)*100/127) ;
+		int st=int(GetSimpler(SIP_S_FENV)*0.9f+(GetSimpler(SIP_S_FENV)>=0?0.5f:-0.5f)) ;
+		FindVariable(SIP_S_FST)->SetInt(st<-72?-72:(st>72?72:st)) ;
+	}
+}
+
+void SampleInstrument::initSimplerFromLGPT() {
 	if (GetSimpler(SIP_S_INIT)) return ;
 	FindVariable(SIP_S_INIT)->SetInt(1) ;
 	int size=(source_ && source_->GetSize(-1)>0)?source_->GetSize(-1):0 ;
@@ -1552,6 +1576,35 @@ bool SampleInstrument::startSimpler(renderParams *rp,int channel,unsigned char n
 	return true ;
 }
 
+// Filtro del Sampler: state variable de 12 dB/oct (forma TPT de Cytomic),
+// pasabajos, pasabanda o pasaaltos de verdad, en Hz
+void SampleInstrument::simplerFilter(renderParams *rp,fixed *buffer,int size) {
+	if (rp->svfType_<0) return ;
+	float g=rp->svfG_, k=rp->svfK_ ;
+	float a1=1.0f/(1.0f+g*(g+k)), a2=g*a1, a3=g*a2 ;
+	int type=rp->svfType_ ;
+	for (int c=0;c<2;c++) {
+		float ic1=rp->svfIc1_[c], ic2=rp->svfIc2_[c] ;
+		fixed *p=buffer+c ;
+		for (int i=0;i<size;i++,p+=2) {
+			float v0=fp2fl(*p) ;
+			float v3=v0-ic2 ;
+			float v1=a1*ic1+a2*v3 ;
+			float v2=ic2+a2*ic1+a3*v3 ;
+			ic1=2*v1-ic1 ;
+			ic2=2*v2-ic2 ;
+			// pasabanda normalizado: 0 dB en la frecuencia de corte
+			float out=(type==0)?v2:((type==1)?k*v1:v0-k*v1-v2) ;
+			*p=fl2fp(out) ;
+		}
+		// sin ruido de números diminutos
+		if (fabsf(ic1)<1e-12f) ic1=0 ;
+		if (fabsf(ic2)<1e-12f) ic2=0 ;
+		rp->svfIc1_[c]=ic1 ;
+		rp->svfIc2_[c]=ic2 ;
+	}
+}
+
 float SampleInstrument::envMs(FourCC id) {
 	int v=GetSimpler(id) ;
 	return v<0?0:float(v) ;
@@ -1572,22 +1625,35 @@ void SampleInstrument::simplerBlock(renderParams *rp,int size) {
 		int pan=0x7F+v*127/50 ;
 		rp->pan_=rp->basePan_=i2fp(pan<0?0:(pan>254?254:pan)) ;
 	}
-	if ((v=GetSimpler(SIP_S_FTYPE))!=rp->sLive_[2]) {
-		static const int mixes[3]={0x00,0x80,0xFF} ;
-		rp->sLive_[2]=v ;
-		rp->filterMix_=mixes[(v<0||v>2)?0:v] ;
+	// el filtro de LGPT queda abierto: el Sampler usa el suyo (simplerFilter)
+	if (rp->sLive_[3]!=1) {
+		rp->sLive_[3]=1 ;
+		rp->cutoff_=rp->baseFCut_=i2fp(1) ;
+		rp->reso_=rp->baseFRes_=0 ;
+		rp->filterMix_=0 ;
 	}
-	if ((v=GetSimpler(SIP_S_FRES))!=rp->sLive_[4]) {
-		rp->sLive_[4]=v ;
-		rp->reso_=rp->baseFRes_=fl2fp(v/127.0f) ;
-	}
-	int env=GetSimpler(SIP_S_FENV) ;
-	if ((v=GetSimpler(SIP_S_FFREQ))!=rp->sLive_[3] || env!=0) {
-		rp->sLive_[3]=v ;
-		float cut=v/127.0f+env/127.0f*rp->envLevel_ ;
-		if (cut<0) cut=0 ;
-		if (cut>1) cut=1 ;
-		rp->cutoff_=rp->baseFCut_=fl2fp(cut) ;
+	// coeficientes del filtro (TPT / state variable, 12 dB/oct). La envolvente
+	// de volumen mueve el corte 'fenv' semitonos
+	{
+		int type=GetSimpler(SIP_S_FTYPE) ;
+		float hz=float(GetSimpler(SIP_S_FHZ)) ;
+		int st=GetSimpler(SIP_S_FST) ;
+		float q=GetSimpler(SIP_S_FQ)/100.0f ;
+		if (q<0) q=0 ;
+		if (q>1) q=1 ;
+		if (st!=0) hz*=powf(2.0f,st*rp->envLevel_/12.0f) ;
+		if (hz<20) hz=20 ;
+		if (hz>20000) hz=20000 ;
+		// sin filtro si no cambia nada (pasabajos abierto, sin resonancia)
+		if (type==0 && hz>=19000 && q<=0 && st<=0) {
+			rp->svfType_=-1 ;
+		} else {
+			rp->svfType_=(type<0||type>2)?0:type ;
+			rp->svfG_=tanf(3.14159265f*hz/44100.0f) ;
+			// Q de 0.707 (0 %) a ~25 (100 %), exponencial
+			float Q=0.7071f*powf(25.0f/0.7071f,q) ;
+			rp->svfK_=1.0f/Q ;
+		}
 	}
 	int ch=int(rp-renderParams_) ;
 	if (rp->glideLeft_>0 && size>0) {

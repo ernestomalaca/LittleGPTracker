@@ -91,6 +91,11 @@ enum SampleInstrumentLoopMode {
 #define SIP_S_WARP  MAKE_FOURCC('S', 'W', 'R', 'P')
 #define SIP_S_BPM   MAKE_FOURCC('S', 'B', 'P', 'M')
 #define SIP_S_VOICES MAKE_FOURCC('S', 'V', 'O', 'I')
+// trk2als: filtro del Sampler (12 dB/oct, como el Clean de Simpler)
+#define SIP_S_FHZ   MAKE_FOURCC('S', 'F', 'H', 'Z')   // corte en Hz
+#define SIP_S_FQ    MAKE_FOURCC('S', 'F', 'R', 'Q')   // resonancia 0..100 %
+#define SIP_S_FST   MAKE_FOURCC('S', 'F', 'S', 'T')   // envolvente en semitonos
+#define SIP_S_FVER  MAKE_FOURCC('S', 'F', 'V', 'R')   // 1 = ya con el filtro nuevo
 
 // trk2als: cada canal tiene su voz y, con 'voices: 2', una voz más para la
 // cola de la nota anterior (índice canal+SONG_CHANNEL_COUNT)
@@ -114,6 +119,9 @@ public:
        virtual void Choke(int channel) ;
        // trk2als: Sampler estilo Simpler
        void InitSimpler() ;       // la primera vez: traducir lo de LGPT
+   private:
+       void initSimplerFromLGPT() ;
+   public:
        int GetSimpler(FourCC id) { return FindVariable(id)->GetInt() ; } ;
        int GuessSimplerBpm() ;   // tempo probable de la región (compases enteros)
        void RefreshSample() { updateInstrumentData(true) ; } ; // trk2als: presets
@@ -187,6 +195,7 @@ private:
 	   void readLoop(renderParams *rp,int n) ;
 	   bool startSimpler(renderParams *rp,int channel,unsigned char note,int &first,bool &sliced,float &offset) ;
 	   void simplerBlock(renderParams *rp,int size) ; // envolvente -> corte, glide
+	   void simplerFilter(renderParams *rp,fixed *buffer,int size) ;
 	   void simplerEnvelope(renderParams *rp,fixed *buffer,int size) ;
 	   float envMs(FourCC id) ;
 	   WarpStretch *stretch_[SI_VOICE_COUNT] ;

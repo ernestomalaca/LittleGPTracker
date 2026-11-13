@@ -1,4 +1,5 @@
 #include "InstrumentView.h"
+#include "Application/AppWindow.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -18,6 +19,46 @@
 #include "ModalDialogs/PresetDialog.h"
 #include "Application/Instruments/InstrumentPresets.h"
 #include "System/System/System.h"
+
+// trk2als: frecuencia de corte en Hz. A+izq/der: un semitono; A+arr/aba:
+// una octava. Se muestra en Hz o kHz
+class UIFreqVarField : public UIIntVarField {
+public:
+	UIFreqVarField(GUIPoint &p, Variable &v) : UIIntVarField(p,v,"freq: %d",30,22000,1,12) {}
+	virtual void Draw(GUIWindow &w,int offset=0) {
+		GUITextProperties props ;
+		GUIPoint position=GetPosition() ;
+		position._y+=offset ;
+		if (focus_) {
+			((AppWindow&)w).SetColor(CD_HILITE2) ;
+			props.invert_=true ;
+		} else {
+			((AppWindow&)w).SetColor(CD_NORMAL) ;
+		}
+		char buffer[32] ;
+		int hz=src_.GetInt() ;
+		if (hz>=10000) sprintf(buffer,"freq: %dkHz",(hz+500)/1000) ;
+		else if (hz>=1000) sprintf(buffer,"freq: %d.%dkHz",hz/1000,(hz%1000+50)/100>9?9:(hz%1000+50)/100) ;
+		else sprintf(buffer,"freq: %dHz",hz) ;
+		w.DrawString(buffer,position,props) ;
+	}
+	virtual void ProcessArrow(unsigned short mask) {
+		float hz=float(src_.GetInt()) ;
+		float f=1.0f ;
+		switch (mask) {
+			case EPBM_RIGHT: f=1.0594631f ; break ;
+			case EPBM_LEFT:  f=1.0f/1.0594631f ; break ;
+			case EPBM_UP:    f=2.0f ; break ;
+			case EPBM_DOWN:  f=0.5f ; break ;
+			default: return ;
+		}
+		int v=int(hz*f+0.5f) ;
+		if (v==src_.GetInt()) v+=(f>1)?1:-1 ;
+		if (v<min_) v=min_ ;
+		if (v>max_) v=max_ ;
+		src_.SetInt(v) ;
+	}
+} ;
 
 void ImportSampleDialogCallback(View &v, ModalView &dialog) {
     ((InstrumentView &)v).OnFocus();
@@ -231,13 +272,13 @@ void InstrumentView::fillSampleParameters() {
 		LABEL("FILTER") ;
 		v=instrument->FindVariable(SIP_S_FTYPE) ;
 		ADD(new UIIntVarField(AT(L),*v,"type: %s",0,2,1,1)) ;
-		v=instrument->FindVariable(SIP_S_FFREQ) ;
-		ADD(new UIIntVarField(AT(R),*v,"freq: %d",0,127,1,16)) ;
+		v=instrument->FindVariable(SIP_S_FHZ) ;
+		ADD(new UIFreqVarField(AT(R),*v)) ;     // pasos de semitono / octava
 		row++ ;
-		v=instrument->FindVariable(SIP_S_FRES) ;
-		ADD(new UIIntVarField(AT(L),*v,"res: %d",0,127,1,16)) ;
-		v=instrument->FindVariable(SIP_S_FENV) ;
-		ADD(new UIIntVarField(AT(R),*v,"env: %+d",-127,127,1,16)) ;
+		v=instrument->FindVariable(SIP_S_FQ) ;
+		ADD(new UIIntVarField(AT(L),*v,"res: %d%%",0,100,1,10)) ;
+		v=instrument->FindVariable(SIP_S_FST) ;
+		ADD(new UIIntVarField(AT(R),*v,"env: %+dst",-72,72,1,12)) ;
 		row++ ;
 
 		LABEL("AMP") ;

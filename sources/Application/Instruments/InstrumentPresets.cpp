@@ -186,10 +186,12 @@ bool InstrumentPresets::Load(SampleInstrument *instr, const std::string &name) {
 	}
 
 	// luego todos los parámetros (los que este instrumento conozca)
+	bool newFilter = false ;
 	for (TiXmlElement *p = data->FirstChildElement("PARAM"); p; p = p->NextSiblingElement("PARAM")) {
 		const char *n = p->Attribute("NAME") ;
 		const char *v = p->Attribute("VALUE") ;
 		if (!n || !v || !strcmp(n, "sample") || skipParam(n)) continue ;
+		if (!strcmp(n, "s filter v")) newFilter = true ;
 		IteratorPtr<Variable> it(instr->GetIterator()) ;
 		for (it->Begin(); !it->IsDone(); it->Next()) {
 			Variable &var = it->CurrentItem() ;
@@ -198,6 +200,11 @@ bool InstrumentPresets::Load(SampleInstrument *instr, const std::string &name) {
 				break ;
 			}
 		}
+	}
+	// presets de antes del filtro nuevo: se convierte como al abrir un proyecto
+	if (!newFilter) {
+		instr->FindVariable(SIP_S_FVER)->SetInt(0) ;
+		instr->InitSimpler() ;
 	}
 	return true ;
 }
