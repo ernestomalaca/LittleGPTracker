@@ -31,6 +31,10 @@ struct renderParams {
     int liveDs_, liveAtt_, liveFbTun_, liveFbMix_ ;
     bool forceSync_ ;   // trk2als: esta voz toca en looper sync porque es una pista de audio
     float syncTickSamples_ ; // trk2als: duración del tick con la que se calculó el looper sync (0 = no aplica)
+    bool complexPrimed_ ;    // trk2als: el time-stretch de esta voz ya arrancó
+    int complexPos_ ;        // trk2als: siguiente cuadro del sample que se le da al time-stretch
+    double complexAcc_ ;     // trk2als: fracción de cuadro pendiente
+    int complexLatency_ ;    // trk2als: cuadros que el time-stretch va adelantado
 	fixed baseVolume_ ;  // Base volume the instrument was triggered with
 	fixed volume_ ;     // Current volume
 	bool reverse_ ;     // true if we we go backwards in stream

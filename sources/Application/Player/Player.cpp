@@ -412,8 +412,14 @@ int Player::audioBars(uchar clip) {
     if (clip >= MAX_SAMPLEINSTRUMENT_COUNT) return 0;
     I_Instrument *instr = project_->GetInstrumentBank()->GetInstrument(clip);
     if (!instr || instr->GetType() != IT_SAMPLE) return 0;
-    Variable *v = instr->FindVariable(SIP_LOOPBARS);
-    int bars = v ? v->GetInt() : 1;
+    // la celda dura 'length' compases (el loop se repite adentro); si no
+    // está puesto, lo mismo que el loop
+    Variable *v = instr->FindVariable(SIP_CLIPBARS);
+    int bars = v ? v->GetInt() : 0;
+    if (bars <= 0) {
+        v = instr->FindVariable(SIP_LOOPBARS);
+        bars = v ? v->GetInt() : 1;
+    }
     return (bars < 1) ? 1 : ((bars > 16) ? 16 : bars);
 }
 
@@ -447,8 +453,12 @@ void Player::playAudioCell(int channel) {
     SampleInstrument::SetChannelSync(channel, true);
     mixer_->StartInstrument(channel, instrument, note, true);
     if (!atStart) {
-        int step = cpos * 16 + pos;
-        int offset = (step * 256) / (bars * 16);
+        // posición dentro del loop (la celda puede durar varias vueltas)
+        Variable *lb = instrument->FindVariable(SIP_LOOPBARS);
+        int loopBars = lb ? lb->GetInt() : bars;
+        if (loopBars < 1) loopBars = 1;
+        int step = (cpos * 16 + pos) % (loopBars * 16);
+        int offset = (step * 256) / (loopBars * 16);
         if (offset > 0xFF) offset = 0xFF;
         instrument->ProcessCommand(channel, I_CMD_PLOF, (ushort)(offset << 8));
     }

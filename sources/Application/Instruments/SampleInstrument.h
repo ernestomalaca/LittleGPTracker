@@ -6,6 +6,8 @@
 #include "SRPUpdaters.h"
 
 #include "SoundSource.h"
+#include "WarpStretch.h"
+#include <vector>
 #include "Application/Model/Song.h" 
 #include "Foundation/Observable.h"
 #include "Foundation/Types/Types.h"
@@ -55,6 +57,12 @@ enum SampleInstrumentLoopMode {
 #define SIP_LOOPBPM MAKE_FOURCC('L', 'B', 'P', 'M')
 // trk2als: compás del sample donde empieza el loop (1 = el primero)
 #define SIP_FROMBAR MAKE_FOURCC('L', 'F', 'R', 'M')
+// trk2als: cómo sigue el loop al tempo: 0 re-pitch (cambia el tono), 1 complex (time-stretch)
+#define SIP_WARP MAKE_FOURCC('W', 'A', 'R', 'P')
+// trk2als: semitonos del modo complex (en re-pitch el tono lo pone el tempo)
+#define SIP_TRANSPOSE MAKE_FOURCC('T', 'R', 'N', 'S')
+// trk2als: cuántos compases dura la celda en la Song (0 = los mismos que el loop)
+#define SIP_CLIPBARS MAKE_FOURCC('C', 'L', 'E', 'N')
 
 #define FB_BUFFER_LENGTH 3500 // (in samples)
 
@@ -132,6 +140,12 @@ private:
 	   SampleInstrumentLoopMode effectiveLoopMode(renderParams *rp) ;
 	   void snapshotLive(renderParams *rp) ;  // trk2als
 	   void applyLive(renderParams *rp) ;     // trk2als
+	   // trk2als: warp complex; deja size cuadros estirados en warpOut_
+	   void renderComplex(int channel,renderParams *rp,int size) ;
+	   void readLoop(renderParams *rp,int n) ;
+	   WarpStretch *stretch_[SONG_CHANNEL_COUNT] ;
+	   std::vector<float> warpIn_[2], warpOut2_[2] ;
+	   std::vector<short> warpOut_ ;
 	   static fixed lastSample_[SONG_CHANNEL_COUNT][2] ;
 	   static fixed feedback_[SONG_CHANNEL_COUNT][FB_BUFFER_LENGTH*2] ;
 
@@ -159,6 +173,9 @@ private:
 	   Variable *loopBars_ ;
 	   WatchedVariable *loopBpm_ ;
 	   Variable *fromBar_ ;
+	   Variable *warp_ ;
+	   Variable *transpose_ ;
+	   Variable *clipBars_ ;
 	   Variable *interpolation_ ;
        Variable *printFx_;
        Variable *irPad_;

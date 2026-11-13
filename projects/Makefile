@@ -8,6 +8,11 @@ PLATFORM:=  RASPI
 FONT := original.bmp
 include $(PWD)/Makefile.$(PLATFORM)
 
+# trk2als: el time-stretch (warp complex) necesita C++11 y siempre va optimizado
+SIGNALSMITH := $(PWD)/../sources/Externals/signalsmith
+WarpStretch.o: CXXFLAGS += -std=gnu++11 -O2 \
+	-I$(SIGNALSMITH)/signalsmith-stretch/include -I$(SIGNALSMITH)/signalsmith-linear/include
+
 #---------------------------------------------------------------------------------
 # options for FXE
 #---------------------------------------------------------------------------------
@@ -260,7 +265,7 @@ COMMONFILES := \
 	char.o n_assert.o fixed.o wildcard.o \
 	SyncMaster.o TablePlayback.o Player.o \
 	Table.o TableView.o\
-	InstrumentBank.o WavFileWriter.o WavFile.o MidiInstrument.o Filters.o SampleVariable.o SampleInstrument.o SamplePool.o CommandList.o FxPrinter.o\
+	InstrumentBank.o WavFileWriter.o WavFile.o MidiInstrument.o Filters.o SampleVariable.o SampleInstrument.o WarpStretch.o SamplePool.o CommandList.o FxPrinter.o\
 	PersistencyService.o Persistent.o \
 	Observable.o SingletonRegistry.o \
 	Audio.o AudioMixer.o AudioOutDriver.o AudioDriver.o \

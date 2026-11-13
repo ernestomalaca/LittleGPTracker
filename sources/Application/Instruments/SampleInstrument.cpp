@@ -72,7 +72,10 @@ int SampleInstrument::lastMidiNote_[SONG_CHANNEL_COUNT]= {
 #define KRATE_SAMPLE_COUNT 100
 
 SampleInstrument::SampleInstrument() {
-	 for (int ch=0;ch<SONG_CHANNEL_COUNT;ch++) voiceClock_[ch]=0 ; // trk2als
+	 for (int ch=0;ch<SONG_CHANNEL_COUNT;ch++) {   // trk2als
+		 voiceClock_[ch]=0 ;
+		 stretch_[ch]=0 ;
+	 }
 
 
 // Initialize instruments settings
@@ -151,6 +154,14 @@ SampleInstrument::SampleInstrument() {
 	 fromBar_=new Variable("from bar",SIP_FROMBAR,1) ;
 	 Insert(fromBar_) ;
 
+	 static const char *warpTypes[2]={"re-pitch","complex"} ;
+	 warp_=new Variable("warp",SIP_WARP,warpTypes,2,0) ;
+	 Insert(warp_) ;
+	 transpose_=new Variable("transpose",SIP_TRANSPOSE,0) ;
+	 Insert(transpose_) ;
+	 clipBars_=new Variable("length",SIP_CLIPBARS,0) ;
+	 Insert(clipBars_) ;
+
 	 loopStart_=new WatchedVariable("loopstart",SIP_LOOPSTART,0) ;
 	 Insert(loopStart_) ;
 	 loopStart_->AddObserver(*this) ;
@@ -202,6 +213,7 @@ SampleInstrument::SampleInstrument() {
 }
 
 SampleInstrument::~SampleInstrument() {
+	for (int ch=0;ch<SONG_CHANNEL_COUNT;ch++) delete stretch_[ch] ; // trk2als
 }
 
 bool SampleInstrument::Init() {
@@ -384,6 +396,7 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 
 	rp->finished_=false ;
 	if (loopmode!=SILM_LOOPSYNC) rp->syncTickSamples_=0 ;
+	rp->complexPrimed_=false ; // trk2als
 
   // Initialize feedback data
 
@@ -736,6 +749,22 @@ bool SampleInstrument::Render(int channel, fixed *buffer, int size, int flags) {
 		fixed *fltHeightPtr=0 ;
 
     short *dsBasePtr = ((short *)wavbuf) + rp->rendFirst_* channelCount;
+
+    // trk2als: warp complex. El time-stretch deja 'size' cuadros ya estirados
+    // (y transpuestos) en warpOut_; el resto del camino (feedback, crush,
+    // filtro, volumen) los lee como si fueran el sample a velocidad 1.
+    bool complex=(loopMode==SILM_LOOPSYNC && warp_->GetInt()==1 &&
+                  WarpStretch::Available() && !rpReverse) ;
+    if (complex) {
+        renderComplex(channel,rp,size) ;
+        wavbuf=(char *)&warpOut_[0] ;
+        input=(short *)wavbuf ;
+        fpPos=0 ;
+        fpSpeed=FP_ONE ;
+        loopPosition=input ;
+        lastSample=input+(size+1)*channelCount ;
+        dsBasePtr=input ;
+    }
        
 		while (count>0) {
 
@@ -885,7 +914,9 @@ bool SampleInstrument::Render(int channel, fixed *buffer, int size, int flags) {
 						fixed fixedpanl=panlaw[pan] ;
 						fixed fixedpanr=panlaw[254-pan] ;
 
-						if (rpReverse) {
+						if (complex) {
+							fpSpeed=FP_ONE ;   // trk2als: la velocidad la pone el time-stretch
+						} else if (rpReverse) {
 							fpSpeed=-rp->speed_ ;
 						} else {
 							fpSpeed=rp->speed_ ;
@@ -1070,6 +1101,12 @@ bool SampleInstrument::Render(int channel, fixed *buffer, int size, int flags) {
 
 		// Update final sample position
     rp->position_=(((char *)input)-wavbuf)/(2*channelCount)+fp2fl(fpPos) ;
+    if (complex) {   // trk2als: lo que suena va 'complexLatency_' cuadros atrás
+        int p=rp->complexPos_-rp->complexLatency_ ;
+        int len=rp->rendLoopEnd_-rp->rendLoopStart_ ;
+        while (len>0 && p<rp->rendLoopStart_) p+=len ;
+        rp->position_=float(p) ;
+    }
 
 		// Update feedback position
 
@@ -1080,6 +1117,102 @@ bool SampleInstrument::Render(int channel, fixed *buffer, int size, int flags) {
 
     return somethingToMix;
 };
+
+/************************************************************
+ trk2als: warp complex (time-stretch de Signalsmith)
+ ************************************************************/
+
+// Copia n cuadros del loop a warpIn_ (como float), dando la vuelta en el final
+void SampleInstrument::readLoop(renderParams *rp,int n) {
+	int ch=rp->channelCount_ ;
+	if ((int)warpIn_[0].size()<n) {
+		warpIn_[0].resize(n) ;
+		warpIn_[1].resize(n) ;
+	}
+	short *wav=(short *)rp->sampleBuffer_ ;
+	int pos=rp->complexPos_ ;
+	for (int i=0;i<n;i++) {
+		if (pos>=rp->rendLoopEnd_ || pos<rp->rendLoopStart_) pos=rp->rendLoopStart_ ;
+		short *frame=wav+pos*ch ;
+		warpIn_[0][i]=frame[0]/32768.0f ;
+		if (ch>1) warpIn_[1][i]=frame[1]/32768.0f ;
+		pos++ ;
+	}
+	rp->complexPos_=pos ;
+}
+
+void SampleInstrument::renderComplex(int channel,renderParams *rp,int size) {
+	int ch=rp->channelCount_>1?2:1 ;
+	WarpStretch *ws=stretch_[channel] ;
+	if (!ws) {
+		ws=stretch_[channel]=new WarpStretch() ;
+	}
+	const int mixRate=44100 ;
+	if (ws->Channels()!=ch) {
+		ws->Configure(ch,mixRate) ;
+		rp->complexPrimed_=false ;
+	}
+	// el time-stretch trabaja en cuadros; para que suene en su tono original
+	// hay que compensar la frecuencia del archivo contra la de la mezcla
+	float rate=source_?float(source_->GetSampleRate(rp->midiNote_)):mixRate ;
+	ws->SetTranspose(rate/mixRate*float(pow(2.0,transpose_->GetInt()/12.0))) ;
+	double speed=fp2fl(rp->speed_) ;     // cuadros del sample por cuadro de salida
+	if (speed<0.01) speed=0.01 ;
+
+	if ((int)warpOut2_[0].size()<size) {
+		warpOut2_[0].resize(size) ;
+		warpOut2_[1].resize(size) ;
+	}
+	float *ins[2]={0,0}, *outs[2]={&warpOut2_[0][0],&warpOut2_[1][0]} ;
+
+	if (!rp->complexPrimed_) {
+		ws->Reset() ;
+		rp->complexPos_=int(rp->position_) ;
+		rp->complexAcc_=0 ;
+		// darle por adelantado lo que necesita para que el tiempo de
+		// proceso quede justo donde arranca la voz...
+		int pre=ws->InputLatency() ;
+		readLoop(rp,pre) ;
+		ins[0]=&warpIn_[0][0] ; ins[1]=&warpIn_[1][0] ;
+		ws->Seek(ins,pre,speed) ;
+		rp->complexLatency_=pre ;
+		// ... y tirar la salida de relleno, para que suene a tiempo
+		int skip=ws->OutputLatency() ;
+		while (skip>0) {
+			int n=skip<size?skip:size ;
+			rp->complexAcc_+=n*speed ;
+			int nin=int(rp->complexAcc_) ;
+			rp->complexAcc_-=nin ;
+			readLoop(rp,nin) ;
+			ins[0]=&warpIn_[0][0] ; ins[1]=&warpIn_[1][0] ;
+			ws->Process(ins,nin,outs,n) ;
+			skip-=n ;
+		}
+		rp->complexPrimed_=true ;
+	}
+
+	rp->complexAcc_+=size*speed ;
+	int nin=int(rp->complexAcc_) ;
+	rp->complexAcc_-=nin ;
+	readLoop(rp,nin) ;
+	ins[0]=&warpIn_[0][0] ; ins[1]=&warpIn_[1][0] ;
+	ws->Process(ins,nin,outs,size) ;
+
+	// a 16 bits, intercalado como el sample, con un cuadro extra para la interpolación
+	if ((int)warpOut_.size()<(size+2)*ch) warpOut_.resize((size+2)*ch) ;
+	for (int i=0;i<size;i++) {
+		for (int c=0;c<ch;c++) {
+			float v=warpOut2_[c][i]*32768.0f ;
+			if (v>32767.0f) v=32767.0f ;
+			if (v<-32768.0f) v=-32768.0f ;
+			warpOut_[i*ch+c]=short(v) ;
+		}
+	}
+	for (int c=0;c<ch;c++) {
+		warpOut_[size*ch+c]=warpOut_[(size-1)*ch+c] ;
+		warpOut_[(size+1)*ch+c]=warpOut_[(size-1)*ch+c] ;
+	}
+}
 
 void SampleInstrument::AssignSample(int i) {
 

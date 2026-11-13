@@ -137,10 +137,25 @@ void InstrumentView::fillSampleParameters() {
 	v=instrument->FindVariable(SIP_LOOPBARS) ;
 	ADD(new UIIntVarField(AT(R),*v,"bars: %d",1,16,1,4)) ;
 	row++ ;
+	if (audioMode_) {
+		// cuánto dura la celda en la Song (el loop se repite adentro) y cómo
+		// sigue al tempo
+		v=instrument->FindVariable(SIP_CLIPBARS) ;
+		if (v->GetInt()<=0) v->SetInt(instrument->FindVariable(SIP_LOOPBARS)->GetInt()) ;
+		ADD(new UIIntVarField(AT(L),*v,"length: %d",1,16,1,4)) ;
+		v=instrument->FindVariable(SIP_WARP) ;
+		ADD(new UIIntVarField(AT(R),*v,"warp: %s",0,1,1,1)) ;
+		row++ ;
+	}
 	v=instrument->FindVariable(SIP_LOOPBPM) ;
 	ADD(new UIIntVarField(AT(L),*v,"bpm: %3d",0,300,1,10)) ;
 	bpmInfoPos_=GUIPoint(L+10,row) ;
 	row++ ;
+	if (audioMode_ && instrument->FindVariable(SIP_WARP)->GetInt()==1) {
+		v=instrument->FindVariable(SIP_TRANSPOSE) ;
+		ADD(new UIIntVarField(AT(L),*v,"transpose: %+d",-24,24,1,12)) ;
+		row++ ;
+	}
 	if (!audioMode_) {
 		v=instrument->FindVariable(SIP_LOOPMODE) ;
 		ADD(new UIIntVarField(AT(L),*v,"loop mode: %s",0,SILM_LAST-1,1,1)) ;
@@ -350,7 +365,19 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 	FieldView::ProcessButtonMask(mask) ;
 	if ((editedID==SIP_FROMBAR || editedID==SIP_LOOPBARS) &&
 	    current_->FindVariable(editedID)->GetInt()!=editedBefore) {
+		Variable *len=current_->FindVariable(SIP_CLIPBARS) ;
+		int lenBefore=len->GetInt() ;
 		((SampleInstrument *)current_)->ApplyBarRegion() ;
+		// si la celda duraba lo mismo que el loop, sigue durando lo mismo
+		if (editedID==SIP_LOOPBARS && lenBefore==editedBefore) {
+			len->SetInt(current_->FindVariable(SIP_LOOPBARS)->GetInt()) ;
+		}
+		isDirty_=true ;
+	}
+	// cambiar el warp muestra u oculta 'transpose'
+	if (editedID==SIP_WARP && current_->FindVariable(editedID)->GetInt()!=editedBefore) {
+		lastFocusID_=SIP_WARP ;
+		onInstrumentChange() ;
 		isDirty_=true ;
 	}
 
@@ -543,7 +570,11 @@ void InstrumentView::DrawView() {
             int tempo=viewData_->project_->GetTempo() ;
             float ratio=secs/(bars*240.0f/tempo) ; // >1 = se acelera
             char info[32] ;
-            sprintf(info,"%d>%d %+.1fst",bpm,tempo,12.0f*log2f(ratio)) ;
+            if (audioMode_ && si->FindVariable(SIP_WARP)->GetInt()==1) {
+                sprintf(info,"%d>%d",bpm,tempo) ;   // complex: el tono no cambia
+            } else {
+                sprintf(info,"%d>%d %+.1fst",bpm,tempo,12.0f*log2f(ratio)) ;
+            }
             SetColor(CD_HILITE1) ;
             DrawString(bpmInfoPos_._x,bpmInfoPos_._y,info,props) ;
             SetColor(CD_NORMAL) ;
