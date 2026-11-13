@@ -83,6 +83,10 @@ SampleInstrument::SampleInstrument() {
 		 renderParams_[ch].envStage_=4 ;
 		 renderParams_[ch].envLevel_=0 ;
 		 renderParams_[ch].glideLeft_=0 ;
+		 renderParams_[ch].audioClip_=false ;
+		 renderParams_[ch].declickIn_=-1 ;
+		 renderParams_[ch].declickOut_=renderParams_[ch].declickOutLen_=0 ;
+		 renderParams_[ch].chokeMs_=0 ;
 	 }
 
 
@@ -217,6 +221,11 @@ SampleInstrument::SampleInstrument() {
 	 Insert(new Variable("s fenv v",SIP_S_FEVER,0)) ;
 	 static const char *envTabs[2]={"amp","filter"} ;
 	 Insert(new Variable("s env tab",SIP_S_ETAB,envTabs,2,0)) ;
+	 Insert(new Variable("a gain",SIP_A_GAIN,0)) ;
+	 Insert(new Variable("a detune",SIP_A_DET,0)) ;
+	 static const char *onOff[2]={"off","on"} ;
+	 Insert(new Variable("a fade",SIP_A_FADE,onOff,2,1)) ;
+	 Insert(new Variable("a init",SIP_A_INIT,0)) ;
 
 	 loopStart_=new WatchedVariable("loopstart",SIP_LOOPSTART,0) ;
 	 Insert(loopStart_) ;
@@ -325,6 +334,14 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 
 	 rp->volume_=rp->baseVolume_=i2fp(volume_->GetInt()) ;
 	 rp->attenuate_=i2fp(attenuate_->GetInt()) ;
+	 // trk2als: clip de audio: la ganancia va en dB (0 dB = el 128 de LGPT)
+	 bool audioClip=(loopMode_->GetInt()==SILM_LOOPSYNC) ;
+	 if (audioClip) {
+		 InitAudioClip() ;
+		 float lin=128.0f*powf(10.0f,GetSimpler(SIP_A_GAIN)/20.0f) ;
+		 if (lin>255) lin=255 ;
+		 rp->volume_=rp->baseVolume_=fl2fp(lin) ;
+	 }
 
 	 rp->pan_=rp->basePan_=i2fp(pan_->GetInt()) ;
 
@@ -351,6 +368,22 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
      fixed prevSpeed=rp->speed_ ;
      // trk2als: con 2 voces, la nota que sonaba sigue como cola (su release,
      // o completa en trigger) en vez de cortarse; con glide no: se desliza
+     // trk2als: clip de audio que sigue sonando: pasa a la voz de cola y se
+     // apaga en 4 ms mientras entra el nuevo (sin click)
+     if (channel<SONG_CHANNEL_COUNT && rp->audioClip_ && !rp->finished_ &&
+         voiceClock_[channel]!=0 &&
+         System::GetInstance()->GetClock()-voiceClock_[channel]<200) {
+         startTail(channel) ;
+         renderParams *tp=renderParams_+channel+SONG_CHANNEL_COUNT ;
+         tp->declickOut_=tp->declickOutLen_=176 ;
+     }
+     rp->audioClip_=false ;
+     rp->declickIn_=-1 ;
+     rp->declickOut_=0 ;
+     if (audioClip && GetSimpler(SIP_A_FADE)) {
+         rp->audioClip_=true ;
+         rp->declickIn_=0 ;
+     }
      if (channel<SONG_CHANNEL_COUNT) {
          int t=channel+SONG_CHANNEL_COUNT ;
          unsigned long now=System::GetInstance()->GetClock() ;
@@ -623,6 +656,11 @@ void SampleInstrument::Stop(int channel) {
 	 running_=false ;
 	 // trk2als: el Sampler suelta la nota con su release (o la deja sonar
 	 // completa en modo trigger)
+	 // trk2als: clip de audio con fade: se apaga en 10 ms en vez de cortarse
+	 if (rp->audioClip_ && !rp->finished_) {
+		 if (rp->declickOutLen_==0) rp->declickOut_=rp->declickOutLen_=441 ;
+		 return ;
+	 }
 	 if (rp->simpler_ && !rp->finished_) {
 		 if (rp->gate_ && rp->envStage_<3) {
 			 rp->envReleaseFrom_=rp->envLevel_ ;
@@ -651,12 +689,16 @@ void SampleInstrument::Choke(int channel) {
 			rp->fenvClock_=0 ;
 			rp->chokeMs_=10 ;
 		}
+		if (rp->audioClip_ && !rp->finished_ && rp->declickOutLen_==0) {
+			rp->declickOut_=rp->declickOutLen_=441 ;
+		}
 	}
 }
 
 bool SampleInstrument::Releasing(int channel) {
 	renderParams *rp=renderParams_+channel ;
 	if (channel<SONG_CHANNEL_COUNT && tailActive(channel)) return true ;
+	if (rp->audioClip_ && !rp->finished_ && rp->declickOutLen_>0) return true ;
 	return rp->simpler_ && !rp->finished_ && rp->envStage_<4 ;
 }
 
@@ -755,7 +797,50 @@ bool SampleInstrument::Render(int channel, fixed *buffer, int size, int flags) {
 
 bool SampleInstrument::tailActive(int channel) {
     renderParams *tp=renderParams_+channel+SONG_CHANNEL_COUNT ;
-    return tp->simpler_ && !tp->finished_ && tp->envStage_<4 ;
+    if (tp->finished_) return false ;
+    if (tp->simpler_) return tp->envStage_<4 ;
+    return tp->audioClip_ && tp->declickOut_>0 ;   // clip de audio apagándose
+}
+
+// trk2als: clip de audio con 'fade: on': 2 ms de entrada y, al cortarse o
+// detenerse, una salida corta (como los fades de clip de Live)
+void SampleInstrument::declickVoice(renderParams *rp,fixed *buffer,int size) {
+	const int inLen=88 ;
+	for (int i=0;i<size;i++) {
+		float g=1.0f ;
+		if (rp->declickIn_>=0) {
+			g=float(rp->declickIn_)/inLen ;
+			if (++rp->declickIn_>=inLen) rp->declickIn_=-1 ;
+		}
+		if (rp->declickOutLen_>0) {
+			if (rp->declickOut_<=0) {
+				g=0 ;                     // ya se apagó: silencio hasta el final del bloque
+				rp->declickOut_=-1 ;
+			} else {
+				g*=float(rp->declickOut_)/rp->declickOutLen_ ;
+				rp->declickOut_-- ;
+				if (rp->declickOut_==0) rp->declickOut_=-1 ;   // terminó
+			}
+		}
+		if (g<1.0f) {
+			fixed f=fl2fp(g) ;
+			buffer[2*i]=fp_mul(buffer[2*i],f) ;
+			buffer[2*i+1]=fp_mul(buffer[2*i+1],f) ;
+		}
+	}
+	if (rp->declickOut_<0) {   // la salida terminó: la voz se calla
+		rp->declickOut_=0 ;
+		rp->declickOutLen_=0 ;
+		rp->finished_=true ;
+	}
+}
+
+void SampleInstrument::InitAudioClip() {
+	if (GetSimpler(SIP_A_INIT)) return ;
+	FindVariable(SIP_A_INIT)->SetInt(1) ;
+	int vol=volume_->GetInt() ;
+	int db=(vol<=0)?-36:int(roundf(20.0f*log10f(vol/128.0f))) ;
+	FindVariable(SIP_A_GAIN)->SetInt(db<-36?-36:(db>6?6:db)) ;
 }
 
 void SampleInstrument::startTail(int channel) {
@@ -1382,6 +1467,8 @@ bool SampleInstrument::renderVoice(int channel, fixed *buffer, int size, int fla
 		if (rp->simpler_) {   // trk2als
 			simplerFilter(rp,buffer,size) ;
 			simplerEnvelope(rp,buffer,size) ;
+		} else if (rp->audioClip_) {
+			declickVoice(rp,buffer,size) ;
 		}
     }
 
@@ -1437,7 +1524,8 @@ void SampleInstrument::renderComplex(int channel,renderParams *rp,int size) {
 	// el time-stretch trabaja en cuadros; para que suene en su tono original
 	// hay que compensar la frecuencia del archivo contra la de la mezcla
 	float rate=source_?float(source_->GetSampleRate(rp->midiNote_)):mixRate ;
-	float semisFactor=rp->simpler_?rp->warpTranspose_:float(pow(2.0,transpose_->GetInt()/12.0)) ;
+	float semisFactor=rp->simpler_?rp->warpTranspose_:
+	    float(pow(2.0,(transpose_->GetInt()+GetSimpler(SIP_A_DET)/100.0)/12.0)) ;
 	ws->SetTranspose(rate/mixRate*semisFactor) ;
 	double speed=fp2fl(rp->speed_) ;     // cuadros del sample por cuadro de salida
 	if (speed<0.01) speed=0.01 ;

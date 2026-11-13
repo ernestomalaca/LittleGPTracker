@@ -341,30 +341,55 @@ void InstrumentView::fillSampleParameters() {
 		return ;
 	}
 
+	// trk2als: clip de audio, como la vista de clip de Live: CLIP, WARP y GAIN.
+	// Lo de LGPT (crush, filtro, feedback, tabla...) no existe en un clip de
+	// Live; el volumen y el pan son de la pista
 	if (audioMode_) {
-		LABEL("LOOP") ;
+		instrument->InitAudioClip() ;
+		LABEL("CLIP") ;
 		v=instrument->FindVariable(SIP_FROMBAR) ;
 		ADD(new UIIntVarField(AT(L),*v,"from bar: %d",1,64,1,4)) ;
 		v=instrument->FindVariable(SIP_LOOPBARS) ;
-		ADD(new UIIntVarField(AT(R),*v,"bars: %d",1,16,1,4)) ;
+		ADD(new UIIntVarField(AT(R),*v,"loop: %d bars",1,16,1,4)) ;
 		row++ ;
-		// cuánto dura la celda en la Song (el loop se repite adentro) y cómo
-		// sigue al tempo
+		// cuánto dura la celda en la Song (el loop se repite adentro)
 		v=instrument->FindVariable(SIP_CLIPBARS) ;
 		if (v->GetInt()<=0) v->SetInt(instrument->FindVariable(SIP_LOOPBARS)->GetInt()) ;
-		ADD(new UIIntVarField(AT(L),*v,"length: %d",1,16,1,4)) ;
+		ADD(new UIIntVarField(AT(L),*v,"length: %d bars",1,16,1,4)) ;
+		row++ ;
+
+		LABEL("WARP") ;
+		bool complex=(instrument->FindVariable(SIP_WARP)->GetInt()==1) ;
 		v=instrument->FindVariable(SIP_WARP) ;
-		ADD(new UIIntVarField(AT(R),*v,"warp: %s",0,1,1,1)) ;
-		row++ ;
+		ADD(new UIIntVarField(AT(L),*v,"warp: %s",0,1,1,1)) ;
 		v=instrument->FindVariable(SIP_LOOPBPM) ;
-		ADD(new UIIntVarField(AT(L),*v,"bpm: %3d",0,300,1,10)) ;
-		bpmInfoPos_=GUIPoint(L+10,row) ;
+		ADD(new UIIntVarField(AT(R),*v,"bpm: %3d",0,300,1,10)) ;
+		// complex: "124>120" junto al bpm; re-pitch: cuánto sube o baja la
+		// altura por el tempo, en el lugar de detune
+		bpmInfoPos_=complex?GUIPoint(R+9,row):GUIPoint(R,row+1) ;
 		row++ ;
-		if (instrument->FindVariable(SIP_WARP)->GetInt()==1) {
+		if (complex) {
 			v=instrument->FindVariable(SIP_TRANSPOSE) ;
-			ADD(new UIIntVarField(AT(L),*v,"transpose: %+d",-24,24,1,12)) ;
-			row++ ;
+			ADD(new UIIntVarField(AT(L),*v,"transpose: %+dst",-24,24,1,12)) ;
+			v=instrument->FindVariable(SIP_A_DET) ;
+			ADD(new UIIntVarField(AT(R),*v,"detune: %+dct",-50,50,1,10)) ;
+		} else {
+			// en re-pitch la altura la decide el tempo (como en Live)
+			ADD(new UIStaticField(AT(L),"transpose: --")) ;
 		}
+		row++ ;
+
+		LABEL("GAIN") ;
+		v=instrument->FindVariable(SIP_A_GAIN) ;
+		ADD(new UIIntVarField(AT(L),*v,"gain: %+ddB",-36,6,1,6)) ;
+		v=instrument->FindVariable(SIP_A_FADE) ;
+		ADD(new UIIntVarField(AT(R),*v,"fade: %s",0,1,1,1)) ;
+		row++ ;
+		row++ ;
+		ADD(new UIIntVarField(AT(L),presetLoadVar_,"> cargar preset",0,0,1,1)) ;
+		ADD(new UIIntVarField(AT(R),presetSaveVar_,"> guardar preset",0,0,1,1)) ;
+		row++ ;
+		return ;
 	}
 
 	LABEL("SOUND") ;
@@ -782,7 +807,7 @@ void InstrumentView::DrawView() {
 
     char title[20];
     SetColor(CD_NORMAL);
-    sprintf(title, simplerView_ ? "Sampler %2.2X" : "Instrument %2.2X",
+    sprintf(title, simplerView_ ? "Sampler %2.2X" : (audioMode_ ? "Clip %2.2X" : "Instrument %2.2X"),
             viewData_->currentInstrument_);
     DrawString(pos._x, pos._y, title, props);
 

@@ -105,6 +105,11 @@ enum SampleInstrumentLoopMode {
 #define SIP_S_FVEL  MAKE_FOURCC('S', 'F', 'V', 'L')   // velocity -> corte 0..100 %
 #define SIP_S_FEVER MAKE_FOURCC('S', 'F', 'E', 'V')   // 1 = ya con su envolvente
 #define SIP_S_ETAB  MAKE_FOURCC('S', 'E', 'T', 'B')   // pantalla: amp / filter
+// trk2als: clip de audio estilo Live
+#define SIP_A_GAIN  MAKE_FOURCC('A', 'G', 'A', 'N')   // ganancia del clip en dB
+#define SIP_A_DET   MAKE_FOURCC('A', 'D', 'E', 'T')   // detune en cents (complex)
+#define SIP_A_FADE  MAKE_FOURCC('A', 'F', 'A', 'D')   // microfades en los bordes
+#define SIP_A_INIT  MAKE_FOURCC('A', 'I', 'N', 'I')   // 1 = ya convertido
 
 // trk2als: cada canal tiene su voz y, con 'voices: 2', una voz más para la
 // cola de la nota anterior (índice canal+SONG_CHANNEL_COUNT)
@@ -132,7 +137,9 @@ public:
        void initSimplerFromLGPT() ;
    public:
        int GetSimpler(FourCC id) { return FindVariable(id)->GetInt() ; } ;
-       int GuessSimplerBpm() ;   // tempo probable de la región (compases enteros)
+       int GuessSimplerBpm() ;
+       void InitAudioClip() ;    // trk2als: volumen de LGPT -> gain en dB (una vez)
+       void declickVoice(renderParams *rp,fixed *buffer,int size) ;   // tempo probable de la región (compases enteros)
        void RefreshSample() { updateInstrumentData(true) ; } ; // trk2als: presets
        virtual bool Render(int channel, fixed *buffer, int size, int flags);
        virtual bool IsInitialized() ;
