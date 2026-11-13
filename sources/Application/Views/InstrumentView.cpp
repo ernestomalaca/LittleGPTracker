@@ -13,13 +13,33 @@
 #include "Foundation/Variables/Variable.h"
 #include "ModalDialogs/ImportSampleDialog.h"
 #include "ModalDialogs/MessageBox.h"
+#include "ModalDialogs/NewProjectDialog.h"
+#include "ModalDialogs/PresetDialog.h"
+#include "Application/Instruments/InstrumentPresets.h"
 #include "System/System/System.h"
 
 void ImportSampleDialogCallback(View &v, ModalView &dialog) {
     ((InstrumentView &)v).OnFocus();
 }
 
-InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data) {
+#define IV_PRESET_LOAD MAKE_FOURCC('P','R','S','L')
+#define IV_PRESET_SAVE MAKE_FOURCC('P','R','S','S')
+
+static void PresetLoadCallback(View &v, ModalView &dialog) {
+	if (dialog.GetReturnCode()==1) {
+		((InstrumentView &)v).OnPresetLoad(((PresetDialog &)dialog).GetSelected()) ;
+	}
+}
+
+static void PresetSaveCallback(View &v, ModalView &dialog) {
+	if (dialog.GetReturnCode()>0) {
+		((InstrumentView &)v).OnPresetSave(((NewProjectDialog &)dialog).GetName()) ;
+	}
+}
+
+InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data),
+	presetLoadVar_("preset load",IV_PRESET_LOAD,(int)0,0),
+	presetSaveVar_("preset save",IV_PRESET_SAVE,(int)0,0) {
 
 	project_=data->project_ ;
 	lastFocusID_=0 ;
@@ -115,7 +135,8 @@ void InstrumentView::fillSampleParameters() {
 	audioMode_=viewData_->project_->IsAudioInstrument(i) ;
 	bool sync=instrument->FindVariable(SIP_LOOPMODE)->GetInt()==SILM_LOOPSYNC ;
 	const int L=1, R=21 ;
-	int row=10 ;
+	// el Sampler deja un renglón más para los presets (onda un poco más baja)
+	int row=(!audioMode_ && !sync)?9:10 ;
 	labelCount_=0 ;
 	Variable *v ;
 	UIIntVarField *f1 ;
@@ -145,6 +166,16 @@ void InstrumentView::fillSampleParameters() {
 		gaps=4 ;
 		v=instrument->FindVariable(SIP_S_MODE) ;
 		ADD(new UIIntVarField(AT(L),*v,"mode: %s",0,2,1,1)) ;
+		// warp como en Simpler (en slice no: las rebanadas siguen las notas)
+		bool warp=(mode!=SM_SLICE) ;
+		bool warped=warp && instrument->GetSimpler(SIP_S_WARP)!=SW_OFF ;
+		if (warp) {
+			v=instrument->FindVariable(SIP_S_WARP) ;
+			ADD(new UIIntVarField(AT(R),*v,"warp: %s",0,2,1,1)) ;
+		}
+		if (warped && instrument->GetSimpler(SIP_S_BPM)<=0) {
+			instrument->FindVariable(SIP_S_BPM)->SetInt(instrument->GuessSimplerBpm()) ;
+		}
 		row++ ;
 
 		LABEL("PLAYBACK") ;
@@ -168,9 +199,18 @@ void InstrumentView::fillSampleParameters() {
 				ADD(new UIIntVarField(AT(R),*v,"loop len: %d%%",1,100,1,10)) ;
 			}
 			row++ ;
+			if (warped) {
+				v=instrument->FindVariable(SIP_S_BPM) ;
+				ADD(new UIIntVarField(AT(L),*v,"bpm: %d",40,300,1,10)) ;
+				row++ ;
+			}
 		} else if (mode==SM_ONESHOT) {
 			v=instrument->FindVariable(SIP_S_TRIG) ;
 			ADD(new UIIntVarField(AT(L),*v,"trigger: %s",0,1,1,1)) ;
+			if (warped) {
+				v=instrument->FindVariable(SIP_S_BPM) ;
+				ADD(new UIIntVarField(AT(R),*v,"bpm: %d",40,300,1,10)) ;
+			}
 			row++ ;
 		}
 
@@ -221,6 +261,10 @@ void InstrumentView::fillSampleParameters() {
 			ADD(new UIIntVarField(AT(R),*v,"release: %dms",0,10000,10,100)) ;
 			row++ ;
 		}
+		// presets: A abre la lista o el nombre
+		ADD(new UIIntVarField(AT(L),presetLoadVar_,"> cargar preset",0,0,1,1)) ;
+		ADD(new UIIntVarField(AT(R),presetSaveVar_,"> guardar preset",0,0,1,1)) ;
+		row++ ;
 		return ;
 	}
 
@@ -386,6 +430,18 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 
 	isDirty_=false ;
 
+	// trk2als: en los campos de presets, A abre la ventana; lo demás, igual
+	if (GetFocus() && !GetFocus()->IsStatic()) {
+		FourCC fid=((UIIntVarField *)GetFocus())->GetVariableID() ;
+		if (fid==IV_PRESET_LOAD || fid==IV_PRESET_SAVE) {
+			viewMode_=VM_NORMAL ;
+			if (mask==EPBM_A) {
+				if (fid==IV_PRESET_LOAD) openPresetLoad() ; else openPresetSave() ;
+				return ;
+			}
+		}
+	}
+
 	if (viewMode_==VM_NEW) {
 		if (mask==EPBM_A) {
 			UIIntVarField *field=(UIIntVarField *)GetFocus() ;
@@ -476,7 +532,7 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 	// cambiar el warp muestra u oculta 'transpose'
 	// ... y el loop mode (en pistas de tracker) muestra u oculta bars y bpm
 	if ((editedID==SIP_WARP || editedID==SIP_LOOPMODE || editedID==SIP_S_MODE ||
-	     editedID==SIP_S_LOOP) &&
+	     editedID==SIP_S_LOOP || editedID==SIP_S_WARP) &&
 	    current_->FindVariable(editedID)->GetInt()!=editedBefore) {
 		lastFocusID_=editedID ;
 		onInstrumentChange() ;
@@ -710,7 +766,7 @@ void InstrumentView::drawWaveform() {
 		DrawText(16,labelRow_[i]*16+4,labelText_[i],dim2,0) ;
 	}
 
-	const int X=16, Y=22, W=WF_BARS*8, H=124 ;
+	const int X=16, Y=22, W=WF_BARS*8, H=simplerView_?108:124 ;
 	FillRect(X-8,Y-4,W+16,H+8,Mix(bg,fg,9),8) ;
 
 	int index=si->GetSampleIndex() ;
@@ -846,9 +902,16 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 	SoundSource *src=SamplePool::GetInstance()->GetSource(si->GetSampleIndex()) ;
 	int rate=src?src->GetSampleRate(-1):0 ;
 	if (rate>0) {
-		char info[16] ;
+		char info[40] ;
 		int cs=int((long long)size*100/rate) ;
 		sprintf(info,"%d.%02ds",cs/100,cs%100) ;
+		// con warp: cuántos compases dura la región a su tempo
+		int bpm=si->GetSimpler(SIP_S_BPM) ;
+		if (mode!=SM_SLICE && si->GetSimpler(SIP_S_WARP)!=SW_OFF && bpm>0) {
+			float bars=float(size)*(si->GetSimpler(SIP_S_END)-si->GetSimpler(SIP_S_START))/100.0f/rate*bpm/240.0f ;
+			int b10=int(bars*10+0.5f) ;
+			sprintf(info+strlen(info)," %d.%d bar%s",b10/10,b10%10,b10==10?"":"s") ;
+		}
 		DrawText(632-8*int(strlen(info)),3,info,dim2,0) ;
 	}
 
@@ -956,4 +1019,53 @@ void InstrumentView::OnFocus() { onInstrumentChange(); }
 
 void InstrumentView::Update(Observable &o,I_ObservableData *d) {
 	onInstrumentChange() ;
+}
+
+/************************************************************
+ trk2als: presets del Sampler
+ ************************************************************/
+
+void InstrumentView::openPresetLoad() {
+	PresetDialog *pd=new PresetDialog(*this) ;
+	DoModal(pd,PresetLoadCallback) ;
+}
+
+void InstrumentView::openPresetSave() {
+	if (!current_ || current_->GetType()!=IT_SAMPLE) return ;
+	SampleInstrument *si=(SampleInstrument *)current_ ;
+	if (si->GetSampleIndex()<0) {
+		View::SetNotification("Primero elige un sample") ;
+		return ;
+	}
+	NewProjectDialog *nd=new NewProjectDialog(*this,"root:presets") ;
+	nd->SetPrefix("") ;
+	nd->SetTitle("Guardar preset") ;
+	nd->SetInitialName(InstrumentPresets::SuggestedName(si)) ;
+	nd->SetAllowExisting(true) ;     // con el mismo nombre se actualiza
+	DoModal(nd,PresetSaveCallback) ;
+}
+
+void InstrumentView::OnPresetLoad(const std::string &name) {
+	if (name.empty() || !current_ || current_->GetType()!=IT_SAMPLE) return ;
+	if (InstrumentPresets::Load((SampleInstrument *)current_,name)) {
+		std::string msg="Preset "+name+" cargado" ;
+		View::SetNotification(msg.c_str()) ;
+	} else {
+		View::SetNotification("No se pudo cargar el preset") ;
+	}
+	lastFocusID_=IV_PRESET_LOAD ;
+	onInstrumentChange() ;
+	isDirty_=true ;
+}
+
+void InstrumentView::OnPresetSave(const std::string &name) {
+	if (name.empty() || !current_ || current_->GetType()!=IT_SAMPLE) return ;
+	bool existed=InstrumentPresets::Exists(name) ;
+	if (InstrumentPresets::Save((SampleInstrument *)current_,name)) {
+		std::string msg="Preset "+name+(existed?" actualizado":" guardado") ;
+		View::SetNotification(msg.c_str()) ;
+	} else {
+		View::SetNotification("No se pudo guardar el preset") ;
+	}
+	isDirty_=true ;
 }

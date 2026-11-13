@@ -9,7 +9,8 @@ static char *buttonText[BUTTONS_LENGTH] = {(char *)"Random", (char *)"Ok",
 #define DIALOG_WIDTH 20
 
 NewProjectDialog::NewProjectDialog(View &view, Path currentPath)
-    : ModalView(view), currentPath_(currentPath) {}
+    : ModalView(view), prefix_("lgpt_"), allowExisting_(false),
+      currentPath_(currentPath) {}
 
 NewProjectDialog::~NewProjectDialog() {}
 
@@ -34,6 +35,8 @@ void NewProjectDialog::DrawView() {
     // Draw string
 
     int x = (DIALOG_WIDTH - MAX_NAME_LENGTH) / 3;
+    if (!title_.empty())
+        DrawString(x, 0, title_.c_str(), props);
 
     char buffer[2];
     buffer[1] = 0;
@@ -109,6 +112,12 @@ void NewProjectDialog::OnFocus() {
     keyboardMode_ = false;
     keyboardRow_ = 2;
     keyboardCol_ = 0;
+    if (!initial_.empty()) {   // trk2als: nombre sugerido
+        size_t n = initial_.size() < MAX_NAME_LENGTH ? initial_.size() : MAX_NAME_LENGTH;
+        memcpy(name_, initial_.c_str(), n);
+        currentChar_ = n < MAX_NAME_LENGTH ? n : MAX_NAME_LENGTH - 1;
+        selected_ = 2;   // el cursor ya en "Ok"
+    }
 };
 
 void NewProjectDialog::ProcessButtonMask(unsigned short mask, bool pressed) {
@@ -210,7 +219,7 @@ void NewProjectDialog::ProcessButtonMask(unsigned short mask, bool pressed) {
                 isDirty_ = true;
                 break;
             case 2:
-                if (currentPath_.Descend(GetName()).Exists()) {
+                if (!allowExisting_ && currentPath_.Descend(GetName()).Exists()) {
                     std::string res("Name " + std::string(name_) + " busy");
                     View::SetNotification(res.c_str(), -6);
                 } else {
@@ -292,7 +301,7 @@ std::string NewProjectDialog::GetName() {
             break;
         }
     }
-    std::string name = "lgpt_";
+    std::string name = prefix_;
     name += name_;
 	return name;
 }

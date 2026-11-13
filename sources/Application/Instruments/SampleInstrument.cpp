@@ -77,6 +77,7 @@ SampleInstrument::SampleInstrument() {
 	 for (int ch=0;ch<SONG_CHANNEL_COUNT;ch++) {   // trk2als
 		 voiceClock_[ch]=0 ;
 		 stretch_[ch]=0 ;
+		 lastWarpT_[ch]=warpTarget_[ch]=1.0f ;
 		 renderParams_[ch].simpler_=false ;
 		 renderParams_[ch].finished_=true ;
 		 renderParams_[ch].envStage_=4 ;
@@ -199,6 +200,9 @@ SampleInstrument::SampleInstrument() {
 	 Insert(new Variable("s fade in",SIP_S_FIN,0)) ;
 	 Insert(new Variable("s fade out",SIP_S_FOUT,0)) ;
 	 Insert(new Variable("s velocity",SIP_S_VEL,35)) ;
+	 static const char *simplerWarps[3]={"off","re-pitch","complex"} ;
+	 Insert(new Variable("s warp",SIP_S_WARP,simplerWarps,3,SW_OFF)) ;
+	 Insert(new Variable("s bpm",SIP_S_BPM,0)) ;
 
 	 loopStart_=new WatchedVariable("loopstart",SIP_LOOPSTART,0) ;
 	 Insert(loopStart_) ;
@@ -451,6 +455,38 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
         rp->glideLen_=rp->glideLeft_=int(GetSimpler(SIP_S_GLIDE)*44.1f) ;
         rp->speed_=prevSpeed ;
     }
+    // trk2als: Sampler con warp. La región dura lo mismo en tiempo musical
+    // a cualquier tempo; re-pitch la acelera/frena (y no sigue las notas),
+    // complex la estira y transpone por separado
+    rp->sWarp_=SW_OFF ;
+    rp->warpTranspose_=1.0f ;
+    if (rp->simpler_ && GetSimpler(SIP_S_MODE)!=SM_SLICE && GetSimpler(SIP_S_WARP)!=SW_OFF) {
+        int bpm=GetSimpler(SIP_S_BPM) ;
+        if (bpm<=0) bpm=GuessSimplerBpm() ;
+        float tick=SyncMaster::GetInstance()->GetTickSampleCount() ;
+        if (bpm>0 && tick>0) {
+            rp->sWarp_=GetSimpler(SIP_S_WARP) ;
+            if (rp->sWarp_==SW_COMPLEX && !WarpStretch::Available()) rp->sWarp_=SW_REPITCH ;
+            float srcRate=float(source_->GetSampleRate(rp->midiNote_)) ;
+            // cuadros del sample por cuadro de salida: un beat del sample
+            // (srcRate*60/bpm) en lo que dura un beat del proyecto (24 ticks)
+            float tempoSpeed=srcRate*60.0f/bpm/(24.0f*tick) ;
+            float prevT=rp->warpTranspose_ ;
+            rp->baseSpeed_=rp->speed_=fl2fp(tempoSpeed) ;
+            rp->syncTickSamples_=tick ;
+            if (rp->sWarp_==SW_COMPLEX) {
+                float t=float(pow(2.0,simplerOffset/12.0)) ;
+                if (rp->glideLeft_>0) {
+                    rp->glideFromT_=lastWarpT_[channel] ;
+                    prevT=rp->glideFromT_ ;
+                }
+                rp->warpTranspose_=(rp->glideLeft_>0)?prevT:t ;
+                warpTarget_[channel]=t ;
+            } else {
+                rp->glideLeft_=0 ;   // re-pitch no sigue las notas: no hay glide
+            }
+        }
+    }
     
   // Init k rate counter
  
@@ -459,7 +495,7 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 	// We allow processing
 
 	rp->finished_=false ;
-	if (loopmode!=SILM_LOOPSYNC) rp->syncTickSamples_=0 ;
+	if (loopmode!=SILM_LOOPSYNC && rp->sWarp_==SW_OFF) rp->syncTickSamples_=0 ;
 	rp->complexPrimed_=false ; // trk2als
 	rp->warpMode_=warp_->GetInt() ;
 	rp->justWrapped_=false ;
@@ -858,6 +894,7 @@ bool SampleInstrument::Render(int channel, fixed *buffer, int size, int flags) {
     }
     bool complex=(loopMode==SILM_LOOPSYNC && rp->warpMode_==1 &&
                   WarpStretch::Available() && !rpReverse) ;
+    if (rp->simpler_) complex=(rp->sWarp_==SW_COMPLEX && !rpReverse) ;
     if (complex) {
         renderComplex(channel,rp,size) ;
         wavbuf=(char *)&warpOut_[0] ;
@@ -1207,7 +1244,17 @@ bool SampleInstrument::Render(int channel, fixed *buffer, int size, int flags) {
     if (complex) {   // trk2als: lo que suena va 'complexLatency_' cuadros atrás
         int p=rp->complexPos_-rp->complexLatency_ ;
         int len=rp->rendLoopEnd_-rp->rendLoopStart_ ;
-        while (len>0 && p<rp->rendLoopStart_) p+=len ;
+        if (rp->simpler_) {
+            // Sampler: la región puede empezar antes del loop; sin loop, al
+            // llegar al final la voz termina
+            if (rp->simplerLoop_!=SILM_LOOP && p>=rp->rendLoopEnd_) {
+                *rpFinished=true ;
+            } else if (p<rp->complexFirst_) {
+                p+=len ;
+            }
+        } else {
+            while (len>0 && p<rp->rendLoopStart_) p+=len ;
+        }
         rp->position_=float(p) ;
     }
     rp->justWrapped_=(rp->position_<posBefore) ;
@@ -1236,8 +1283,20 @@ void SampleInstrument::readLoop(renderParams *rp,int n) {
 	}
 	short *wav=(short *)rp->sampleBuffer_ ;
 	int pos=rp->complexPos_ ;
+	bool simplerOnce=rp->simpler_ && rp->simplerLoop_!=SILM_LOOP ;
 	for (int i=0;i<n;i++) {
-		if (pos>=rp->rendLoopEnd_ || pos<rp->rendLoopStart_) pos=rp->rendLoopStart_ ;
+		if (rp->simpler_) {
+			// Sampler: arranca en 'start' (antes del loop) y, sin loop, se
+			// queda en silencio al pasar el final
+			if (pos>=rp->rendLoopEnd_) {
+				if (simplerOnce) {
+					warpIn_[0][i]=warpIn_[1][i]=0 ;
+					pos++ ;
+					continue ;
+				}
+				pos=rp->rendLoopStart_ ;
+			}
+		} else if (pos>=rp->rendLoopEnd_ || pos<rp->rendLoopStart_) pos=rp->rendLoopStart_ ;
 		short *frame=wav+pos*ch ;
 		warpIn_[0][i]=frame[0]/32768.0f ;
 		if (ch>1) warpIn_[1][i]=frame[1]/32768.0f ;
@@ -1260,7 +1319,8 @@ void SampleInstrument::renderComplex(int channel,renderParams *rp,int size) {
 	// el time-stretch trabaja en cuadros; para que suene en su tono original
 	// hay que compensar la frecuencia del archivo contra la de la mezcla
 	float rate=source_?float(source_->GetSampleRate(rp->midiNote_)):mixRate ;
-	ws->SetTranspose(rate/mixRate*float(pow(2.0,transpose_->GetInt()/12.0))) ;
+	float semisFactor=rp->simpler_?rp->warpTranspose_:float(pow(2.0,transpose_->GetInt()/12.0)) ;
+	ws->SetTranspose(rate/mixRate*semisFactor) ;
 	double speed=fp2fl(rp->speed_) ;     // cuadros del sample por cuadro de salida
 	if (speed<0.01) speed=0.01 ;
 
@@ -1273,6 +1333,7 @@ void SampleInstrument::renderComplex(int channel,renderParams *rp,int size) {
 	if (!rp->complexPrimed_) {
 		ws->Reset() ;
 		rp->complexPos_=int(rp->position_) ;
+		rp->complexFirst_=rp->complexPos_ ;
 		rp->complexAcc_=0 ;
 		// darle por adelantado lo que necesita para que el tiempo de
 		// proceso quede justo donde arranca la voz...
@@ -1452,13 +1513,21 @@ void SampleInstrument::simplerBlock(renderParams *rp,int size) {
 		if (cut>1) cut=1 ;
 		rp->cutoff_=rp->baseFCut_=fl2fp(cut) ;
 	}
+	int ch=int(rp-renderParams_) ;
 	if (rp->glideLeft_>0 && size>0) {
 		rp->glideLeft_-=size ;
 		if (rp->glideLeft_<0) rp->glideLeft_=0 ;
 		float k=1.0f-float(rp->glideLeft_)/rp->glideLen_ ;
-		float from=fp2fl(rp->glideFrom_), to=fp2fl(rp->baseSpeed_) ;
-		rp->speed_=fl2fp(from+(to-from)*k) ;
+		if (rp->sWarp_==SW_COMPLEX) {
+			// con warp complex el glide es de transposición, no de velocidad
+			float from=rp->glideFromT_, to=warpTarget_[ch] ;
+			rp->warpTranspose_=from*powf(to/from,k) ;
+		} else {
+			float from=fp2fl(rp->glideFrom_), to=fp2fl(rp->baseSpeed_) ;
+			rp->speed_=fl2fp(from+(to-from)*k) ;
+		}
 	}
+	if (rp->sWarp_==SW_COMPLEX) lastWarpT_[ch]=rp->warpTranspose_ ;
 }
 
 // Envolvente de amplitud, muestra por muestra. Classic y slice: ADSR;
@@ -1502,6 +1571,27 @@ void SampleInstrument::simplerEnvelope(renderParams *rp,fixed *buffer,int size) 
 		buffer[2*i+1]=fp_mul(buffer[2*i+1],f) ;
 	}
 	if (rp->envStage_>=4) rp->finished_=true ;   // terminó la cola
+}
+
+// Tempo probable de la región start..end: el que da un número entero de
+// compases (o, si no, de beats) entre 85 y 170 bpm. 0 si no hay sample
+int SampleInstrument::GuessSimplerBpm() {
+	int index=GetSampleIndex() ;
+	if (index<0) return 0 ;
+	SoundSource *src=SamplePool::GetInstance()->GetSource(index) ;
+	if (!src || src->GetSampleRate(-1)<=0 || src->GetSize(-1)<=0) return 0 ;
+	float secs=src->GetSize(-1)*(GetSimpler(SIP_S_END)-GetSimpler(SIP_S_START))/100.0f/src->GetSampleRate(-1) ;
+	if (secs<=0.05f) return 120 ;
+	static const int bars[5]={1,2,4,8,16} ;
+	for (int k=0;k<5;k++) {
+		float bpm=240.0f*bars[k]/secs ;
+		if (bpm>=85 && bpm<170) return int(bpm+0.5f) ;
+	}
+	for (int beats=1;beats<=64;beats++) {
+		float bpm=60.0f*beats/secs ;
+		if (bpm>=85 && bpm<170) return int(bpm+0.5f) ;
+	}
+	return 120 ;
 }
 
 void SampleInstrument::AssignSample(int i) {

@@ -88,7 +88,11 @@ enum SampleInstrumentLoopMode {
 #define SIP_S_FIN   MAKE_FOURCC('S', 'F', 'I', 'N')
 #define SIP_S_FOUT  MAKE_FOURCC('S', 'F', 'O', 'U')
 #define SIP_S_VEL   MAKE_FOURCC('S', 'V', 'E', 'L')
+#define SIP_S_WARP  MAKE_FOURCC('S', 'W', 'R', 'P')
+#define SIP_S_BPM   MAKE_FOURCC('S', 'B', 'P', 'M')
 enum SimplerMode { SM_CLASSIC = 0, SM_ONESHOT, SM_SLICE };
+// trk2als: warp del Sampler (como en Simpler): sin warp, re-pitch o complex
+enum SimplerWarp { SW_OFF = 0, SW_REPITCH, SW_COMPLEX };
 
 #define FB_BUFFER_LENGTH 3500 // (in samples)
 
@@ -105,6 +109,8 @@ public:
        // trk2als: Sampler estilo Simpler
        void InitSimpler() ;       // la primera vez: traducir lo de LGPT
        int GetSimpler(FourCC id) { return FindVariable(id)->GetInt() ; } ;
+       int GuessSimplerBpm() ;   // tempo probable de la región (compases enteros)
+       void RefreshSample() { updateInstrumentData(true) ; } ; // trk2als: presets
        virtual bool Render(int channel, fixed *buffer, int size, int flags);
        virtual bool IsInitialized() ;
 	   virtual bool IsEmpty() ;
@@ -178,6 +184,7 @@ private:
 	   void simplerEnvelope(renderParams *rp,fixed *buffer,int size) ;
 	   float envMs(FourCC id) ;
 	   WarpStretch *stretch_[SONG_CHANNEL_COUNT] ;
+	   float lastWarpT_[SONG_CHANNEL_COUNT], warpTarget_[SONG_CHANNEL_COUNT] ; // glide con warp complex
 	   std::vector<float> warpIn_[2], warpOut2_[2] ;
 	   std::vector<short> warpOut_ ;
 	   static fixed lastSample_[SONG_CHANNEL_COUNT][2] ;

@@ -33,7 +33,8 @@ struct renderParams {
     float syncTickSamples_ ; // trk2als: duración del tick con la que se calculó el looper sync (0 = no aplica)
     bool complexPrimed_ ;    // trk2als: el time-stretch de esta voz ya arrancó
     int complexPos_ ;        // trk2als: siguiente cuadro del sample que se le da al time-stretch
-    double complexAcc_ ;     // trk2als: fracción de cuadro pendiente
+    double complexAcc_ ;
+    int complexFirst_ ;      // trk2als: primer cuadro que se le dio al time-stretch     // trk2als: fracción de cuadro pendiente
     int complexLatency_ ;    // trk2als: cuadros que el time-stretch va adelantado
     int warpMode_ ;          // trk2als: warp con el que suena la voz (el cambio espera al inicio del loop)
     bool justWrapped_ ;      // trk2als: el loop acaba de volver al principio
@@ -48,6 +49,9 @@ struct renderParams {
     bool gate_ ;             // false: la nota suena completa aunque se suelte
     fixed glideFrom_ ;       // velocidad de la nota anterior
     int glideLeft_, glideLen_ ; // muestras de glide que faltan / totales
+    int sWarp_ ;             // trk2als: warp del Sampler con el que arrancó la nota
+    float warpTranspose_ ;   // trk2als: transposición del time-stretch (factor)
+    float glideFromT_ ;      // trk2als: transposición de la que parte el glide con warp
     int sLive_[5] ;          // últimos valores aplicados (vol, pan, tipo, freq, res)
 	fixed baseVolume_ ;  // Base volume the instrument was triggered with
 	fixed volume_ ;     // Current volume

@@ -5,6 +5,8 @@
 #include "BaseClasses/FieldView.h"
 #include "Foundation/Observable.h"
 #include "ViewData.h"
+#include "Foundation/Variables/Variable.h"
+#include <string>
 
 class SampleInstrument ;
 
@@ -48,5 +50,12 @@ private:
 	int labelCount_ ;        // etiquetas de los bloques de campos
 	int labelRow_[8] ;
 	const char *labelText_[8] ;
+	// trk2als: presets (campos "cargar"/"guardar" al final del Sampler)
+	Variable presetLoadVar_, presetSaveVar_ ;
+	void openPresetLoad() ;
+	void openPresetSave() ;
+public:
+	void OnPresetLoad(const std::string &name) ;
+	void OnPresetSave(const std::string &name) ;
 } ;
 #endif
