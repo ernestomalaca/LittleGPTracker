@@ -177,8 +177,9 @@ void InstrumentView::fillSampleParameters() {
 	audioMode_=viewData_->project_->IsAudioInstrument(i) ;
 	bool sync=instrument->FindVariable(SIP_LOOPMODE)->GetInt()==SILM_LOOPSYNC ;
 	const int L=1, R=21 ;
-	// el Sampler deja un renglón más para los presets (onda un poco más baja)
-	int row=(!audioMode_ && !sync)?9:10 ;
+	// el Sampler deja dos renglones más (presets y pestañas de envolvente):
+	// la onda es un poco más baja
+	int row=(!audioMode_ && !sync)?8:10 ;
 	labelCount_=0 ;
 	Variable *v ;
 	UIIntVarField *f1 ;
@@ -277,23 +278,43 @@ void InstrumentView::fillSampleParameters() {
 		row++ ;
 		v=instrument->FindVariable(SIP_S_FQ) ;
 		ADD(new UIIntVarField(AT(L),*v,"res: %d%%",0,100,1,10)) ;
-		v=instrument->FindVariable(SIP_S_FST) ;
-		ADD(new UIIntVarField(AT(R),*v,"env: %+dst",-72,72,1,12)) ;
 		row++ ;
 
-		LABEL("AMP") ;
+		// envolventes como pestañas (como en Simpler): el mismo orden en las
+		// dos para que el ADSR quede en su lugar al cambiar
+		bool ftab=(instrument->GetSimpler(SIP_S_ETAB)==1) ;
+		LABEL(ftab?"FILTER ENVELOPE":"AMP") ;
 		ampLabelRow_=row-1 ;
-		v=instrument->FindVariable(SIP_S_VOL) ;
-		ADD(new UIIntVarField(AT(L),*v,"volume: %+ddB",-36,6,1,6)) ;
-		v=instrument->FindVariable(SIP_S_PAN) ;
-		ADD(new UIIntVarField(AT(R),*v,"pan: %+d",-50,50,1,10)) ;
+		v=instrument->FindVariable(SIP_S_ETAB) ;
+		ADD(new UIIntVarField(AT(L),*v,"envelope: %s",0,1,1,1)) ;
+		if (ftab) {
+			v=instrument->FindVariable(SIP_S_FST) ;
+			ADD(new UIIntVarField(AT(R),*v,"amount: %+dst",-72,72,1,12)) ;
+		}
 		row++ ;
-		if (mode==SM_ONESHOT) {
+		if (ftab) {
+			v=instrument->FindVariable(SIP_S_FATK) ;
+			ADD(new UIIntVarField(AT(L),*v,"attack: %dms",0,5000,5,100)) ;
+			v=instrument->FindVariable(SIP_S_FDEC) ;
+			ADD(new UIIntVarField(AT(R),*v,"decay: %dms",0,10000,10,100)) ;
+			row++ ;
+			v=instrument->FindVariable(SIP_S_FSUS) ;
+			ADD(new UIIntVarField(AT(L),*v,"sustain: %ddB",-60,0,1,6)) ;
+			v=instrument->FindVariable(SIP_S_FREL) ;
+			ADD(new UIIntVarField(AT(R),*v,"release: %dms",0,10000,10,100)) ;
+			row++ ;
+			v=instrument->FindVariable(SIP_S_FKEY) ;
+			ADD(new UIIntVarField(AT(L),*v,"key: %d%%",0,100,1,10)) ;
+			v=instrument->FindVariable(SIP_S_FVEL) ;
+			ADD(new UIIntVarField(AT(R),*v,"velocity: %d%%",0,100,1,10)) ;
+			row++ ;
+		} else if (mode==SM_ONESHOT) {
 			v=instrument->FindVariable(SIP_S_FIN) ;
 			ADD(new UIIntVarField(AT(L),*v,"fade in: %dms",0,2000,5,50)) ;
 			v=instrument->FindVariable(SIP_S_FOUT) ;
 			ADD(new UIIntVarField(AT(R),*v,"fade out: %dms",0,2000,5,50)) ;
 			row++ ;
+			row++ ;   // en one-shot no hay decay/sustain: el renglón queda vacío
 		} else {
 			v=instrument->FindVariable(SIP_S_ATK) ;
 			ADD(new UIIntVarField(AT(L),*v,"attack: %dms",0,5000,5,100)) ;
@@ -304,6 +325,13 @@ void InstrumentView::fillSampleParameters() {
 			ADD(new UIIntVarField(AT(L),*v,"sustain: %ddB",-60,0,1,6)) ;
 			v=instrument->FindVariable(SIP_S_REL) ;
 			ADD(new UIIntVarField(AT(R),*v,"release: %dms",0,10000,10,100)) ;
+			row++ ;
+		}
+		if (!ftab) {   // volumen y pan al final, donde la pestaña filter tiene key/velocity
+			v=instrument->FindVariable(SIP_S_VOL) ;
+			ADD(new UIIntVarField(AT(L),*v,"volume: %+ddB",-36,6,1,6)) ;
+			v=instrument->FindVariable(SIP_S_PAN) ;
+			ADD(new UIIntVarField(AT(R),*v,"pan: %+d",-50,50,1,10)) ;
 			row++ ;
 		}
 		// presets: A abre la lista o el nombre
@@ -577,7 +605,7 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 	// cambiar el warp muestra u oculta 'transpose'
 	// ... y el loop mode (en pistas de tracker) muestra u oculta bars y bpm
 	if ((editedID==SIP_WARP || editedID==SIP_LOOPMODE || editedID==SIP_S_MODE ||
-	     editedID==SIP_S_LOOP || editedID==SIP_S_WARP) &&
+	     editedID==SIP_S_LOOP || editedID==SIP_S_WARP || editedID==SIP_S_ETAB) &&
 	    current_->FindVariable(editedID)->GetInt()!=editedBefore) {
 		lastFocusID_=editedID ;
 		onInstrumentChange() ;
@@ -811,7 +839,7 @@ void InstrumentView::drawWaveform() {
 		DrawText(16,labelRow_[i]*16+4,labelText_[i],dim2,0) ;
 	}
 
-	const int X=16, Y=22, W=WF_BARS*8, H=simplerView_?108:124 ;
+	const int X=16, Y=22, W=WF_BARS*8, H=simplerView_?92:124 ;
 	FillRect(X-8,Y-4,W+16,H+8,Mix(bg,fg,9),8) ;
 
 	int index=si->GetSampleIndex() ;
@@ -1018,14 +1046,39 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 			FillRect(c-3,mid-h/2,5,h,dim,2) ;
 		}
 	}
+	// pestaña filter: la curva es la envolvente del corte (en otro color) y
+	// arriba, de dónde a dónde se mueve
+	bool ftab=(si->GetSimpler(SIP_S_ETAB)==1) ;
+	if (ftab) {
+		atk=float(si->GetSimpler(SIP_S_FATK)) ;
+		dec=float(si->GetSimpler(SIP_S_FDEC)) ;
+		rel=float(si->GetSimpler(SIP_S_FREL)) ;
+		int db=si->GetSimpler(SIP_S_FSUS) ;
+		sus=(db<=-60)?0:powf(10.0f,db/20.0f) ;
+		oneShot=false ;   // la del filtro siempre es ADSR
+		hi2=fg ;
+		int hz=si->GetSimpler(SIP_S_FHZ) ;
+		int amt=si->GetSimpler(SIP_S_FST) ;
+		int top=int(hz*powf(2.0f,amt/12.0f)) ;
+		if (top>20000) top=20000 ;
+		if (top<20) top=20 ;
+		char txt[48], fa[12], fb[12] ;
+		#define HZTXT(buf,v) { if ((v)>=1000) sprintf(buf,"%d.%dk",(v)/1000,((v)%1000)/100) ; else sprintf(buf,"%d",(v)) ; }
+		HZTXT(fa,hz)
+		HZTXT(fb,top)
+		#undef HZTXT
+		sprintf(txt,"corte %sHz > %sHz",fa,fb) ;
+		DrawText(a+16,Y+1,txt,fg,0) ;
+	}
 	// la curva encima de las barras
 	for (int x=a;x<b;x+=3) {
 		float g ;
 		ENV_AT(x,g)
 		FillRect(x,Y+6+int((1.0f-g)*(H-14)),3,2,hi2) ;
 	}
-	// classic: el release después del final (empieza cuando sueltas la nota)
-	if (mode==SM_CLASSIC && rel>=1 && msPerPx>0 && sus>0) {
+	// classic (o la del filtro): el release después del final (empieza
+	// cuando sueltas la nota)
+	if ((mode==SM_CLASSIC || ftab) && rel>=1 && msPerPx>0 && sus>0) {
 		int len=int(rel/msPerPx) ;
 		if (len>X+W-b) len=X+W-b ;
 		for (int x=0;x<len;x+=4) {
@@ -1035,6 +1088,7 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 	}
 	#undef ENV_AT
 
+	hi2=ColorOf(CD_HILITE2) ;
 	// banderas: start y end apuntan hacia la parte que suena
 	#define FLAG(xx,dir) { FillRect((xx)-1,Y-4,2,H+8,hi2) ; \
 		for (int q=0;q<10;q++) { int w=(q<5)?2*q+3:21-2*q ; \

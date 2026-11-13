@@ -208,6 +208,15 @@ SampleInstrument::SampleInstrument() {
 	 Insert(new Variable("s reso",SIP_S_FQ,0)) ;
 	 Insert(new Variable("s fenv",SIP_S_FST,0)) ;
 	 Insert(new Variable("s filter v",SIP_S_FVER,0)) ;
+	 Insert(new Variable("s f attack",SIP_S_FATK,0)) ;
+	 Insert(new Variable("s f decay",SIP_S_FDEC,600)) ;
+	 Insert(new Variable("s f sustain",SIP_S_FSUS,0)) ;
+	 Insert(new Variable("s f release",SIP_S_FREL,50)) ;
+	 Insert(new Variable("s key",SIP_S_FKEY,0)) ;
+	 Insert(new Variable("s f velocity",SIP_S_FVEL,0)) ;
+	 Insert(new Variable("s fenv v",SIP_S_FEVER,0)) ;
+	 static const char *envTabs[2]={"amp","filter"} ;
+	 Insert(new Variable("s env tab",SIP_S_ETAB,envTabs,2,0)) ;
 
 	 loopStart_=new WatchedVariable("loopstart",SIP_LOOPSTART,0) ;
 	 Insert(loopStart_) ;
@@ -582,6 +591,9 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 		rp->envLevel_=0 ;
 		rp->envClock_=0 ;
 		rp->choke_=false ;
+		rp->fenvStage_=0 ;
+		rp->fenvLevel_=0 ;
+		rp->fenvClock_=0 ;
 		if (!wasSounding) {
 			rp->svfIc1_[0]=rp->svfIc1_[1]=rp->svfIc2_[0]=rp->svfIc2_[1]=0 ;
 		}
@@ -605,6 +617,9 @@ void SampleInstrument::Stop(int channel) {
 			 rp->envReleaseFrom_=rp->envLevel_ ;
 			 rp->envStage_=3 ;
 			 rp->envClock_=0 ;
+			 rp->fenvReleaseFrom_=rp->fenvLevel_ ;
+			 rp->fenvStage_=3 ;
+			 rp->fenvClock_=0 ;
 		 }
 		 return ;
 	 }
@@ -620,6 +635,9 @@ void SampleInstrument::Choke(int channel) {
 			rp->envReleaseFrom_=rp->envLevel_ ;
 			rp->envStage_=3 ;
 			rp->envClock_=0 ;
+			rp->fenvReleaseFrom_=rp->fenvLevel_ ;
+			rp->fenvStage_=3 ;
+			rp->fenvClock_=0 ;
 			rp->choke_=true ;
 		}
 	}
@@ -749,6 +767,9 @@ void SampleInstrument::startTail(int channel) {
         tp->envReleaseFrom_=tp->envLevel_ ;
         tp->envStage_=3 ;
         tp->envClock_=0 ;
+        tp->fenvReleaseFrom_=tp->fenvLevel_ ;
+        tp->fenvStage_=3 ;
+        tp->fenvClock_=0 ;
     }
 }
 
@@ -1484,6 +1505,22 @@ void SampleInstrument::InitSimpler() {
 		int st=int(GetSimpler(SIP_S_FENV)*0.9f+(GetSimpler(SIP_S_FENV)>=0?0.5f:-0.5f)) ;
 		FindVariable(SIP_S_FST)->SetInt(st<-72?-72:(st>72?72:st)) ;
 	}
+	// trk2als: antes el corte seguía la envolvente de volumen; la del filtro
+	// arranca como copia para que suene igual
+	if (!GetSimpler(SIP_S_FEVER)) {
+		FindVariable(SIP_S_FEVER)->SetInt(1) ;
+		if (GetSimpler(SIP_S_MODE)==SM_ONESHOT) {
+			FindVariable(SIP_S_FATK)->SetInt(GetSimpler(SIP_S_FIN)) ;
+			FindVariable(SIP_S_FDEC)->SetInt(0) ;
+			FindVariable(SIP_S_FSUS)->SetInt(0) ;
+			FindVariable(SIP_S_FREL)->SetInt(GetSimpler(SIP_S_FOUT)) ;
+		} else {
+			FindVariable(SIP_S_FATK)->SetInt(GetSimpler(SIP_S_ATK)) ;
+			FindVariable(SIP_S_FDEC)->SetInt(GetSimpler(SIP_S_DEC)) ;
+			FindVariable(SIP_S_FSUS)->SetInt(GetSimpler(SIP_S_SUS)) ;
+			FindVariable(SIP_S_FREL)->SetInt(GetSimpler(SIP_S_REL)) ;
+		}
+	}
 }
 
 void SampleInstrument::initSimplerFromLGPT() {
@@ -1605,6 +1642,39 @@ void SampleInstrument::simplerFilter(renderParams *rp,fixed *buffer,int size) {
 	}
 }
 
+// Envolvente del filtro: ADSR propio, avanza por bloque (el corte se
+// calcula por bloque); se suelta junto con la de volumen
+void SampleInstrument::filterEnvBlock(renderParams *rp,int size) {
+	const float msr=44.1f ;
+	float atk=envMs(SIP_S_FATK)*msr ;
+	float dec=envMs(SIP_S_FDEC)*msr ;
+	float rel=envMs(SIP_S_FREL)*msr ;
+	int db=GetSimpler(SIP_S_FSUS) ;
+	float sus=(db<=-60)?0:powf(10.0f,db/20.0f) ;
+	float l=rp->fenvLevel_ ;
+	switch (rp->fenvStage_) {
+		case 0:
+			l=(atk<1)?1:float(rp->fenvClock_)/atk ;
+			if (l>=1) { l=1 ; rp->fenvStage_=1 ; rp->fenvClock_=0 ; }
+			break ;
+		case 1:
+			l=(dec<1)?sus:1.0f-(1.0f-sus)*float(rp->fenvClock_)/dec ;
+			if (l<=sus || dec<1) { l=sus ; rp->fenvStage_=2 ; rp->fenvClock_=0 ; }
+			break ;
+		case 2:
+			l=sus ;
+			break ;
+		case 3:
+			l=(rel<1)?0:rp->fenvReleaseFrom_*(1.0f-float(rp->fenvClock_)/rel) ;
+			if (l<=0) { l=0 ; rp->fenvStage_=4 ; }
+			break ;
+		default:
+			l=0 ;
+	}
+	rp->fenvLevel_=l ;
+	rp->fenvClock_+=size ;
+}
+
 float SampleInstrument::envMs(FourCC id) {
 	int v=GetSimpler(id) ;
 	return v<0?0:float(v) ;
@@ -1641,11 +1711,15 @@ void SampleInstrument::simplerBlock(renderParams *rp,int size) {
 		float q=GetSimpler(SIP_S_FQ)/100.0f ;
 		if (q<0) q=0 ;
 		if (q>1) q=1 ;
-		if (st!=0) hz*=powf(2.0f,st*rp->envLevel_/12.0f) ;
+		filterEnvBlock(rp,size) ;
+		if (st!=0) hz*=powf(2.0f,st*rp->fenvLevel_/12.0f) ;
+		// key tracking: 100 % = el corte sube un semitono por semitono (C3 = 0)
+		int key=GetSimpler(SIP_S_FKEY) ;
+		if (key!=0) hz*=powf(2.0f,(rp->midiNote_-60)*key/100.0f/12.0f) ;
 		if (hz<20) hz=20 ;
 		if (hz>20000) hz=20000 ;
 		// sin filtro si no cambia nada (pasabajos abierto, sin resonancia)
-		if (type==0 && hz>=19000 && q<=0 && st<=0) {
+		if (type==0 && hz>=19000 && q<=0 && st<=0 && key<=0) {
 			rp->svfType_=-1 ;
 		} else {
 			rp->svfType_=(type<0||type>2)?0:type ;

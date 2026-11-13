@@ -96,6 +96,15 @@ enum SampleInstrumentLoopMode {
 #define SIP_S_FQ    MAKE_FOURCC('S', 'F', 'R', 'Q')   // resonancia 0..100 %
 #define SIP_S_FST   MAKE_FOURCC('S', 'F', 'S', 'T')   // envolvente en semitonos
 #define SIP_S_FVER  MAKE_FOURCC('S', 'F', 'V', 'R')   // 1 = ya con el filtro nuevo
+// trk2als: envolvente propia del filtro (como en Simpler) y modulaciones
+#define SIP_S_FATK  MAKE_FOURCC('S', 'F', 'A', 'T')
+#define SIP_S_FDEC  MAKE_FOURCC('S', 'F', 'D', 'C')
+#define SIP_S_FSUS  MAKE_FOURCC('S', 'F', 'S', 'U')   // dB
+#define SIP_S_FREL  MAKE_FOURCC('S', 'F', 'R', 'L')
+#define SIP_S_FKEY  MAKE_FOURCC('S', 'F', 'K', 'Y')   // key tracking 0..100 %
+#define SIP_S_FVEL  MAKE_FOURCC('S', 'F', 'V', 'L')   // velocity -> corte 0..100 %
+#define SIP_S_FEVER MAKE_FOURCC('S', 'F', 'E', 'V')   // 1 = ya con su envolvente
+#define SIP_S_ETAB  MAKE_FOURCC('S', 'E', 'T', 'B')   // pantalla: amp / filter
 
 // trk2als: cada canal tiene su voz y, con 'voices: 2', una voz más para la
 // cola de la nota anterior (índice canal+SONG_CHANNEL_COUNT)
@@ -196,6 +205,7 @@ private:
 	   bool startSimpler(renderParams *rp,int channel,unsigned char note,int &first,bool &sliced,float &offset) ;
 	   void simplerBlock(renderParams *rp,int size) ; // envolvente -> corte, glide
 	   void simplerFilter(renderParams *rp,fixed *buffer,int size) ;
+	   void filterEnvBlock(renderParams *rp,int size) ;
 	   void simplerEnvelope(renderParams *rp,fixed *buffer,int size) ;
 	   float envMs(FourCC id) ;
 	   WarpStretch *stretch_[SI_VOICE_COUNT] ;

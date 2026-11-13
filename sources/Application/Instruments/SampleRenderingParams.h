@@ -52,7 +52,10 @@ struct renderParams {
     bool choke_ ;
     float svfIc1_[2], svfIc2_[2] ; // trk2als: estado del filtro del Sampler
     float svfG_, svfK_ ;     // coeficientes del bloque
-    int svfType_ ;           // 0 LP, 1 BP, 2 HP; -1 sin filtro            // trk2als: STOP: release corto
+    int svfType_ ;
+    int fenvStage_ ;         // trk2als: envolvente del filtro (0..4 como la de volumen)
+    float fenvLevel_, fenvReleaseFrom_ ;
+    int fenvClock_ ;           // 0 LP, 1 BP, 2 HP; -1 sin filtro            // trk2als: STOP: release corto
     int sWarp_ ;             // trk2als: warp del Sampler con el que arrancó la nota
     float warpTranspose_ ;   // trk2als: transposición del time-stretch (factor)
     float glideFromT_ ;      // trk2als: transposición de la que parte el glide con warp
