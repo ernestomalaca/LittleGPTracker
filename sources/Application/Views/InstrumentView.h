@@ -23,6 +23,7 @@ public:
 
 protected:
 	void warpToNext(int offset) ;
+	bool ownedByTrack() ;
 	void onInstrumentChange() ;
 	void fillSampleParameters() ;
 	void fillMidiParameters() ;

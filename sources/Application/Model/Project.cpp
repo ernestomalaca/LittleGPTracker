@@ -55,17 +55,20 @@ tempoNudge_(0)
     scale->SetInt(0);
     // trk2als: tipo de cada pista (MIDI o audio, como en Live); se cambia en
     // la cabecera de la Song. Proyectos nuevos: todas MIDI
-    // trk2als: un proyecto nuevo arranca con cuatro pistas MIDI con nombre;
-    // las demás no existen hasta que se agregan con '+'
+    // trk2als: un proyecto nuevo arranca con cuatro pistas MIDI, cada una
+    // dueña de su instrumento (el 00 de la 1, el 01 de la 2...); las demás no
+    // existen hasta que se agregan con '+'. Sin preset cargado, la pista se
+    // llama "MIDI 1", "AUDIO 5"...
     static const char *trackTypes[4] = {"TRK", "AUD", "MID", "OFF"};
-    static const char *startNames[4] = {"DRUMS", "BASS", "HARMONY", "LEAD"};
     for (int ch = 0; ch < SONG_CHANNEL_COUNT; ch++) {
         char name[16];
         sprintf(name, "track%d", ch + 1);
         Variable *t = new Variable(name, VAR_TRACKTYPE(ch), trackTypes, 4, ch < 4 ? TT_MIDI : TT_OFF);
         this->Insert(t);
         sprintf(name, "trackname%d", ch + 1);
-        this->Insert(new Variable(name, VAR_TRACKNAME(ch), ch < 4 ? startNames[ch] : ""));
+        this->Insert(new Variable(name, VAR_TRACKNAME(ch), ""));
+        sprintf(name, "trackinstr%d", ch + 1);
+        this->Insert(new Variable(name, VAR_TRACKINSTR(ch), ch < 4 ? ch : -1, 0));
     }
     // proyectos de antes de los tipos guardaban cuántas pistas de audio había
     Variable *audioTracks = new Variable("audiotracks", VAR_AUDIOTRACKS, 0, 8);
@@ -184,7 +187,22 @@ int Project::TrackCount() {
 const char *Project::GetTrackName(int channel) {
     Variable *v = FindVariable(VAR_TRACKNAME(channel));
     const char *n = v ? v->GetString() : 0;
-    return n ? n : "";
+    if (n && *n) return n;
+    static char def[16];
+    snprintf(def, sizeof(def), "%s %d", IsAudioChannel(channel) ? "AUDIO" : "MIDI", channel + 1);
+    return def;
+}
+
+void Project::SetTrackName(int channel, const char *name) {
+    Variable *v = FindVariable(VAR_TRACKNAME(channel));
+    if (v) v->SetString(name ? name : "");
+}
+
+int Project::GetTrackInstrument(int channel) {
+    if (!TrackExists(channel) || IsAudioChannel(channel)) return -1;
+    Variable *v = FindVariable(VAR_TRACKINSTR(channel));
+    int i = v ? v->GetInt() : -1;
+    return (i >= 0 && i < MAX_INSTRUMENT_COUNT) ? i : -1;
 }
 
 int Project::AddTrack(TrackType type) {
@@ -193,9 +211,30 @@ int Project::AddTrack(TrackType type) {
     unsigned char *data = song_->data_;
     for (int r = 0; r < 256; r++) data[r * SONG_CHANNEL_COUNT + ch] = 0xFF;
     FindVariable(VAR_TRACKTYPE(ch))->SetInt(type == TT_AUDIO ? TT_AUDIO : TT_MIDI);
-    char name[16];
-    snprintf(name, sizeof(name), "%s %d", type == TT_AUDIO ? "AUDIO" : "MIDI", ch + 1);
-    FindVariable(VAR_TRACKNAME(ch))->SetString(name);
+    FindVariable(VAR_TRACKNAME(ch))->SetString("");
+    int owner = -1;
+    if (type != TT_AUDIO) {
+        // un instrumento de sample que nadie usa: ni otra pista, ni una
+        // phrase, ni un loop de audio
+        bool used[MAX_SAMPLEINSTRUMENT_COUNT] = {false};
+        for (int c = 0; c < SONG_CHANNEL_COUNT; c++) {
+            int o = GetTrackInstrument(c);
+            if (c != ch && o >= 0 && o < MAX_SAMPLEINSTRUMENT_COUNT) used[o] = true;
+        }
+        for (int i = 0; i < PHRASE_COUNT * 16; i++) {
+            unsigned char ins = song_->phrase_->instr_[i];
+            if (ins < MAX_SAMPLEINSTRUMENT_COUNT) used[ins] = true;
+        }
+        for (int i = 0; i < 256 * SONG_CHANNEL_COUNT; i++) {
+            unsigned char c = data[i];
+            if (c < MAX_SAMPLEINSTRUMENT_COUNT && IsAudioChannel(i % SONG_CHANNEL_COUNT)) used[c] = true;
+        }
+        for (int i = 0; i < MAX_SAMPLEINSTRUMENT_COUNT && owner < 0; i++) {
+            if (!used[i]) owner = i;
+        }
+        if (owner >= 0) GetInstrumentBank()->GetInstrument(owner)->Purge();   // limpio
+    }
+    FindVariable(VAR_TRACKINSTR(ch))->SetInt(owner);
     return ch;
 }
 
@@ -241,6 +280,13 @@ void Project::DeleteTrack(int channel) {
             else instrOther[ins] = true;
         }
     }
+    int owner = GetTrackInstrument(channel);
+    if (owner >= 0) {
+        instrMine[owner] = true;
+        for (int c = 0; c < SONG_CHANNEL_COUNT; c++) {   // ¿otra pista con el mismo? (no debería)
+            if (c != channel && GetTrackInstrument(c) == owner) instrOther[owner] = true;
+        }
+    }
     // borrar lo que era solo de esta pista
     for (int i = 0; i < CHAIN_COUNT; i++) {
         if (!chainMine[i] || chainOther[i]) continue;
@@ -271,11 +317,13 @@ void Project::DeleteTrack(int channel) {
     }
     for (int c = channel; c < SONG_CHANNEL_COUNT - 1; c++) {
         FindVariable(VAR_TRACKTYPE(c))->SetInt(FindVariable(VAR_TRACKTYPE(c + 1))->GetInt());
-        std::string n = GetTrackName(c + 1);
+        std::string n = FindVariable(VAR_TRACKNAME(c + 1))->GetString();
         FindVariable(VAR_TRACKNAME(c))->SetString(n.c_str());
+        FindVariable(VAR_TRACKINSTR(c))->SetInt(FindVariable(VAR_TRACKINSTR(c + 1))->GetInt());
     }
     FindVariable(VAR_TRACKTYPE(SONG_CHANNEL_COUNT - 1))->SetInt(TT_OFF);
     FindVariable(VAR_TRACKNAME(SONG_CHANNEL_COUNT - 1))->SetString("");
+    FindVariable(VAR_TRACKINSTR(SONG_CHANNEL_COUNT - 1))->SetInt(-1);
 }
 
 bool Project::IsAudioChannel(int channel) {
@@ -494,6 +542,8 @@ void Project::RestoreContent(TiXmlElement *element) {
 	FindVariable(VAR_AUDIOTRACKS)->SetInt(0) ;
 	for (int ch=0;ch<SONG_CHANNEL_COUNT;ch++) {
 		FindVariable(VAR_TRACKTYPE(ch))->SetInt(TT_MIDI) ;
+		FindVariable(VAR_TRACKINSTR(ch))->SetInt(-1) ;   // trk2als: proyecto de antes: manda la phrase
+		FindVariable(VAR_TRACKNAME(ch))->SetString("") ;
 	}
 
 	// Now loop on all variables

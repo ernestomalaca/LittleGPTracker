@@ -1030,7 +1030,10 @@ void PhraseView::processNormalButtonMask(unsigned short mask) {
                 if (mask & EPBM_RIGHT) {
                     unsigned char *c = phrase_->instr_ +
                                        (16 * viewData_->currentPhrase_ + row_);
-                    if (*c != 0xFF) {
+                    int owner = viewData_->project_->GetTrackInstrument(viewData_->songX_);
+                    if (owner >= 0) {   // trk2als: el instrumento de la pista
+                        viewData_->currentInstrument_ = owner;
+                    } else if (*c != 0xFF) {
                         viewData_->currentInstrument_ = *c;
                     } else {
                         int nearest = findClosestInstrumentFor(row_);
@@ -1187,7 +1190,10 @@ void PhraseView::processSelectionButtonMask(unsigned short mask) {
                 if (mask & EPBM_RIGHT) {
                     unsigned char *c = phrase_->instr_ +
                                        (16 * viewData_->currentPhrase_ + row_);
-                    if (*c != 0xFF) {
+                    int owner = viewData_->project_->GetTrackInstrument(viewData_->songX_);
+                    if (owner >= 0) {   // trk2als: el instrumento de la pista
+                        viewData_->currentInstrument_ = owner;
+                    } else if (*c != 0xFF) {
                         viewData_->currentInstrument_ = *c;
                     } else {
                         int nearest = findClosestInstrumentFor(row_);

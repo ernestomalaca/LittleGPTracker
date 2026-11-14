@@ -10,6 +10,8 @@
 #include "System/System/System.h"
 #include "Application/Views/ModalDialogs/MessageBox.h"
 #include "Application/Views/ModalDialogs/TrackTypeDialog.h"
+#include "Application/Views/ModalDialogs/PresetDialog.h"
+#include "Application/Instruments/InstrumentPresets.h"
 #include "UIController.h"
 #include "VuMeterUtil.h"
 #include <iostream>
@@ -53,6 +55,7 @@ SongView::SongView(GUIWindow &w, ViewData *viewData, const char *song)
     lastClip_ = 0xFF; // trk2als: sin loop todavía
     headerMode_ = false;
     pendingTypeCh_ = -1;
+    presetCh_ = -1;
     pendingType_ = 0;
     songname_ = song;
 
@@ -1039,6 +1042,31 @@ void SongView::processNormalButtonMask(unsigned int mask) {
    cambia de columna, abajo regresa a las celdas
  ******************************************************/
 
+static void TrackPresetCallback(View &v, ModalView &dialog) {
+    SongView &sv = (SongView &)v;
+    if (dialog.GetReturnCode() > 0) {
+        sv.LoadTrackPreset(((PresetDialog &)dialog).GetSelected());
+    }
+}
+
+// trk2als: el preset va al instrumento de la pista, y la pista toma su nombre
+void SongView::LoadTrackPreset(const std::string &name) {
+    Project *project = viewData_->project_;
+    int ch = presetCh_;
+    int owner = project->GetTrackInstrument(ch);
+    if (name.empty() || owner < 0 || owner >= MAX_SAMPLEINSTRUMENT_COUNT) return;
+    SampleInstrument *si =
+        (SampleInstrument *)project->GetInstrumentBank()->GetInstrument(owner);
+    if (!InstrumentPresets::Load(si, name)) {
+        View::SetNotification("No se pudo cargar el preset");
+        return;
+    }
+    std::string shortName = name.substr(name.rfind('/') == std::string::npos ? 0 : name.rfind('/') + 1);
+    project->SetTrackName(ch, shortName.c_str());
+    View::SetNotification((shortName + " cargado").c_str());
+    isDirty_ = true;
+}
+
 static void TrackTypeCallback(View &v, ModalView &dialog) {
     SongView &sv = (SongView &)v;
     int code = dialog.GetReturnCode();
@@ -1052,6 +1080,22 @@ static void TrackTypeCallback(View &v, ModalView &dialog) {
 void SongView::ApplyTrackType(int channel, int code, bool) {
     Project *project = viewData_->project_;
     char msg[40];
+    if (code == TTD_LOAD) {
+        presetCh_ = channel;
+        DoModal(new PresetDialog(*this), TrackPresetCallback);
+        return;
+    }
+    if (code == TTD_EDIT) {   // al instrumento de la pista; B regresa a la Song
+        int owner = project->GetTrackInstrument(channel);
+        if (owner < 0) return;
+        viewData_->currentInstrument_ = owner;
+        viewData_->instrumentFromSong_ = true;
+        ViewType vt = VT_INSTRUMENT;
+        ViewEvent ve(VET_SWITCH_VIEW, &vt);
+        SetChanged();
+        NotifyObservers(&ve);
+        return;
+    }
     if (code == TTD_DELETE) {
         if (Player::GetInstance()->IsRunning()) {   // nada de borrar lo que suena
             View::SetNotification("deten la musica para borrar");
@@ -1097,7 +1141,8 @@ void SongView::processHeaderButtonMask(unsigned int mask) {
         Project *project = viewData_->project_;
         bool adding = !project->TrackExists(ch);
         pendingTypeCh_ = ch;
-        TrackTypeDialog *d = new TrackTypeDialog(*this, ch, adding, project->GetTrackName(ch));
+        TrackTypeDialog *d = new TrackTypeDialog(*this, ch, adding, project->GetTrackName(ch),
+                                                 project->GetTrackInstrument(ch) >= 0);
         DoModal(d, TrackTypeCallback);
         return;
     }

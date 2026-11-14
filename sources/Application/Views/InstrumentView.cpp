@@ -592,7 +592,21 @@ void InstrumentView::fillMidiParameters() {
 } ;
 
 
+// trk2als: ¿el instrumento que se ve es el de una pista? Entonces solo se
+// cambia desde la cabecera de la pista, en la Song
+bool InstrumentView::ownedByTrack() {
+	Project *p=viewData_->project_ ;
+	for (int ch=0;ch<SONG_CHANNEL_COUNT;ch++) {
+		if (p->GetTrackInstrument(ch)==viewData_->currentInstrument_) return true ;
+	}
+	return false ;
+}
+
 void InstrumentView::warpToNext(int offset) {
+	if (ownedByTrack()) {
+		View::SetNotification("se cambia en la cabecera de la pista") ;
+		return ;
+	}
 	int instrument=viewData_->currentInstrument_+offset ;
 	if (instrument>=MAX_INSTRUMENT_COUNT) {
 		instrument=instrument-MAX_INSTRUMENT_COUNT ;
@@ -634,7 +648,9 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 		if (fid==IV_PRESET_LOAD || fid==IV_PRESET_SAVE) {
 			viewMode_=VM_NORMAL ;
 			if (mask==EPBM_A) {
-				if (fid==IV_PRESET_LOAD) openPresetLoad() ; else openPresetSave() ;
+				if (fid==IV_PRESET_LOAD && ownedByTrack()) {
+					View::SetNotification("se carga en la cabecera de la pista") ;
+				} else if (fid==IV_PRESET_LOAD) openPresetLoad() ; else openPresetSave() ;
 				return ;
 			}
 		}

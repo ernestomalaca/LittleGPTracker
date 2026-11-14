@@ -924,7 +924,15 @@ void Player::playCursorPosition(int channel) {
             bool newInstrument = false;
 
             I_Instrument *instrument;
-            if (instr != 0xFF) {
+            int owner = project_->GetTrackInstrument(channel);
+            if (owner >= 0) {
+                // trk2als: la pista es dueña de su instrumento; la columna de
+                // instrumento de la phrase ya no cuenta
+                instrument = bank->GetInstrument(owner);
+                newInstrument = (instr != 0xFF) ||
+                                (mixer_->GetLastInstrument(channel) != instrument);
+                instr = (unsigned char)owner;
+            } else if (instr != 0xFF) {
                 instrument = bank->GetInstrument(instr);
                 newInstrument = true;
             } else {

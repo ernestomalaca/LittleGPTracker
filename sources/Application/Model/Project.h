@@ -27,6 +27,7 @@
 // pasa a TT_MIDI (las pistas MIDI se escriben con chains y phrases)
 enum TrackType { TT_TRACKER = 0, TT_AUDIO = 1, TT_MIDI = 2, TT_OFF = 3 }; // OFF: la pista no existe
 #define VAR_TRACKNAME(ch) MAKE_FOURCC('T', 'N', 'M', '0' + (ch))
+#define VAR_TRACKINSTR(ch) MAKE_FOURCC('T', 'I', 'N', '0' + (ch))
 
 #define PROJECT_NUMBER "1"
 #define PROJECT_RELEASE "6"
@@ -61,7 +62,11 @@ public:
   // agregan y se borran, no cambian de tipo)
   int TrackCount();
   bool TrackExists(int channel);
-  const char *GetTrackName(int channel);
+  const char *GetTrackName(int channel);   // el del preset, o "MIDI 3" / "AUDIO 5"
+  void SetTrackName(int channel, const char *name);
+  // instrumento de la pista MIDI (-1: proyecto de antes, manda la columna
+  // de instrumento de la phrase)
+  int GetTrackInstrument(int channel);
   int AddTrack(TrackType type);      // canal nuevo, o -1 si ya hay 8
   void DeleteTrack(int channel);     // con sus chains, phrases e instrumentos que nadie más usa
   void Trigger();

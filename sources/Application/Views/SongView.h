@@ -2,6 +2,7 @@
 #ifndef _SONG_VIEW_H_
 #define _SONG_VIEW_H_
 
+#include <string>
 #include "BaseClasses/View.h"
 
 class SongView;
@@ -68,6 +69,8 @@ class SongView : public View {
   public: // trk2als: tipo de pista desde la cabecera de la columna
     void ApplyTrackType(int channel, int type, bool clear);
     void clampTrackCursor();
+    void LoadTrackPreset(const std::string &name);
+    int presetCh_;
     int pendingTypeCh_, pendingType_; // .cambio que espera confirmación
   private:
     bool headerMode_; // .el cursor está en la cabecera de las columnas
