@@ -53,6 +53,7 @@ private:
 	const char *labelText_[8] ;
 	// trk2als: presets (campos "cargar"/"guardar" al final del Sampler)
 	Variable presetLoadVar_, presetSaveVar_ ;
+	std::string presetFolder_ ;   // trk2als: categoría donde se guarda el preset
 	Variable markVar_ ;      // trk2als: cursor de las marcas (slice manual)
 	bool markTap_ ;
 	// trk2als: slice manual, editar marcas sobre la onda
@@ -79,5 +80,6 @@ private:
 public:
 	void OnPresetLoad(const std::string &name) ;
 	void OnPresetSave(const std::string &name) ;
+	void OnPresetFolder(const std::string &folder) ;
 } ;
 #endif

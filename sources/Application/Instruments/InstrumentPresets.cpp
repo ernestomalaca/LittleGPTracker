@@ -48,7 +48,44 @@ static Path resolved(const Path &p) {
 }
 
 static Path presetPath(const std::string &name) {
-	return resolved(Path(PRESET_DIR).Descend(name)) ;
+	// "Drums/KICK1": una carpeta por cada parte
+	Path p(PRESET_DIR) ;
+	size_t start=0 ;
+	while (start<name.size()) {
+		size_t slash=name.find('/',start) ;
+		std::string part=name.substr(start,slash==std::string::npos?std::string::npos:slash-start) ;
+		if (!part.empty()) p=p.Descend(part) ;
+		if (slash==std::string::npos) break ;
+		start=slash+1 ;
+	}
+	return resolved(p) ;
+}
+
+std::string &InstrumentPresets::LastFolder() {
+	static std::string last ;
+	return last ;
+}
+
+void InstrumentPresets::ListFolder(const std::string &folder, std::vector<std::string> &folders,
+                                   std::vector<std::string> &presets) {
+	folders.clear() ;
+	presets.clear() ;
+	Path root=presetPath(folder) ;
+	if (!root.Exists()) return ;
+	I_Dir *dir=FileSystem::GetInstance()->Open(root.GetPath().c_str()) ;
+	if (!dir) return ;
+	dir->GetContent((char *)"*") ;
+	IteratorPtr<Path> it(dir->GetIterator()) ;
+	for (it->Begin(); !it->IsDone(); it->Next()) {
+		Path p=it->CurrentItem() ;
+		std::string n=p.GetName() ;
+		if (n.empty() || n[0]=='.' || !p.IsDirectory()) continue ;
+		if (Path(p).Descend(PRESET_FILE).Exists()) presets.push_back(n) ;
+		else folders.push_back(n) ;
+	}
+	delete dir ;
+	std::sort(folders.begin(),folders.end()) ;
+	std::sort(presets.begin(),presets.end()) ;
 }
 
 std::vector<std::string> InstrumentPresets::List() {
@@ -101,6 +138,11 @@ bool InstrumentPresets::Save(SampleInstrument *instr, const std::string &name) {
 	if (!root.Exists() && fs->MakeDir(root.GetPath().c_str()).Failed()) {
 		Trace::Error("No se pudo crear %s", root.GetPath().c_str()) ;
 		return false ;
+	}
+	// las carpetas de la categoría ("Drums/Kicks/...") si faltan
+	for (size_t slash=name.find('/'); slash!=std::string::npos; slash=name.find('/',slash+1)) {
+		Path cat=presetPath(name.substr(0,slash)) ;
+		if (!cat.Exists()) fs->MakeDir(cat.GetPath().c_str()) ;
 	}
 	Path folder = presetPath(name) ;
 	if (!folder.Exists() && fs->MakeDir(folder.GetPath().c_str()).Failed()) {

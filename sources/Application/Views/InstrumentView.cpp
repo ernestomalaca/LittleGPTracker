@@ -123,6 +123,12 @@ static void PresetLoadCallback(View &v, ModalView &dialog) {
 	}
 }
 
+static void PresetFolderCallback(View &v, ModalView &dialog) {
+	if (dialog.GetReturnCode()==1) {
+		((InstrumentView &)v).OnPresetFolder(((PresetDialog &)dialog).GetFolder()) ;
+	}
+}
+
 static void PresetSaveCallback(View &v, ModalView &dialog) {
 	if (dialog.GetReturnCode()>0) {
 		((InstrumentView &)v).OnPresetSave(((NewProjectDialog &)dialog).GetName()) ;
@@ -1402,9 +1408,20 @@ void InstrumentView::openPresetSave() {
 		View::SetNotification("Primero elige un sample") ;
 		return ;
 	}
-	NewProjectDialog *nd=new NewProjectDialog(*this,"root:presets") ;
+	// primero la carpeta (categoría), luego el nombre
+	PresetDialog *pd=new PresetDialog(*this,true) ;
+	DoModal(pd,PresetFolderCallback) ;
+}
+
+void InstrumentView::OnPresetFolder(const std::string &folder) {
+	if (!current_ || current_->GetType()!=IT_SAMPLE) return ;
+	SampleInstrument *si=(SampleInstrument *)current_ ;
+	presetFolder_=folder ;
+	std::string base="root:presets" ;
+	if (!folder.empty()) base+="/"+folder ;
+	NewProjectDialog *nd=new NewProjectDialog(*this,base.c_str()) ;
 	nd->SetPrefix("") ;
-	nd->SetTitle("Guardar preset") ;
+	nd->SetTitle(folder.empty()?"Guardar preset":"Guardar en "+folder) ;
 	nd->SetInitialName(InstrumentPresets::SuggestedName(si)) ;
 	nd->SetAllowExisting(true) ;     // con el mismo nombre se actualiza
 	DoModal(nd,PresetSaveCallback) ;
@@ -1423,8 +1440,9 @@ void InstrumentView::OnPresetLoad(const std::string &name) {
 	isDirty_=true ;
 }
 
-void InstrumentView::OnPresetSave(const std::string &name) {
-	if (name.empty() || !current_ || current_->GetType()!=IT_SAMPLE) return ;
+void InstrumentView::OnPresetSave(const std::string &shortName) {
+	if (shortName.empty() || !current_ || current_->GetType()!=IT_SAMPLE) return ;
+	std::string name=presetFolder_.empty()?shortName:presetFolder_+"/"+shortName ;
 	bool existed=InstrumentPresets::Exists(name) ;
 	if (InstrumentPresets::Save((SampleInstrument *)current_,name)) {
 		std::string msg="Preset "+name+(existed?" actualizado":" guardado") ;

@@ -225,10 +225,13 @@ void View::ProcessButton(unsigned short mask, bool pressed) {
 		modalView_->isDirty_;
 		if (modalView_->IsFinished()) {
 			// process callback sending the modal dialog
+			// trk2als: el callback puede abrir otra ventana (DoModal): esa se queda
+			ModalView *done=modalView_ ;
 			if (modalViewCallback_) {
-				modalViewCallback_(*this,*modalView_) ;
+				modalViewCallback_(*this,*done) ;
 			}
-			SAFE_DELETE(modalView_) ;
+			if (modalView_==done) modalView_=0 ;
+			delete done ;
 			isDirty_=true ;
 		}
 	} else {
