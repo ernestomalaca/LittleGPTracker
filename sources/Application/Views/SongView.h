@@ -88,6 +88,7 @@ class SongView : public View {
         int offset_;          // .
         int width_;           // .Size of selection
         int height_;          // .
+        int srcLeft_;         // .trk2als: primera columna de donde se copió
     } clipboard_;
 
     int saveX_;

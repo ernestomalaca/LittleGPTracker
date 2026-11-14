@@ -457,6 +457,7 @@ void SongView::fillClipboardData() {
 
     clipboard_.width_ = selRect.Width() + 1;
     clipboard_.height_ = selRect.Height() + 1;
+    clipboard_.srcLeft_ = selRect.Left();
 
     clipboard_.data_ =
         (unsigned char *)SYS_MALLOC(clipboard_.width_ * clipboard_.height_);
@@ -543,6 +544,23 @@ void SongView::pasteClipboard() {
 
     if (!clipboard_.data_)
         return;
+
+    // trk2als: en una pista de audio las celdas son loops y en una MIDI son
+    // chains (el mismo número es otra cosa): no se mezclan
+    for (int i = 0; i < clipboard_.width_; i++) {
+        int from = clipboard_.srcLeft_ + i, to = viewData_->songX_ + i;
+        if (to >= SONG_CHANNEL_COUNT) break;
+        bool fromAudio = isAudioColumn(from), toAudio = isAudioColumn(to);
+        if (fromAudio == toAudio) continue;
+        bool any = false;
+        for (int j = 0; j < clipboard_.height_; j++) {
+            if (clipboard_.data_[j * clipboard_.width_ + i] != 0xFF) any = true;
+        }
+        if (!any) continue;
+        View::SetNotification(fromAudio ? "clips de audio no van en pistas MIDI"
+                                        : "clips MIDI no van en pistas de audio");
+        return;
+    }
 
     // Check we're not out of scope
 

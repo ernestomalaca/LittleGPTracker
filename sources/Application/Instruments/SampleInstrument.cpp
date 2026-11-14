@@ -2459,6 +2459,16 @@ void SampleInstrument::Update(Observable &o,I_ObservableData *d)
 		{
 			if (running_) {
 				dirty_=true ; // we'll update later, when instrument gets re-triggered
+				// trk2als: pero el largo del sample nuevo ya se ve (y con él
+				// el bpm del loop); 'running_' se queda prendido después de
+				// tocar en una pista MIDI, y así el bpm salía del sample anterior
+				SoundSource *src=0 ;
+				int index=v.GetInt() ;
+				if (index!=NO_SAMPLE) src=SamplePool::GetInstance()->GetSource(index) ;
+				int size=(src && !src->IsMulti())?src->GetSize(-1):0 ;
+				FindVariable(SIP_END)->SetInt(size) ;
+				FindVariable(SIP_LOOPSTART)->SetInt(0) ;
+				FindVariable(SIP_START)->SetInt(0) ;
 			} else {
 				updateInstrumentData(true) ;
 				SetChanged() ;
