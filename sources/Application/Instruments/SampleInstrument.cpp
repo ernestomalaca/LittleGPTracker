@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <stdlib.h>
 #include "SamplePool.h"
+#include "Application/Model/Config.h"
 #include "System/Console/Trace.h"
 #include "System/io/Status.h"
 #include "CommandList.h"
@@ -1821,12 +1822,20 @@ int SampleInstrument::AddMark(int frame) {
 	return frame ;
 }
 
-// distancia mínima entre marcas: 30 ms del sample
+// distancia mínima entre marcas: 30 ms del sample. En config.xml,
+// <SLICEMARKGAP value="10"/> la cambia (en ms) y value="0" la quita
 int SampleInstrument::MinMarkGap() {
+	static int ms=-1 ;
+	if (ms<0) {
+		const char *v=Config::GetInstance()->GetValue("SLICEMARKGAP") ;
+		ms=v?atoi(v):30 ;
+		if (ms<0) ms=0 ;
+	}
+	if (ms==0) return 1 ;       // sin mínimo: solo que no caigan en el mismo cuadro
 	SoundSource *src=currentSource() ;
 	int rate=src?src->GetSampleRate(-1):44100 ;
 	if (rate<=0) rate=44100 ;
-	return rate*30/1000 ;
+	return rate*ms/1000 ;
 }
 
 bool SampleInstrument::RemoveMarkNear(int frame,int tolerance) {
