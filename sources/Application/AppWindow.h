@@ -123,6 +123,10 @@ class AppWindow : public GUIWindow, I_Observer, Status {
     std::vector<Shape> _shapes;
     bool _shapeCells[1200];     // celdas tapadas por figuras en este cuadro
     bool _prevShapeCells[1200]; // ... y en el anterior (hay que redibujarlas)
+    // trk2als: pantalla de arranque (Chancho 6); SPLASH en config.xml (ms, 0 = sin)
+    unsigned long _splashUntil;
+    bool _splashDrawn;
+    void drawSplash();
     bool _shapesDirty;          // las figuras cambiaron: redibujar sus celdas
     bool _prevShapesOn;
 

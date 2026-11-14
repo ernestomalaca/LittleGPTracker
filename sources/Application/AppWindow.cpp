@@ -16,6 +16,9 @@
 #include "UIFramework/Interfaces/I_GUIWindowFactory.h"
 #include "Views/UIController.h"
 #include <string.h>
+#include <stdlib.h>
+#include "Resources/hdfont.h"
+#include "Application/Model/Config.h"
 
 AppWindow *instance = 0;
 
@@ -70,6 +73,14 @@ void AppWindow::defineColor(const char *colorName, GUIColor &color) {
 AppWindow::AppWindow(I_GUIWindowImp &imp) : GUIWindow(imp) {
 
     instance = this;
+
+    // trk2als: pantalla de arranque
+    {
+        const char *sp = Config::GetInstance()->GetValue("SPLASH");
+        int ms = sp ? atoi(sp) : 1800;
+        _splashUntil = ms > 0 ? System::GetInstance()->GetClock() + ms : 0;
+        _splashDrawn = false;
+    }
 
     // Init all members
 
@@ -231,6 +242,25 @@ void AppWindow::Flush() {
 
     Lock();
     long flushStart = System::GetInstance()->GetClock();
+
+    // trk2als: mientras dura la pantalla de arranque no se dibuja nada más
+    if (_splashUntil) {
+        if (SupportsShapes() && System::GetInstance()->GetClock() < _splashUntil) {
+            if (!_splashDrawn) {
+                drawSplash();
+                _splashDrawn = true;
+                GUIWindow::Flush();
+            }
+            Unlock();
+            return;
+        }
+        _splashUntil = 0;           // terminó: todo se vuelve a dibujar
+        memset(_preScreen, 0xFE, sizeof(_preScreen));
+        _shapesDirty = true;
+        GUIColor bg = GetColor(CD_BACKGROUND);
+        GUIRect all(0, 0, 640, 480);
+        GUIWindow::FillRoundRect(all, 0, bg);
+    }
 
     GUITextProperties props;
     GUIPoint pos;
@@ -907,4 +937,56 @@ void AppWindow::SaveLastProject(const Path &p) {
 
     Trace::Log("SaveLastProject", "Saved last project: %s",
                p.GetPath().c_str());
+}
+
+/************************************************************
+ trk2als: pantalla de arranque. La ficha del doble seis (el
+ "chancho 6") con el nombre de lado, de abajo hacia arriba.
+ ************************************************************/
+void AppWindow::drawSplash() {
+    GUIColor bg(0x14, 0x14, 0x14);
+    GUIColor fg(0xE8, 0xE6, 0xE3);
+    GUIRect all(0, 0, 640, 480);
+    GUIWindow::FillRoundRect(all, 0, bg);
+
+    // la ficha: 150 x 340, centrada junto con el texto
+    const int s = 3;                     // escala de la letra (16 px -> 48)
+    const int adv = 11;                  // avance por letra (más juntas que la rejilla)
+    const char *name = "CHANCHO 6";
+    int len = (int)strlen(name);
+    int textH = len * adv * s;
+    int x0 = (640 - (150 + 26 + 16 * s)) / 2, y0 = 70, w = 150, h = 340;
+    GUIRect frame(x0, y0, x0 + w, y0 + h);
+    GUIWindow::FrameRoundRect(frame, 18, 5, fg);
+    GUIRect bar(x0 + 16, y0 + h / 2 - 3, x0 + w - 16, y0 + h / 2 + 3);
+    GUIWindow::FillRoundRect(bar, 3, fg);
+    // seis puntos en cada mitad
+    const int r = 16;
+    int cx[2] = {x0 + 44, x0 + w - 44};
+    for (int half = 0; half < 2; half++) {
+        int top = y0 + half * (h / 2);
+        for (int k = 0; k < 3; k++) {
+            int cy = top + (h / 2) * (2 * k + 1) / 6 + (half ? 3 : -3);
+            for (int c = 0; c < 2; c++) {
+                GUIRect dot(cx[c] - r, cy - r, cx[c] + r, cy + r);
+                GUIWindow::FillRoundRect(dot, r, fg);
+            }
+        }
+    }
+    // el nombre, girado: se lee de abajo hacia arriba
+    int tx = x0 + w + 26;
+    int ty = y0 + h / 2 + textH / 2;     // la base, abajo
+    for (int i = 0; i < len; i++) {
+        unsigned char ch = ((unsigned char)name[i]) & 127;
+        const unsigned char *g = hdfont[ch];
+        for (int gy = 0; gy < 16; gy++) {
+            for (int gx = 0; gx < 16; gx++) {
+                if (g[gy * 16 + gx] < 128) continue;
+                int px = tx + gy * s;
+                int py = ty - (i * adv + gx - 2) * s;
+                GUIRect px1(px, py, px + s, py + s);
+                GUIWindow::FillRoundRect(px1, 0, fg);
+            }
+        }
+    }
 }
