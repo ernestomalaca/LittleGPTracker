@@ -185,6 +185,10 @@ void InstrumentView::onInstrumentChange() {
 		if (current_==old && lastSampleIdx_!=-2 && idx!=lastSampleIdx_ && idx>=0) {
 			// 0 si no parece un loop: así no arrastra el BPM del sample anterior
 			si->FindVariable(SIP_LOOPBPM)->SetInt(si->DetectLoopBpm()) ;
+			// las marcas del slice manual eran del sample anterior
+			si->SetMarks(std::vector<int>()) ;
+			markVar_.SetInt(0) ;
+			if (waveEdit_) exitWaveEdit() ;
 		}
 		lastSampleIdx_=idx ;
 	} else {
