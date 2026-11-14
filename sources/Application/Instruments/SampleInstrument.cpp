@@ -314,6 +314,51 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 
   renderParams *rp=renderParams_+channel ;
 
+  // trk2als: la nota que sonaba pasa a la voz de cola ANTES de tocar rp:
+  // así se lleva su volumen, paneo, nota y región (si no, la cola sonaba
+  // con los valores de la nota nueva: click y voces raras)
+     bool wasSounding=rp->simpler_ && !rp->finished_ && rp->envStage_<4 &&
+                     voiceClock_[channel]!=0 ;
+     fixed prevSpeed=rp->speed_ ;
+     // trk2als: con 2 voces, la nota que sonaba sigue como cola (su release,
+     // o completa en trigger) en vez de cortarse; con glide no: se desliza
+     // trk2als: clip de audio que sigue sonando: pasa a la voz de cola y se
+     // apaga en 4 ms mientras entra el nuevo (sin click)
+     if (channel<SONG_CHANNEL_COUNT && rp->audioClip_ && !rp->finished_ &&
+         voiceClock_[channel]!=0 &&
+         System::GetInstance()->GetClock()-voiceClock_[channel]<200) {
+         startTail(channel) ;
+         renderParams *tp=renderParams_+channel+SONG_CHANNEL_COUNT ;
+         tp->declickOut_=tp->declickOutLen_=176 ;
+     }
+     if (channel<SONG_CHANNEL_COUNT) {
+         int t=channel+SONG_CHANNEL_COUNT ;
+         unsigned long now=System::GetInstance()->GetClock() ;
+         // una cola que nadie renderiza hace rato (cambió el instrumento del
+         // canal) no debe reaparecer
+         if (!renderParams_[t].finished_ && (voiceClock_[t]==0 || now-voiceClock_[t]>200)) {
+             renderParams_[t].finished_=true ;
+         }
+         // con glide la nota nueva también arranca desde start: la anterior
+         // se apaga en la cola (sin click) y solo el tono se desliza
+         if (wasSounding) {
+             bool glide=GetSimpler(SIP_S_GLIDE)>0 ;
+             startTail(channel) ;
+             if (GetSimpler(SIP_S_VOICES)<2 || glide) {
+                 // una voz: la nota anterior no se corta de golpe (click),
+                 // se apaga en 4 ms mientras entra la nueva
+                 renderParams *tp=renderParams_+channel+SONG_CHANNEL_COUNT ;
+                 if (tp->envStage_<3) {
+                     tp->envReleaseFrom_=tp->envLevel_ ;
+                     tp->envStage_=3 ;
+                     tp->envClock_=0 ;
+                 }
+                 tp->chokeMs_=4 ;
+             }
+             if (!glide) wasSounding=false ;
+         }
+     }
+
   rp->midiNote_=midinote ;
   
   if (lastMidiNote_[channel] == -1) // To prevent First LEGA to go bonkers
@@ -363,50 +408,12 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
      rp->forceSync_=syncRequest_[channel] ; // trk2als: pista de audio
      // trk2als: en las pistas MIDI el instrumento es el Sampler estilo Simpler
      // (salvo instrumentos viejos en looper sync)
-     bool wasSounding=rp->simpler_ && !rp->finished_ && rp->envStage_<4 &&
-                     voiceClock_[channel]!=0 ;
-     fixed prevSpeed=rp->speed_ ;
-     // trk2als: con 2 voces, la nota que sonaba sigue como cola (su release,
-     // o completa en trigger) en vez de cortarse; con glide no: se desliza
-     // trk2als: clip de audio que sigue sonando: pasa a la voz de cola y se
-     // apaga en 4 ms mientras entra el nuevo (sin click)
-     if (channel<SONG_CHANNEL_COUNT && rp->audioClip_ && !rp->finished_ &&
-         voiceClock_[channel]!=0 &&
-         System::GetInstance()->GetClock()-voiceClock_[channel]<200) {
-         startTail(channel) ;
-         renderParams *tp=renderParams_+channel+SONG_CHANNEL_COUNT ;
-         tp->declickOut_=tp->declickOutLen_=176 ;
-     }
      rp->audioClip_=false ;
      rp->declickIn_=-1 ;
      rp->declickOut_=0 ;
      if (audioClip && GetSimpler(SIP_A_FADE)) {
          rp->audioClip_=true ;
          rp->declickIn_=0 ;
-     }
-     if (channel<SONG_CHANNEL_COUNT) {
-         int t=channel+SONG_CHANNEL_COUNT ;
-         unsigned long now=System::GetInstance()->GetClock() ;
-         // una cola que nadie renderiza hace rato (cambió el instrumento del
-         // canal) no debe reaparecer
-         if (!renderParams_[t].finished_ && (voiceClock_[t]==0 || now-voiceClock_[t]>200)) {
-             renderParams_[t].finished_=true ;
-         }
-         if (wasSounding && GetSimpler(SIP_S_GLIDE)==0) {
-             startTail(channel) ;
-             if (GetSimpler(SIP_S_VOICES)<2) {
-                 // una voz: la nota anterior no se corta de golpe (click),
-                 // se apaga en 4 ms mientras entra la nueva
-                 renderParams *tp=renderParams_+channel+SONG_CHANNEL_COUNT ;
-                 if (tp->envStage_<3) {
-                     tp->envReleaseFrom_=tp->envLevel_ ;
-                     tp->envStage_=3 ;
-                     tp->envClock_=0 ;
-                 }
-                 tp->chokeMs_=4 ;
-             }
-             wasSounding=false ;
-         }
      }
      rp->simpler_=!rp->forceSync_ && loopMode_->GetInt()!=SILM_LOOPSYNC &&
                   !source_->IsMulti() ;
@@ -1253,8 +1260,10 @@ bool SampleInstrument::renderVoice(int channel, fixed *buffer, int size, int fla
 						fpattenuate=fp_mul(rp->attenuate_,volscale) ;
 						pan=fp2i(rp->pan_) ;
 						// trk2als: panlaw sube con el índice; pan 00 = izquierda, como en Live
-						fixed fixedpanl=panlaw[254-pan] ;
-						fixed fixedpanr=panlaw[pan] ;
+						// (sin 'fixed': antes declaraba variables nuevas y el
+						// paneo no cambiaba a media nota)
+						fixedpanl=panlaw[254-pan] ;
+						fixedpanr=panlaw[pan] ;
 
 						if (complex) {
 							fpSpeed=FP_ONE ;   // trk2als: la velocidad la pone el time-stretch

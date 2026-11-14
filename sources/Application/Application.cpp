@@ -10,6 +10,53 @@
 
 #include <math.h>
 
+// trk2als: si el programa truena, deja crash.log (en la carpeta raíz) con la
+// pila de llamadas: dónde falló, para poder arreglarlo
+#if defined(__APPLE__) || defined(__linux__)
+#include <execinfo.h>
+#include <signal.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <string.h>
+#include <time.h>
+
+static char crashPath_[1024] ;
+
+static void crashWrite(int fd,const char *s) {
+	if (write(fd,s,strlen(s))<0) {}
+}
+
+static void crashHandler(int sig) {
+	int fd=open(crashPath_,O_WRONLY|O_CREAT|O_APPEND,0644) ;
+	if (fd>=0) {
+		char head[160] ;
+		time_t now=time(0) ;
+		struct tm t ;
+		localtime_r(&now,&t) ;
+		strftime(head,sizeof(head),"\n=== crash %Y-%m-%d %H:%M:%S",&t) ;
+		crashWrite(fd,head) ;
+		crashWrite(fd,sig==SIGSEGV?" SIGSEGV (memoria)\n":sig==SIGBUS?" SIGBUS (memoria)\n":
+		              sig==SIGFPE?" SIGFPE (division)\n":sig==SIGABRT?" SIGABRT (abort)\n":
+		              sig==SIGILL?" SIGILL\n":"\n") ;
+		void *frames[64] ;
+		int n=backtrace(frames,64) ;
+		backtrace_symbols_fd(frames,n,fd) ;
+		close(fd) ;
+	}
+	signal(sig,SIG_DFL) ;   // que el sistema también lo registre
+	raise(sig) ;
+}
+
+static void installCrashLog() {
+	Path p("root:crash.log") ;
+	strncpy(crashPath_,p.GetPath().c_str(),sizeof(crashPath_)-1) ;
+	int sigs[5]={SIGSEGV,SIGBUS,SIGFPE,SIGABRT,SIGILL} ;
+	for (int i=0;i<5;i++) signal(sigs[i],crashHandler) ;
+}
+#else
+static void installCrashLog() {}
+#endif
+
 Application *Application::instance_=NULL ;
 
 Application::Application() {
@@ -45,6 +92,7 @@ bool Application::Init(GUICreateWindowParams &params) {
 	if (root) {
 		Path::SetAlias("root",root) ;
 	} ;
+	installCrashLog() ;
 	window_=AppWindow::Create(params) ;
 	PersistencyService::GetInstance() ;
   Audio *audio=Audio::GetInstance() ;

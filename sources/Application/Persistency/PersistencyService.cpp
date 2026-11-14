@@ -43,10 +43,12 @@ bool PersistencyService::Load() {
 	file->Seek(0,SEEK_END) ;
 	int length=file->Tell() ;
 
-	unsigned char *compBuffer=(unsigned char *)SYS_MALLOC(length) ;
+	// trk2als: un byte extra en cero; TinyXML lee hasta encontrarlo
+	unsigned char *compBuffer=(unsigned char *)SYS_MALLOC(length+1) ;
 
   file->Seek(0,SEEK_SET) ;
 	file->Read(compBuffer,1,length) ;
+	compBuffer[length]=0 ;
 	file->Close();
 	delete file ;
 	
