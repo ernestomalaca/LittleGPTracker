@@ -5,7 +5,7 @@
 #include "Application/Views/BaseClasses/ModalView.h"
 #include <string>
 
-#define MAX_NAME_LENGTH 12
+#define MAX_NAME_LENGTH 16   // trk2als: antes 12 (para "Precordillera...")
 #define BUTTONS_LENGTH 3
 
 class NewProjectDialog:public ModalView {
