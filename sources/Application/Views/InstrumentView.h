@@ -62,6 +62,10 @@ private:
 	unsigned long lastAPress_ ;
 	bool previewing_ ;
 	int previewPos_ ;
+	bool tapPlay_ ;           // suena toda la región: A marca
+	bool songByTap_ ;         // la canción la arrancó la edición
+	void startTapPlay(int from) ;
+	void stopTapPlay() ;
 	void enterWaveEdit() ;
 	void exitWaveEdit() ;
 	bool processWaveEdit(unsigned short mask,bool pressed) ;

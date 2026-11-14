@@ -19,6 +19,7 @@
 #include "ModalDialogs/PresetDialog.h"
 #include "Application/Instruments/InstrumentPresets.h"
 #include "System/System/System.h"
+#include "Services/Audio/Audio.h"
 
 // trk2als: frecuencia de corte en Hz. A+izq/der: un semitono; A+arr/aba:
 // una octava. Se muestra en Hz o kHz
@@ -91,6 +92,8 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data),
 	lastAPress_=0 ;
 	previewing_=false ;
 	previewPos_=-1 ;
+	tapPlay_=false ;
+	songByTap_=false ;
 
 	project_=data->project_ ;
 	lastFocusID_=0 ;
@@ -1264,7 +1267,8 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 			sprintf(tag,"marcas %d  %d.%d%%  zoom x%d",int(m.size()),pm/10,pm%10,waveZoom_) ;
 			DrawText(X+4,Y+H-12,tag,fg,0) ;
 			{
-				const char *help="A escucha  AA marca  B+<> salta  B+A borra  abajo: listo" ;
+				const char *help=tapPlay_?"sonando: A marca  START para" :
+				                         "START toca  A escucha  AA marca  B+<> mueve  B+A borra" ;
 				DrawText(632-8*int(strlen(help)),3,help,dim2,0) ;
 			}
 			// lo que suena al escuchar (A)
@@ -1302,6 +1306,13 @@ void InstrumentView::AnimationUpdate() {
 	// editando marcas: el cabezal de la escucha
 	if (previewing_) {
 		int sp=Player::GetInstance()->GetStreamPosition() ;
+		int ra,rb ;
+		if (tapPlay_ && (sp==-1 || (sp>=0 && si->SimplerRegion(ra,rb) && sp>=rb))) {
+			stopTapPlay() ;
+			ClearShapes() ;
+			drawWaveform() ;
+			return ;
+		}
 		if (sp>=0 && sp!=previewPos_) {
 			previewPos_=sp ;
 			px=-2 ;
@@ -1393,10 +1404,33 @@ void InstrumentView::enterWaveEdit() {
 	lastAPress_=0 ;
 	int c=markVar_.GetInt() ;
 	if (c<a || c>b) markVar_.SetInt(a) ;
+	startTapPlay(a) ;
+}
+
+// trk2als: toda la región suena desde 'from' (y la canción, si no estaba
+// sonando): con A se marca donde va sonando
+void InstrumentView::startTapPlay(int from) {
+	markVar_.SetInt(from) ;
+	startPreview() ;
+	tapPlay_=previewing_ ;
+	Player *player=Player::GetInstance() ;
+	if (tapPlay_ && !player->IsRunning()) {
+		player->OnSongStartButton(0,7,false,false) ;
+		songByTap_=true ;
+	}
+}
+
+void InstrumentView::stopTapPlay() {
+	stopPreview() ;
+	if (songByTap_) {
+		Player *player=Player::GetInstance() ;
+		if (player->IsRunning()) player->OnSongStartButton(0,7,false,false) ;
+		songByTap_=false ;
+	}
 }
 
 void InstrumentView::exitWaveEdit() {
-	stopPreview() ;
+	stopTapPlay() ;
 	waveEdit_=false ;
 	waveSel_=0 ;
 	waveZoom_=1 ;
@@ -1417,6 +1451,7 @@ void InstrumentView::startPreview() {
 void InstrumentView::stopPreview() {
 	if (previewing_) Player::GetInstance()->StopStreaming() ;
 	previewing_=false ;
+	tapPlay_=false ;
 }
 
 // la marca más cercana al cursor (dentro de 1% de la región), o -1
@@ -1444,7 +1479,7 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 		return false ;
 	}
 	if (!pressed) {
-		if (previewing_ && !(mask&EPBM_A)) stopPreview() ;
+		if (previewing_ && !tapPlay_ && !(mask&EPBM_A)) stopPreview() ;
 		return true ;
 	}
 	// cambiar de pantalla (Select + flechas, o R + flechas) termina la edición.
@@ -1464,6 +1499,30 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 	if (c>b) c=b ;
 	std::vector<int> m=si->GetMarks() ;
 	isDirty_=true ;
+
+	// Start: tocar / parar la región desde el cursor (y la canción)
+	if (mask==EPBM_START) {
+		if (tapPlay_) stopTapPlay() ;
+		else startTapPlay((c>=b-step)?a:c) ;
+		return true ;
+	}
+	// mientras suena la región: A marca donde va sonando (lo que se oye va
+	// un poco atrás de lo que se lee: se compensa la latencia del audio)
+	if (tapPlay_) {
+		if (mask==EPBM_A) {
+			int sp=Player::GetInstance()->GetStreamPosition() ;
+			SoundSource *src=si->currentSource() ;
+			if (sp>=0 && src) {
+				int lat=int((long long)Audio::GetInstance()->GetAudioBufferSize()*2*
+				            src->GetSampleRate(-1)/44100) ;
+				int at=si->AddMark(sp-lat>a?sp-lat:a+1) ;
+				if (at>=0) markVar_.SetInt(at) ;
+			}
+			return true ;
+		}
+		// cualquier otra cosa la detiene y sigue como siempre
+		stopTapPlay() ;
+	}
 
 	if ((mask&(EPBM_L|EPBM_R)) && (mask&EPBM_B) && !(mask&EPBM_A)) {   // Select + B: seleccionar
 		waveSel_=(waveSel_>=2)?2:waveSel_+1 ;
@@ -1488,10 +1547,12 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 			int next=b ;
 			for (size_t i=0;i<m.size();i++) if (m[i]>c && m[i]<next) next=m[i] ;
 			markVar_.SetInt(next) ;
+			waveSel_=(next<b)?1:0 ;             // la marca queda agarrada: ← → la mueven
 		} else if (mask&EPBM_LEFT) {            // B + ←: la anterior
 			int prev=a ;
 			for (size_t i=0;i<m.size();i++) if (m[i]<c && m[i]>prev) prev=m[i] ;
 			markVar_.SetInt(prev) ;
+			waveSel_=(prev>a)?1:0 ;
 		} else if (mask&EPBM_UP) {              // B + ↑ / ↓: zoom
 			if (waveZoom_<64) waveZoom_*=2 ;
 		} else if (mask&EPBM_DOWN) {
@@ -1523,6 +1584,21 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 		}
 		return true ;
 	}
+	if ((mask==EPBM_LEFT || mask==EPBM_RIGHT) && waveSel_==1) {
+		int k=nearMark(m) ;
+		if (k>=0) {
+			int lo=(k>0)?m[k-1]+1:a+1 ;
+			int hi=(k+1<(int)m.size())?m[k+1]-1:b-1 ;
+			int p=m[k]+((mask==EPBM_RIGHT)?step:-step) ;
+			if (p<lo) p=lo ;
+			if (p>hi) p=hi ;
+			m[k]=p ;
+			si->SetMarks(m) ;
+			markVar_.SetInt(p) ;
+			return true ;
+		}
+		waveSel_=0 ;
+	}
 	if (mask==EPBM_LEFT || mask==EPBM_RIGHT) {
 		c+=(mask==EPBM_RIGHT)?step:-step ;
 		if (c<a) c=a ;
@@ -1535,7 +1611,16 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 		return true ;
 	}
 	if (mask==EPBM_DOWN) {                       // terminar: queda en "slice by"
-		if (waveSel_) waveSel_=0 ;
+		if (waveSel_==1) {                         // soltar la marca, en el cruce por cero
+			int k=nearMark(m) ;
+			if (k>=0) {
+				m.erase(m.begin()+k) ;
+				si->SetMarks(m) ;
+				int at=si->AddMark(c) ;
+				if (at>=0) markVar_.SetInt(at) ;
+			}
+			waveSel_=0 ;
+		} else if (waveSel_) waveSel_=0 ;
 		else exitWaveEdit() ;
 		return true ;
 	}
