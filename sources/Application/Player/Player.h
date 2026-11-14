@@ -76,6 +76,7 @@ public:
 	void StartStreaming(const Path &path) ;
 	void StartStreaming(const Path &path, double speed, double delaySecs, double startFrac, bool loop) ;
 	void StopStreaming() ;
+	int GetStreamPosition() ; // trk2als: cuadro del archivo que suena (-1 = nada)
 
 	// Channel data
 

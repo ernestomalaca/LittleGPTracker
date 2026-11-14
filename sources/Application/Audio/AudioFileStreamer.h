@@ -20,6 +20,7 @@ public:
 	// antes de sonar, startFrac es el punto de arranque (0-1) y loop repite
 	bool Start(const Path &, double speed, double delaySecs, double startFrac, bool loop) ;
 	void Stop() ;
+	int GetPosition() { return (mode_==AFSM_PLAYING && wav_)?position_:-1 ; } // trk2als
 protected:
 	AudioFileStreamerMode mode_ ;
 	Path path_ ;

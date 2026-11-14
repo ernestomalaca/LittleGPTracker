@@ -55,6 +55,19 @@ private:
 	Variable presetLoadVar_, presetSaveVar_ ;
 	Variable markVar_ ;      // trk2als: cursor de las marcas (slice manual)
 	bool markTap_ ;
+	// trk2als: slice manual, editar marcas sobre la onda
+	bool waveEdit_ ;
+	int waveZoom_ ;
+	int waveSel_ ;            // 0 nada, 1 la marca del cursor, 2 todas
+	unsigned long lastAPress_ ;
+	bool previewing_ ;
+	int previewPos_ ;
+	void enterWaveEdit() ;
+	void exitWaveEdit() ;
+	bool processWaveEdit(unsigned short mask,bool pressed) ;
+	void startPreview() ;
+	void stopPreview() ;
+	int nearMark(const std::vector<int> &m) ;
 	void openPresetLoad() ;
 	void openPresetSave() ;
 public:

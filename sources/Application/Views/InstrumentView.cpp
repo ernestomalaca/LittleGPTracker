@@ -22,74 +22,6 @@
 
 // trk2als: frecuencia de corte en Hz. A+izq/der: un semitono; A+arr/aba:
 // una octava. Se muestra en Hz o kHz
-// trk2als: slice manual. Cursor sobre la onda (en cuadros del sample):
-// A+←/→ lo mueve, A+↑/↓ salta a la marca siguiente/anterior; A (al soltar)
-// pone una marca ahí y B+A la quita (lo hace InstrumentView)
-class UIMarkField : public UIIntVarField {
-public:
-	UIMarkField(GUIPoint &p, Variable &v, SampleInstrument *si) : UIIntVarField(p,v,"",0,0,1,1), si_(si) {}
-	virtual void Draw(GUIWindow &w,int offset=0) {
-		GUITextProperties props ;
-		GUIPoint position=GetPosition() ;
-		position._y+=offset ;
-		if (focus_) {
-			((AppWindow&)w).SetColor(CD_HILITE2) ;
-			props.invert_=true ;
-		} else {
-			((AppWindow&)w).SetColor(CD_NORMAL) ;
-		}
-		SoundSource *ss=si_->currentSource() ; int size=ss?ss->GetSize(-1):0 ;
-		int pos=clampPos() ;
-		int pm=size>0?int((long long)pos*1000/size):0 ;
-		std::vector<int> m=si_->GetMarks() ;
-		int on=-1 ;
-		for (size_t i=0;i<m.size();i++) if (m[i]==pos) on=int(i) ;
-		char buffer[40] ;
-		if (on>=0) sprintf(buffer,"marca %d/%d: %d.%d%%",on+1,int(m.size()),pm/10,pm%10) ;
-		else sprintf(buffer,"marca: %d.%d%%",pm/10,pm%10) ;
-		w.DrawString(buffer,position,props) ;
-	}
-	virtual void ProcessArrow(unsigned short mask) {
-		int a,b ;
-		if (!si_->SimplerRegion(a,b)) return ;
-		int pos=clampPos() ;
-		int step=(b-a)/256 ;
-		if (step<1) step=1 ;
-		std::vector<int> m=si_->GetMarks() ;
-		switch (mask) {
-			case EPBM_RIGHT: pos+=step ; break ;
-			case EPBM_LEFT:  pos-=step ; break ;
-			case EPBM_UP: {     // la marca siguiente (o el final)
-				int next=b ;
-				for (size_t i=0;i<m.size();i++) if (m[i]>pos && m[i]<next) next=m[i] ;
-				pos=next ;
-				break ;
-			}
-			case EPBM_DOWN: {   // la anterior (o el inicio)
-				int prev=a ;
-				for (size_t i=0;i<m.size();i++) if (m[i]<pos && m[i]>prev) prev=m[i] ;
-				pos=prev ;
-				break ;
-			}
-			default: return ;
-		}
-		if (pos<a) pos=a ;
-		if (pos>b) pos=b ;
-		src_.SetInt(pos) ;
-	}
-private:
-	int clampPos() {
-		int a,b ;
-		int pos=src_.GetInt() ;
-		if (si_->SimplerRegion(a,b)) {
-			if (pos<a) pos=a ;
-			if (pos>b) pos=b ;
-		}
-		return pos ;
-	}
-	SampleInstrument *si_ ;
-} ;
-
 class UIFreqVarField : public UIIntVarField {
 public:
 	UIFreqVarField(GUIPoint &p, Variable &v) : UIIntVarField(p,v,"freq: %d",30,22000,1,12) {}
@@ -153,6 +85,12 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data),
 	presetSaveVar_("preset save",IV_PRESET_SAVE,(int)0,0),
 	markVar_("mark",IV_MARK,(int)0,0) {
 	markTap_=false ;
+	waveEdit_=false ;
+	waveZoom_=1 ;
+	waveSel_=0 ;
+	lastAPress_=0 ;
+	previewing_=false ;
+	previewPos_=-1 ;
 
 	project_=data->project_ ;
 	lastFocusID_=0 ;
@@ -299,9 +237,8 @@ void InstrumentView::fillSampleParameters() {
 
 		LABEL("PLAYBACK") ;
 		if (mode==SM_SLICE) {
-			if (instrument->GetSimpler(SIP_S_SLICEBY)==SSB_MANUAL) {
-				ADD(new UIMarkField(AT(L),markVar_,instrument)) ;
-			} else {
+			// en manual las rebanadas salen de las marcas (se editan en la onda)
+			if (instrument->GetSimpler(SIP_S_SLICEBY)!=SSB_MANUAL) {
 				v=instrument->FindVariable(SIP_S_SLICES) ;
 				ADD(new UIIntVarField(AT(L),*v,"slices: %d",2,64,1,4)) ;
 			}
@@ -604,31 +541,24 @@ void InstrumentView::warpToNext(int offset) {
 
 void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 
-	// trk2als: slice manual: A tocada (sin flechas) pone una marca al soltarla
-	bool onMark=GetFocus() && !GetFocus()->IsStatic() &&
-	            ((UIIntVarField *)GetFocus())->GetVariableID()==IV_MARK &&
-	            current_ && current_->GetType()==IT_SAMPLE ;
+	// trk2als: slice manual: con "slice by: manual" se edita la onda
+	// (processWaveEdit). Se entra al elegir manual o con A sobre "manual"
+	if (waveEdit_) {
+		if (processWaveEdit(mask,pressed)) return ;
+	}
+	bool onSliceBy=GetFocus() && !GetFocus()->IsStatic() &&
+	            ((UIIntVarField *)GetFocus())->GetVariableID()==SIP_S_SLICEBY &&
+	            current_ && current_->GetType()==IT_SAMPLE &&
+	            ((SampleInstrument *)current_)->GetSimpler(SIP_S_SLICEBY)==SSB_MANUAL ;
 	if (!pressed) {
 		if (markTap_ && !(mask&EPBM_A)) {
 			markTap_=false ;
-			SampleInstrument *si=(SampleInstrument *)current_ ;
-			int at=si->AddMark(markVar_.GetInt()) ;
-			if (at>=0) markVar_.SetInt(at) ;
+			enterWaveEdit() ;
 			isDirty_=true ;
 		}
 		return ;
 	}
-	markTap_=onMark && mask==EPBM_A ;
-	if (onMark && (mask&EPBM_B) && (mask&EPBM_A)) {
-		SampleInstrument *si=(SampleInstrument *)current_ ;
-		int a,b ;
-		si->SimplerRegion(a,b) ;
-		int tol=(b-a)/100 ;           // la marca bajo el cursor (o casi)
-		if (tol<1) tol=1 ;
-		si->RemoveMarkNear(markVar_.GetInt(),tol) ;
-		isDirty_=true ;
-		return ;
-	}
+	markTap_=onSliceBy && mask==EPBM_A ;
 
 	isDirty_=false ;
 
@@ -733,12 +663,19 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 	}
 	// cambiar el warp muestra u oculta 'transpose'
 	// ... y el loop mode (en pistas de tracker) muestra u oculta bars y bpm
+	bool toManual=(editedID==SIP_S_SLICEBY &&
+	     current_->FindVariable(editedID)->GetInt()==SSB_MANUAL && editedBefore!=SSB_MANUAL) ;
 	if ((editedID==SIP_WARP || editedID==SIP_LOOPMODE || editedID==SIP_S_MODE ||
 	     editedID==SIP_S_LOOP || editedID==SIP_S_WARP || editedID==SIP_S_ETAB ||
 	     editedID==SIP_S_SLICEBY) &&
 	    current_->FindVariable(editedID)->GetInt()!=editedBefore) {
 		lastFocusID_=editedID ;
 		onInstrumentChange() ;
+		isDirty_=true ;
+	}
+	if (toManual) {
+		markTap_=false ;
+		enterWaveEdit() ;
 		isDirty_=true ;
 	}
 
@@ -996,6 +933,16 @@ void InstrumentView::drawWaveform() {
 		if (vFrom<0) { vTo-=vFrom ; vFrom=0 ; }
 		if (vTo>size) { vFrom-=vTo-size ; vTo=size ; if (vFrom<0) vFrom=0 ; }
 		if (vTo-vFrom>size*8/10) { vFrom=0 ; vTo=size ; } // casi todo: la onda completa
+		// editando marcas: zoom alrededor del cursor
+		if (waveEdit_ && waveZoom_>1) {
+			int len=(vTo-vFrom)/waveZoom_ ;
+			if (len<64) len=64 ;
+			int c=markVar_.GetInt() ;
+			vFrom=c-len/2 ;
+			if (vFrom<0) vFrom=0 ;
+			vTo=vFrom+len ;
+			if (vTo>size) { vTo=size ; vFrom=(size-len>0)?size-len:0 ; }
+		}
 	}
 	if (index!=wfSample_ || size!=wfSize_ || vFrom!=wfFrom_ || vTo!=wfTo_) {
 		for (int b=0;b<WF_BARS;b++) {
@@ -1146,7 +1093,7 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 			sprintf(info+strlen(info)," %d.%d bar%s",b10/10,b10%10,b10==10?"":"s") ;
 		}
 		strcat(info," a C3") ;   // la envolvente dibujada es la de la nota original
-		DrawText(632-8*int(strlen(info)),3,info,dim2,0) ;
+		if (!waveEdit_) DrawText(632-8*int(strlen(info)),3,info,dim2,0) ;
 	}
 
 	bool loop=(mode==SM_CLASSIC && si->GetSimpler(SIP_S_LOOP)) ;
@@ -1291,20 +1238,39 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 			}
 		}
 		FillRect(b-1,Y-4,2,H+8,hi2) ;
-		// slice manual: el cursor donde va la próxima marca
-		if (si->GetSimpler(SIP_S_SLICEBY)==SSB_MANUAL) {
+		// slice manual, editando: las marcas seleccionadas y el cursor
+		if (waveEdit_ && si->GetSimpler(SIP_S_SLICEBY)==SSB_MANUAL) {
 			int ca,cb ;
 			si->SimplerRegion(ca,cb) ;
+			std::vector<int> m=si->GetMarks() ;
 			int cpos=markVar_.GetInt() ;
 			if (cpos<ca) cpos=ca ;
 			if (cpos>cb) cpos=cb ;
+			int near=nearMark(m) ;
+			for (size_t i=0;i<m.size();i++) {
+				bool sel=(waveSel_>=2) || (waveSel_==1 && int(i)==near) ;
+				if (sel) {
+					int mx=FPX(m[i]) ;
+					if (mx>=X && mx<=X+W) FillRect(mx-2,Y-4,4,H+8,hi) ;
+				}
+			}
 			int cx=FPX(cpos) ;
-			bool focused=GetFocus() && !GetFocus()->IsStatic() &&
-			             ((UIIntVarField *)GetFocus())->GetVariableID()==IV_MARK ;
-			GUIColor cc=focused?fg:dim2 ;
-			for (int yy=Y-4;yy<Y+H+4;yy+=6) FillRect(cx-1,yy,2,4,cc) ;
-			if (focused) {
-				for (int q=0;q<5;q++) FillRect(cx-q,Y+H+4+q,2*q+1,1,fg) ;
+			FillRect(cx-1,Y-4,2,H+8,fg) ;
+			for (int q=0;q<6;q++) FillRect(cx-q,Y+H+4+q,2*q+1,1,fg) ;
+			char tag[48] ;
+			SoundSource *cs=si->currentSource() ;
+			int size=cs?cs->GetSize(-1):0 ;
+			int pm=size>0?int((long long)cpos*1000/size):0 ;
+			sprintf(tag,"marcas %d  %d.%d%%  zoom x%d",int(m.size()),pm/10,pm%10,waveZoom_) ;
+			DrawText(X+4,Y+H-12,tag,fg,0) ;
+			{
+				const char *help="A escucha  AA marca  B+<> salta  B+A borra  abajo: listo" ;
+				DrawText(632-8*int(strlen(help)),3,help,dim2,0) ;
+			}
+			// lo que suena al escuchar (A)
+			if (previewing_) {
+				int sp=Player::GetInstance()->GetStreamPosition() ;
+				if (sp>=wfFrom_ && sp<=wfFrom_+vLen) FillRect(FPX(sp)-1,Y-4,3,H+8,ColorOf(CD_PLAY),1) ;
 			}
 		}
 	} else {
@@ -1332,6 +1298,14 @@ void InstrumentView::AnimationUpdate() {
 	int px=-1 ;
 	if (pos>=wfFrom_ && wfTo_>wfFrom_ && pos<=wfTo_) {
 		px=16+int((long long)(pos-wfFrom_)*(WF_BARS*8)/(wfTo_-wfFrom_)) ;
+	}
+	// editando marcas: el cabezal de la escucha
+	if (previewing_) {
+		int sp=Player::GetInstance()->GetStreamPosition() ;
+		if (sp>=0 && sp!=previewPos_) {
+			previewPos_=sp ;
+			px=-2 ;
+		}
 	}
 	if (px!=playheadPx_) {
 		ClearShapes() ;
@@ -1392,4 +1366,178 @@ void InstrumentView::OnPresetSave(const std::string &name) {
 		View::SetNotification("No se pudo guardar el preset") ;
 	}
 	isDirty_=true ;
+}
+
+/************************************************************
+ trk2als: slice manual, editar marcas sobre la onda
+
+   ← →            mover el cursor
+   A              escuchar desde el cursor (mientras se mantenga)
+   A + ← →        moverse escuchando
+   A, A           poner una marca en el cursor (doble toque)
+   B + ← →        saltar a la marca anterior / siguiente
+   B + A          borrar la marca del cursor (o las seleccionadas)
+   Select + B     seleccionar: una vez la marca del cursor, otra vez todas
+   ↑ / B + ↓      acercar / alejar
+   ↓              terminar (queda en "slice by")
+ ************************************************************/
+
+void InstrumentView::enterWaveEdit() {
+	if (!current_ || current_->GetType()!=IT_SAMPLE) return ;
+	SampleInstrument *si=(SampleInstrument *)current_ ;
+	int a,b ;
+	if (!si->SimplerRegion(a,b)) return ;
+	waveEdit_=true ;
+	waveZoom_=1 ;
+	waveSel_=0 ;
+	lastAPress_=0 ;
+	int c=markVar_.GetInt() ;
+	if (c<a || c>b) markVar_.SetInt(a) ;
+}
+
+void InstrumentView::exitWaveEdit() {
+	stopPreview() ;
+	waveEdit_=false ;
+	waveSel_=0 ;
+	waveZoom_=1 ;
+}
+
+void InstrumentView::startPreview() {
+	if (!current_ || current_->GetType()!=IT_SAMPLE) return ;
+	SampleInstrument *si=(SampleInstrument *)current_ ;
+	int index=si->GetSampleIndex() ;
+	SoundSource *src=si->currentSource() ;
+	if (index<0 || !src || src->GetSize(-1)<=0) return ;
+	std::string name=SamplePool::GetInstance()->GetNameList()[index] ;
+	double frac=double(markVar_.GetInt())/src->GetSize(-1) ;
+	Player::GetInstance()->StartStreaming(Path(std::string("samples:")+name),1.0,0,frac,false) ;
+	previewing_=true ;
+}
+
+void InstrumentView::stopPreview() {
+	if (previewing_) Player::GetInstance()->StopStreaming() ;
+	previewing_=false ;
+}
+
+// la marca más cercana al cursor (dentro de 1% de la región), o -1
+int InstrumentView::nearMark(const std::vector<int> &m) {
+	SampleInstrument *si=(SampleInstrument *)current_ ;
+	int a,b ;
+	si->SimplerRegion(a,b) ;
+	int tol=(b-a)/100 ;
+	if (tol<1) tol=1 ;
+	int c=markVar_.GetInt(), best=-1, dist=tol+1 ;
+	for (size_t i=0;i<m.size();i++) {
+		int d=m[i]-c ;
+		if (d<0) d=-d ;
+		if (d<dist) { dist=d ; best=int(i) ; }
+	}
+	return best ;
+}
+
+// true si la tecla se usó aquí
+bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
+	if (!current_ || current_->GetType()!=IT_SAMPLE ||
+	    ((SampleInstrument *)current_)->GetSimpler(SIP_S_SLICEBY)!=SSB_MANUAL ||
+	    ((SampleInstrument *)current_)->GetSimpler(SIP_S_MODE)!=SM_SLICE) {
+		exitWaveEdit() ;
+		return false ;
+	}
+	if (!pressed) {
+		if (previewing_ && !(mask&EPBM_A)) stopPreview() ;
+		return true ;
+	}
+	// cambiar de pantalla (Select + flechas, o R + flechas) termina la edición.
+	// Ojo: Shift en la Mac también manda R, así que R solo no cuenta
+	const unsigned short arrows=EPBM_UP|EPBM_DOWN|EPBM_LEFT|EPBM_RIGHT ;
+	if ((mask&EPBM_R) && (mask&arrows) && !(mask&EPBM_B)) {
+		exitWaveEdit() ;
+		return false ;
+	}
+	SampleInstrument *si=(SampleInstrument *)current_ ;
+	int a,b ;
+	si->SimplerRegion(a,b) ;
+	int step=(wfTo_>wfFrom_)?(wfTo_-wfFrom_)/128:(b-a)/128 ;
+	if (step<1) step=1 ;
+	int c=markVar_.GetInt() ;
+	if (c<a) c=a ;
+	if (c>b) c=b ;
+	std::vector<int> m=si->GetMarks() ;
+	isDirty_=true ;
+
+	if ((mask&(EPBM_L|EPBM_R)) && (mask&EPBM_B) && !(mask&EPBM_A)) {   // Select + B: seleccionar
+		waveSel_=(waveSel_>=2)?2:waveSel_+1 ;
+		return true ;
+	}
+	if ((mask&EPBM_B) && (mask&EPBM_A)) {     // B + A: borrar
+		if (waveSel_>=2) {
+			m.clear() ;
+			si->SetMarks(m) ;
+		} else {
+			int k=nearMark(m) ;
+			if (k>=0) {
+				m.erase(m.begin()+k) ;
+				si->SetMarks(m) ;
+			}
+		}
+		waveSel_=0 ;
+		return true ;
+	}
+	if (mask&EPBM_B) {
+		if (mask&EPBM_RIGHT) {                  // B + →: la marca siguiente
+			int next=b ;
+			for (size_t i=0;i<m.size();i++) if (m[i]>c && m[i]<next) next=m[i] ;
+			markVar_.SetInt(next) ;
+		} else if (mask&EPBM_LEFT) {            // B + ←: la anterior
+			int prev=a ;
+			for (size_t i=0;i<m.size();i++) if (m[i]<c && m[i]>prev) prev=m[i] ;
+			markVar_.SetInt(prev) ;
+		} else if (mask&EPBM_UP) {              // B + ↑ / ↓: zoom
+			if (waveZoom_<64) waveZoom_*=2 ;
+		} else if (mask&EPBM_DOWN) {
+			if (waveZoom_>1) waveZoom_/=2 ;
+		}
+		return true ;
+	}
+	if (mask&EPBM_A) {
+		if (mask==EPBM_A) {
+			unsigned long now=System::GetInstance()->GetClock() ;
+			if (lastAPress_ && now-lastAPress_<400) {   // doble toque: marca
+				int at=si->AddMark(c) ;
+				if (at>=0) markVar_.SetInt(at) ;
+				lastAPress_=0 ;
+			} else {
+				lastAPress_=now ;
+			}
+			waveSel_=0 ;
+			startPreview() ;
+			return true ;
+		}
+		if (mask&(EPBM_LEFT|EPBM_RIGHT)) {        // A + ← →: moverse escuchando
+			c+=(mask&EPBM_RIGHT)?step:-step ;
+			if (c<a) c=a ;
+			if (c>b) c=b ;
+			markVar_.SetInt(c) ;
+			lastAPress_=0 ;
+			startPreview() ;
+		}
+		return true ;
+	}
+	if (mask==EPBM_LEFT || mask==EPBM_RIGHT) {
+		c+=(mask==EPBM_RIGHT)?step:-step ;
+		if (c<a) c=a ;
+		if (c>b) c=b ;
+		markVar_.SetInt(c) ;
+		return true ;
+	}
+	if (mask==EPBM_UP) {
+		if (waveZoom_<64) waveZoom_*=2 ;
+		return true ;
+	}
+	if (mask==EPBM_DOWN) {                       // terminar: queda en "slice by"
+		if (waveSel_) waveSel_=0 ;
+		else exitWaveEdit() ;
+		return true ;
+	}
+	return true ;
 }

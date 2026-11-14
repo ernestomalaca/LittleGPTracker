@@ -18,6 +18,6 @@ typedef unsigned int uint ;
 typedef unsigned char uchar ;
 
 #define MIN(a,b) ((a)<(b)?(a):(b))
-#define MAX(a,b) ((a)<(b)?(a):(b))
+#define MAX(a,b) ((a)>(b)?(a):(b))   // trk2als: antes devolvía el menor (era una copia de MIN)
 
 #endif

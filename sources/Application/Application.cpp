@@ -19,6 +19,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <time.h>
+#include <stdlib.h>
 
 static char crashPath_[1024] ;
 
@@ -48,6 +49,7 @@ static void crashHandler(int sig) {
 }
 
 static void installCrashLog() {
+	if (getenv("TRK_NOCRASHLOG")) return ;   // p. ej. al depurar con AddressSanitizer
 	Path p("root:crash.log") ;
 	strncpy(crashPath_,p.GetPath().c_str(),sizeof(crashPath_)-1) ;
 	int sigs[5]={SIGSEGV,SIGBUS,SIGFPE,SIGABRT,SIGILL} ;
