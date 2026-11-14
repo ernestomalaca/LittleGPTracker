@@ -40,6 +40,7 @@ private:
 	void resetFocusedField() ;
 	int wfSample_ ;
 	int wfSize_ ;
+	int wfFrom_, wfTo_ ;    // trk2als: cuadros que muestra la onda (zoom a la región)
 	enum { WF_BARS=76 } ;   // barras de 5 px cada 8 px = 608 px
 	unsigned char wfPeaks_[WF_BARS] ;
 	int playheadPx_ ;        // dónde se dibujó el cursor de reproducción (-1 = no)

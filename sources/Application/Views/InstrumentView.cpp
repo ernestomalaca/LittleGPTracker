@@ -89,6 +89,7 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data),
 	lastSampleIdx_=-2 ;
 	wfSample_=-1 ;
 	wfSize_=0 ;
+	wfFrom_=wfTo_=0 ;
 	simplerView_=false ;
 	ampLabelRow_=-1 ;
 	playheadPx_=-1 ;
@@ -876,10 +877,26 @@ void InstrumentView::drawWaveform() {
 	int channels=src->GetChannelCount(-1) ;
 	if (size<=0 || !data || channels<1) return ;
 
-	if (index!=wfSample_ || size!=wfSize_) {
+	// trk2als: en el Sampler la onda hace zoom a la región start..end (con
+	// un margen a cada lado) para que se vea lo que suena
+	int vFrom=0, vTo=size ;
+	if (simplerView_) {
+		int a=int((long long)size*si->GetSimpler(SIP_S_START)/100) ;
+		int b=int((long long)size*si->GetSimpler(SIP_S_END)/100) ;
+		if (b<=a) b=a+1 ;
+		int margin=(b-a)/10 ;
+		vFrom=a-margin ;
+		vTo=b+margin ;
+		int minLen=src->GetSampleRate(-1)/20 ;        // al menos 50 ms a la vista
+		if (vTo-vFrom<minLen) { int c=(a+b)/2 ; vFrom=c-minLen/2 ; vTo=c+minLen/2 ; }
+		if (vFrom<0) { vTo-=vFrom ; vFrom=0 ; }
+		if (vTo>size) { vFrom-=vTo-size ; vTo=size ; if (vFrom<0) vFrom=0 ; }
+		if (vTo-vFrom>size*8/10) { vFrom=0 ; vTo=size ; } // casi todo: la onda completa
+	}
+	if (index!=wfSample_ || size!=wfSize_ || vFrom!=wfFrom_ || vTo!=wfTo_) {
 		for (int b=0;b<WF_BARS;b++) {
-			int from=int((long long)size*b/WF_BARS) ;
-			int to=int((long long)size*(b+1)/WF_BARS) ;
+			int from=vFrom+int((long long)(vTo-vFrom)*b/WF_BARS) ;
+			int to=vFrom+int((long long)(vTo-vFrom)*(b+1)/WF_BARS) ;
 			int step=(to-from)/200+1 ;      // basta con unas 200 lecturas por barra
 			int peak=0 ;
 			for (int i=from;i<to;i+=step) {
@@ -891,6 +908,8 @@ void InstrumentView::drawWaveform() {
 		}
 		wfSample_=index ;
 		wfSize_=size ;
+		wfFrom_=vFrom ;
+		wfTo_=vTo ;
 	}
 
 	if (simplerView_) {
@@ -995,9 +1014,18 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 	GUIColor ghost=Mix(bg,hi,28) ;
 	GUIColor panel=Mix(bg,fg,9) ;
 	int mode=si->GetSimpler(SIP_S_MODE) ;
-	int a=X+W*si->GetSimpler(SIP_S_START)/100 ;
-	int b=X+W*si->GetSimpler(SIP_S_END)/100 ;
+	// cuadro del sample -> px, con el zoom de la onda
+	int vLen=(wfTo_>wfFrom_)?wfTo_-wfFrom_:size ;
+	#define FPX(f) (X+int((long long)((f)-wfFrom_)*W/vLen))
+	int a=FPX((long long)size*si->GetSimpler(SIP_S_START)/100) ;
+	int b=FPX((long long)size*si->GetSimpler(SIP_S_END)/100) ;
 	if (b<=a) b=a+2 ;
+	// con zoom: abajo, una barrita con la parte del sample que se ve
+	if (vLen<size) {
+		int sy=Y+H+1 ;
+		FillRect(X,sy,W,2,Mix(bg,fg,18)) ;
+		FillRect(X+int((long long)wfFrom_*W/size),sy,int((long long)vLen*W/size)+2,2,dim2) ;
+	}
 
 	SoundSource *src=SamplePool::GetInstance()->GetSource(si->GetSampleIndex()) ;
 	int rate=src?src->GetSampleRate(-1):0 ;
@@ -1018,7 +1046,7 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 	}
 
 	bool loop=(mode==SM_CLASSIC && si->GetSimpler(SIP_S_LOOP)) ;
-	int l0=b-W*si->GetSimpler(SIP_S_LLEN)/100 ;
+	int l0=b-int((long long)size*si->GetSimpler(SIP_S_LLEN)/100*W/vLen) ;
 	if (l0<a) l0=a ;
 	if (loop) FillRect(l0,Y-4,b-l0,H+8,Mix(bg,hi,16),8) ;
 
@@ -1031,7 +1059,7 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 		float tick=SyncMaster::GetInstance()->GetTickSampleCount() ;
 		if (bpm>0 && tick>0) framesPerMs=(rate*60.0f/bpm/(24.0f*tick))*44.1f ;
 	}
-	float msPerPx=(framesPerMs>0)?float(size)/W/framesPerMs:0 ;
+	float msPerPx=(framesPerMs>0)?float(vLen)/W/framesPerMs:0 ;
 	bool oneShot=(mode==SM_ONESHOT) ;
 	float atk=float(oneShot?si->GetSimpler(SIP_S_FIN):si->GetSimpler(SIP_S_ATK)) ;
 	float dec=oneShot?0:float(si->GetSimpler(SIP_S_DEC)) ;
@@ -1141,10 +1169,11 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 	// cursor de reproducción
 	playheadPx_=-1 ;
 	int pos=si->GetPlayPosition() ;
-	if (pos>=0 && pos<=size) {
-		playheadPx_=X+int((long long)pos*W/size) ;
+	if (pos>=wfFrom_ && pos<=wfFrom_+vLen) {
+		playheadPx_=FPX(pos) ;
 		FillRect(playheadPx_-1,Y-4,3,H+8,ColorOf(CD_PLAY),1) ;
 	}
+	#undef FPX
 }
 
 // trk2als: ~25 veces por segundo; si el cursor se movió, redibujar las figuras
@@ -1153,8 +1182,8 @@ void InstrumentView::AnimationUpdate() {
 	SampleInstrument *si=(SampleInstrument *)current_ ;
 	int pos=si->GetPlayPosition() ;
 	int px=-1 ;
-	if (pos>=0 && wfSize_>0 && pos<=wfSize_) {
-		px=16+int((long long)pos*(WF_BARS*8)/wfSize_) ;
+	if (pos>=wfFrom_ && wfTo_>wfFrom_ && pos<=wfTo_) {
+		px=16+int((long long)(pos-wfFrom_)*(WF_BARS*8)/(wfTo_-wfFrom_)) ;
 	}
 	if (px!=playheadPx_) {
 		ClearShapes() ;
