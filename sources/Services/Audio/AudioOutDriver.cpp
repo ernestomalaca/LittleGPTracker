@@ -1,5 +1,7 @@
 
 #include "AudioOutDriver.h"
+#include <stdlib.h>
+#include "System/Console/Trace.h"
 #include "Application/Model/Project.h"
 #include "Application/Player/SyncMaster.h" // Should be installable
 #include "AudioDriver.h"
@@ -42,13 +44,49 @@ void AudioOutDriver::Stop() {
 	driver_->Stop() ;
 }
 
+static volatile int g_loadNow = 0, g_loadPeak = 0, g_loadWindow = 0;
+static double g_loadSince = 0;
+
+// reloj fino (el de TimeService va en milisegundos)
+#if defined(__APPLE__) || defined(__linux__)
+#include <time.h>
+static double fineSeconds() {
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return t.tv_sec + t.tv_nsec / 1e9;
+}
+#else
+static double fineSeconds() { return TimeService::GetInstance()->GetTime(); }
+#endif
+
+void GetAudioLoad(int &current, int &peak) {
+    current = g_loadNow;
+    peak = g_loadPeak;
+}
+
 void AudioOutDriver::Trigger() {
 
-	TimeService *ts=TimeService::GetInstance() ;
+    double before = fineSeconds();
 
     prepareMixBuffers();
     hasSound_=AudioMixer::Render(primarySoundBuffer_,sampleCount_) ;
     clipToMix();
+
+    // trk2als: carga = tiempo de cálculo / duración del bloque
+    double now = fineSeconds();
+    if (sampleCount_ > 0) {
+        int load = int((now - before) * 44100.0 / sampleCount_ * 100.0 + 0.5);
+        g_loadNow = load;
+        if (load > g_loadWindow) g_loadWindow = load;
+        if (now - g_loadSince >= 1.0) {      // el pico del último segundo
+            g_loadPeak = g_loadWindow;
+            g_loadWindow = 0;
+            g_loadSince = now;
+            static int logIt = -1;          // TRK_LOADLOG=1: una línea por segundo
+            if (logIt < 0) logIt = getenv("TRK_LOADLOG") ? 1 : 0;
+            if (logIt) Trace::Log("AUDIO", "carga pico %d%%", g_loadPeak);
+        }
+    }
     driver_->AddBuffer(mixBuffer_,sampleCount_) ;
 }
 

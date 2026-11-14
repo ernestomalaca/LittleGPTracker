@@ -16,6 +16,27 @@
 #include <sstream>
 #include <stdlib.h>
 #include <string>
+#include "Services/Audio/AudioOutDriver.h"
+#include "Application/Model/Config.h"
+#include <stdlib.h>
+#include <stdio.h>
+
+// trk2als: carga del audio (pico del último segundo) y su estimado en la
+// consola de referencia: CONSOLEFACTOR en config.xml (cuántas veces más lenta
+// es, 9 para la RG353V contra una Mac con Apple Silicon)
+static void loadText(char *out) {
+    static int factor = -1;
+    if (factor < 0) {
+        const char *v = Config::GetInstance()->GetValue("CONSOLEFACTOR");
+        factor = v ? atoi(v) : 9;
+        if (factor < 1) factor = 1;
+    }
+    int now, peak;
+    GetAudioLoad(now, peak);
+    int est = peak * factor;
+    if (est > 999) est = 999;
+    sprintf(out, "%2d%% rg%3d%%", peak > 99 ? 99 : peak, est);
+}
 
 /****************
  Constructor
@@ -1494,9 +1515,9 @@ void SongView::OnPlayerUpdate(PlayerEventType eventType, unsigned int tick) {
         DrawString(pos._x, pos._y, "----", props);
     }
 
-    char strbuffer[10];
+    char strbuffer[24];
     pos._y += 1;
-    sprintf(strbuffer, "%3.3d%%", player->GetPlayedBufferPercentage());
+    loadText(strbuffer);   // trk2als: carga en la Mac y estimado en la consola
     DrawString(pos._x, pos._y, strbuffer, props);
 
     System *sys = System::GetInstance();

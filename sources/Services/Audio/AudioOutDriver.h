@@ -11,6 +11,11 @@ class AudioDriver ;
 #define MAX_POSITIVE_FIXED i2fp(32767)
 #define MAX_NEGATIVE_FIXED i2fp(-32768)
 
+// trk2als: carga del audio en %: lo que tarda en calcularse un bloque contra
+// lo que dura sonando. current = el último bloque; peak = el máximo del último
+// segundo. Más de 100 = no alcanza (underrun)
+void GetAudioLoad(int &current, int &peak) ;
+
 class AudioOutDriver: public AudioOut,protected I_Observer {
   public:
     AudioOutDriver(AudioDriver &) ;
