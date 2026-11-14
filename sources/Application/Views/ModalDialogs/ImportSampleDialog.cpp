@@ -19,7 +19,7 @@ static const char *buttonText[3]= {
 	"Exit"	
 } ;
 
-ImportSampleDialog::ImportSampleDialog(View &view):ModalView(view) {
+ImportSampleDialog::ImportSampleDialog(View &view, bool audioOnly):ModalView(view),audioOnly_(audioOnly) {
 	if (!initStatic_) {
 		const char *slpath=SamplePool::GetInstance()->GetSampleLib() ;
 		sampleLib_=Path(slpath) ;
@@ -127,7 +127,7 @@ void ImportSampleDialog::preview(Path &element) {
 	Player *player=Player::GetInstance() ;
 	// solo para loops: el instrumento de una pista de audio, o uno en looper
 	// sync. En una pista de tracker el sample se oye a su velocidad original
-	bool loopContext=viewData_->project_->IsAudioInstrument(toInstr_) ;
+	bool loopContext=audioOnly_ || viewData_->project_->IsAudioInstrument(toInstr_) ;
 	I_Instrument *instr=viewData_->project_->GetInstrumentBank()->GetInstrument(toInstr_) ;
 	if (instr && instr->GetType()==IT_SAMPLE &&
 	    instr->FindVariable(SIP_LOOPMODE)->GetInt()==SILM_LOOPSYNC) {
@@ -139,7 +139,7 @@ void ImportSampleDialog::preview(Path &element) {
 		delete wav ;
 		// el nombre manda; si se abrió desde una pista de audio, también se adivina
 		int bpm=SampleInstrument::DetectBpm(element.GetName().c_str(),secs,
-		                                    viewData_->project_->IsAudioInstrument(toInstr_)) ;
+		                                    audioOnly_ || viewData_->project_->IsAudioInstrument(toInstr_)) ;
 		if (bpm>0) {
 			int tempo=viewData_->project_->GetTempo() ;
 			int bars=int(secs*bpm/240.0f+0.5f) ;
@@ -177,7 +177,7 @@ void ImportSampleDialog::import(Path &element) {
 			// al siguiente instrumento libre para importar muchos de un jalón
 		};
 		endPreview() ;
-		EndModal(0) ;
+		EndModal(1) ;
 		return ;
 	} else {
         const char *err_str = (sampleID == -SLOAD_ERR_MAX_SAMPLES)
@@ -330,7 +330,7 @@ void ImportSampleDialog::setCurrentFolder(Path *path) {
 			for (it->Begin();!it->IsDone();it->Next()) {
                 Path &current = it->CurrentItem();
                 if (!current.IsDirectory()) {
-                                  if ((current.Matches("*.wav") || current.Matches("*.sf2")) && current.GetName()[0]!='.') {
+                                  if ((current.Matches("*.wav") || (!audioOnly_ && current.Matches("*.sf2"))) && current.GetName()[0]!='.') {
 						Path *sample=new Path(current) ;
 						sampleList_.Insert(sample) ;
 					}

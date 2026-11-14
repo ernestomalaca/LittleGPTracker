@@ -11,6 +11,8 @@
 #include "Application/Views/ModalDialogs/MessageBox.h"
 #include "Application/Views/ModalDialogs/TrackTypeDialog.h"
 #include "Application/Views/ModalDialogs/PresetDialog.h"
+#include "Application/Views/ModalDialogs/ImportSampleDialog.h"
+#include "Application/Instruments/SamplePool.h"
 #include "Application/Instruments/InstrumentPresets.h"
 #include "UIController.h"
 #include "VuMeterUtil.h"
@@ -56,6 +58,7 @@ SongView::SongView(GUIWindow &w, ViewData *viewData, const char *song)
     headerMode_ = false;
     pendingTypeCh_ = -1;
     presetCh_ = -1;
+    pickClip_ = pickCell_ = -1;
     pendingType_ = 0;
     songname_ = song;
 
@@ -118,10 +121,51 @@ unsigned char SongView::freeClip() {
             if (isAudioColumn(ch) && c < MAX_SAMPLEINSTRUMENT_COUNT) used[c] = true;
         }
     }
+    for (int ch = 0; ch < SONG_CHANNEL_COUNT; ch++) {   // los de las pistas MIDI
+        int o = viewData_->project_->GetTrackInstrument(ch);
+        if (o >= 0 && o < MAX_SAMPLEINSTRUMENT_COUNT) used[o] = true;
+    }
     for (int i = 0; i < MAX_SAMPLEINSTRUMENT_COUNT; i++) {
         if (!used[i]) return (unsigned char)i;
     }
     return 0xFF;
+}
+
+// trk2als: A en una celda vacía de una pista de audio: elegir el archivo; el
+// loop (un instrumento libre, limpio) queda en esa celda
+static void AudioPickCallback(View &v, ModalView &dialog) {
+    ((SongView &)v).OnAudioPicked(dialog.GetReturnCode() == 1);
+}
+
+void SongView::pickAudio() {
+    unsigned char clip = freeClip();
+    if (clip == 0xFF) {
+        View::SetNotification("no quedan instrumentos libres");
+        return;
+    }
+    Path sampleLib(SamplePool::GetInstance()->GetSampleLib());
+    if (FileSystem::GetInstance()->GetFileType(sampleLib.GetPath().c_str()) != FT_DIR) {
+        View::SetNotification("no encuentro la samplelib");
+        return;
+    }
+    viewData_->project_->GetInstrumentBank()->GetInstrument(clip)->Purge();
+    pickClip_ = clip;
+    pickCell_ = int(viewData_->GetCurrentSongPointer() - viewData_->song_->data_);
+    viewData_->currentInstrument_ = clip;
+    DoModal(new ImportSampleDialog(*this, true), AudioPickCallback);
+}
+
+void SongView::OnAudioPicked(bool imported) {
+    if (!imported || pickClip_ < 0 || pickCell_ < 0) return;
+    I_Instrument *instr = viewData_->project_->GetInstrumentBank()->GetInstrument(pickClip_);
+    if (instr->GetType() == IT_SAMPLE) {
+        SampleInstrument *si = (SampleInstrument *)instr;
+        si->FindVariable(SIP_LOOPBPM)->SetInt(si->DetectLoopBpm());   // y con él los compases
+    }
+    viewData_->song_->data_[pickCell_] = (unsigned char)pickClip_;
+    lastClip_ = (unsigned char)pickClip_;
+    pickClip_ = pickCell_ = -1;
+    isDirty_ = true;
 }
 
 void SongView::updateChain(int offset) {
@@ -929,8 +973,7 @@ void SongView::processNormalButtonMask(unsigned int mask) {
                 if (*cell != 0xFF) {
                     aOpenPending_ = true;      // trk2als: se abre al soltar A
                 } else if (isAudioColumn(viewData_->songX_)) {
-                    pasteLast();
-                    viewMode_ = VM_NEW;
+                    pickAudio();               // trk2als: el archivo del loop
                 } else {
                     createClip();              // trk2als: como en Live: un clip nuevo
                 }

@@ -21,6 +21,7 @@ class PhraseView : public View {
     void onCommandSelectorPreview(ModalView &d);
 
   protected:
+    bool hideInstrument();
     void updateCursor(int dx, int dy);
     void stopAudition();
     void updateCursorValue(ViewUpdateDirection offset, int xOffset = 0,

@@ -50,6 +50,12 @@ PhraseView::PhraseView(GUIWindow &w, ViewData *viewData)
 
 PhraseView::~PhraseView() { delete cmdEditField_; };
 
+// trk2als: en una pista dueña de su instrumento la columna de instrumento no
+// existe (no se dibuja y el cursor se la salta)
+bool PhraseView::hideInstrument() {
+    return viewData_->project_->GetTrackInstrument(viewData_->songX_) >= 0;
+}
+
 void PhraseView::updateCursor(int dx, int dy) {
 
     col_ += dx;
@@ -58,6 +64,7 @@ void PhraseView::updateCursor(int dx, int dy) {
         col_ = 5;
     if (col_ < 0)
         col_ = 0;
+    if (col_ == 1 && hideInstrument()) col_ = (dx < 0) ? 0 : 2;
     if (row_ > 15) {
         // Try to see if the current chain has a phrase after this one
 
@@ -1282,6 +1289,13 @@ void PhraseView::DrawView() {
     SetColor(CD_NORMAL);
     sprintf(title, "Phrase %2.2x", viewData_->currentPhrase_);
     DrawString(pos._x, pos._y, title, props);
+    if (col_ == 1 && hideInstrument()) col_ = 0;
+    if (hideInstrument()) {   // trk2als: de qué pista (y con qué instrumento) es
+        SetColor(CD_HILITE2);
+        DrawString(pos._x + 12, pos._y,
+                   viewData_->project_->GetTrackName(viewData_->songX_), props);
+        SetColor(CD_NORMAL);
+    }
 
     // Compute song grid location
 
@@ -1304,7 +1318,8 @@ void PhraseView::DrawView() {
     pos._y -= 1;
     SetColor(CD_COL_TITLE);
     DrawString(pos._x, pos._y, "Nt", props);
-    DrawString(pos._x + 4, pos._y, "I", props);
+    bool noInstr = hideInstrument();
+    if (!noInstr) DrawString(pos._x + 4, pos._y, "I", props);
     DrawString(pos._x + 8, pos._y, "Cmd1", props);
     DrawString(pos._x + 13, pos._y, "", props);
     DrawString(pos._x + 18, pos._y, "Cmd2", props);
@@ -1343,7 +1358,7 @@ void PhraseView::DrawView() {
     buffer[0] = 'I';
     buffer[3] = 0;
 
-    for (int j = 0; j < 16; j++) {
+    for (int j = 0; j < 16 && !noInstr; j++) {
         unsigned char d = *data++;
         setTextProps(props, 1, j, false);
         (0 == j || 4 == j || 8 == j || 12 == j) ? SetColor(CD_MAJORBEAT)

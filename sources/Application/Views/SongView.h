@@ -71,6 +71,9 @@ class SongView : public View {
     void clampTrackCursor();
     void LoadTrackPreset(const std::string &name);
     int presetCh_;
+    void pickAudio();
+    void OnAudioPicked(bool imported);
+    int pickClip_, pickCell_;
     int pendingTypeCh_, pendingType_; // .cambio que espera confirmación
   private:
     bool headerMode_; // .el cursor está en la cabecera de las columnas
