@@ -9,6 +9,9 @@
 #include "System/System/System.h"
 #include <string.h>
 
+// trk2als: el render más lento desde el último aviso de underrun (segundos)
+static volatile float g_maxRender = 0;
+
 int callback(void *outputBuffer, void *inputBuffer, unsigned int nBufferFrames,
              double streamTime, RtAudioStreamStatus status, void *userData) {
     RTAudioDriver *sound = (RTAudioDriver *)userData;
@@ -33,6 +36,7 @@ bool RTAudioDriverThread::Execute() {
         driver_->OnNewBufferNeeded();
         float delta = float(ts->GetTime() - before); // in secs
         percentage_ = int(delta / cycleTime * 100);
+        if (delta > g_maxRender) g_maxRender = delta; // trk2als: diagnóstico
     };
     delete semaphore_;
     return true;
@@ -173,7 +177,9 @@ void RTAudioDriver::fillBuffer(short *stream, int frameCount) {
                 time_t now = time(0);
                 if (now != last) {
                     last = now;
-                    Trace::Log("AUDIO", "underrun (el audio no alcanzó) x%d", count);
+                    Trace::Log("AUDIO", "underrun (el audio no alcanzó) x%d - render max %.1f ms, bloque %d cuadros",
+                               count, g_maxRender * 1000.0f, frameCount);
+                    g_maxRender = 0;
                 }
             }
             return;
