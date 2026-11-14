@@ -18,6 +18,7 @@
 Player::Player() {
 
     isRunning_ = false;
+    metroStep_ = 0;
     viewData_=0;
 	mixer_=new PlayerMixer();
 
@@ -559,6 +560,7 @@ void Player::Update(Observable &o,I_ObservableData *d) {
         if (!firstPlayCycle_) {
             Groove::GetInstance()->Trigger();
             sync->NextSlice();
+            if (sync->MajorSlice()) metroStep_++;   // trk2als: otro paso (1/16)
             triggerLiveChains_ = false;
             if (retrigAllImmediate_) {
 				for (int i=0;i<SONG_CHANNEL_COUNT;i++) {
@@ -580,6 +582,13 @@ void Player::Update(Observable &o,I_ObservableData *d) {
                     playCursorPosition(i);
                 }
             }
+        }
+
+        // trk2als: metrónomo, un click en cada tiempo (4 pasos)
+        if (firstPlayCycle_) metroStep_ = 0;
+        if ((firstPlayCycle_ || sync->MajorSlice()) && metroStep_ % 4 == 0 &&
+            project_->FindVariable(VAR_METRONOME)->GetInt()) {
+            mixer_->MetronomeClick(metroStep_ % 16 == 0);
         }
 
         // Process commands in current phrase

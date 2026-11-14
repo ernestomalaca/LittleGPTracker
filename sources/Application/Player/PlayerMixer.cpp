@@ -28,6 +28,7 @@ bool PlayerMixer::Init(Project *project) {
 
 	AudioMixer *mixer=ms->GetMixBus(STREAM_MIX_BUS) ;
 	mixer->Insert(fileStreamer_) ;
+	mixer->Insert(metronome_) ;   // trk2als
 
 	project_=project ;
 
@@ -213,3 +214,24 @@ void PlayerMixer::Unlock() {
 	MixerService *ms=MixerService::GetInstance() ;
 	ms->Unlock() ;
 };
+
+// trk2als: metrónomo: un tono corto que se apaga en ~35 ms (1 kHz, y
+// 1.5 kHz en el 1 del compás), a -12 dB
+bool MetronomeModule::Render(fixed *buffer,int samplecount) {
+	if (left_<=0) return false ;
+	float freq=accent_?1500.0f:1000.0f ;
+	float w=2.0f*3.14159265f*freq/44100.0f ;
+	for (int i=0;i<samplecount;i++) {
+		float v=0 ;
+		if (left_>0) {
+			float env=float(left_)/1600.0f ;
+			v=0.25f*env*env*sinf(w*pos_) ;
+			pos_++ ;
+			left_-- ;
+		}
+		fixed f=fl2fp(v*32767.0f*0.5f) ;
+		buffer[2*i]=f ;
+		buffer[2*i+1]=f ;
+	}
+	return true ;
+}

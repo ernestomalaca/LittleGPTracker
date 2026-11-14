@@ -126,6 +126,11 @@ ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
         new UIIntVarField(position, *v, "Master: %d", 10, 100, 1, 10);
     T_SimpleList<UIField>::Insert(field);
 
+    v = project_->FindVariable(VAR_METRONOME);   // trk2als
+    position._y += 1;
+    field = new UIIntVarField(position, *v, "Metronome: %s", 0, 1, 1, 1);
+    T_SimpleList<UIField>::Insert(field);
+
     v = project_->FindVariable(VAR_PREGAIN);
     position._y += 2;
     field = new UIIntVarField(position, *v, "Drive: %d", 10, 200, 1, 10);

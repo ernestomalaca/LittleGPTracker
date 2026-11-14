@@ -13,6 +13,17 @@
 
 #define STREAM_MIX_BUS 8
 
+// trk2als: el click del metrónomo (se dispara al principio de un bloque)
+class MetronomeModule : public AudioModule {
+public:
+	MetronomeModule() : left_(0), pos_(0), accent_(false) {}
+	void Click(bool accent) { accent_=accent ; pos_=0 ; left_=1600 ; }
+	virtual bool Render(fixed *buffer,int samplecount) ;
+private:
+	int left_, pos_ ;
+	bool accent_ ;
+} ;
+
 class PlayerMixer: public T_Singleton<PlayerMixer>,public Observable,public I_Observer {
 public:
 	PlayerMixer() ;
@@ -72,6 +83,9 @@ private:
 	bool isChannelPlaying_[SONG_CHANNEL_COUNT] ;
 
 	AudioFileStreamer fileStreamer_ ;
+	MetronomeModule metronome_ ;
+public:
+	void MetronomeClick(bool accent) { metronome_.Click(accent) ; }
 	PlayerChannel *channel_[SONG_CHANNEL_COUNT] ;
 
 	// store trigger notes, 0xFF = none

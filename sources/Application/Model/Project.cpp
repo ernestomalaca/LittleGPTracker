@@ -32,6 +32,9 @@ tempoNudge_(0)
     this->Insert(tempo);
     Variable *masterVolume = new Variable("master", VAR_MASTERVOL, 100, 100);
     this->Insert(masterVolume) ;
+    // trk2als: metrónomo (un click por tiempo, más agudo en el 1 del compás)
+    static const char *metroStates[2] = {"off", "on"};
+    this->Insert(new Variable("metronome", VAR_METRONOME, metroStates, 2, 0));
     Variable *pregain =
         new Variable("pregain", VAR_PREGAIN, 100, 200);
     this->Insert(pregain);

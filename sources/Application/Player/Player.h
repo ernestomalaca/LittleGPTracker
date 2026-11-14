@@ -165,6 +165,7 @@ protected:
 
 	bool retrigAllImmediate_ ;
 	unsigned char retrigPos_ ;
+	int metroStep_ ; // trk2als: pasos desde que arrancó (metrónomo)
 };
 
 #endif
