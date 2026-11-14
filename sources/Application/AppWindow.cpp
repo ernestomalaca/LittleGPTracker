@@ -949,24 +949,25 @@ void AppWindow::drawSplash() {
     GUIRect all(0, 0, 640, 480);
     GUIWindow::FillRoundRect(all, 0, bg);
 
-    // la ficha: 150 x 340, centrada junto con el texto
-    const int s = 3;                     // escala de la letra (16 px -> 48)
+    // la ficha: 90 x 204, centrada junto con el texto
+    const int s = 2;                     // escala de la letra (16 px -> 32)
     const int adv = 11;                  // avance por letra (más juntas que la rejilla)
     const char *name = "CHANCHO 6";
     int len = (int)strlen(name);
     int textH = len * adv * s;
-    int x0 = (640 - (150 + 26 + 16 * s)) / 2, y0 = 70, w = 150, h = 340;
+    const int w = 90, h = 204, gap = 16;
+    int x0 = (640 - (w + gap + 16 * s)) / 2, y0 = (480 - h) / 2;
     GUIRect frame(x0, y0, x0 + w, y0 + h);
-    GUIWindow::FrameRoundRect(frame, 18, 5, fg);
-    GUIRect bar(x0 + 16, y0 + h / 2 - 3, x0 + w - 16, y0 + h / 2 + 3);
-    GUIWindow::FillRoundRect(bar, 3, fg);
+    GUIWindow::FrameRoundRect(frame, 11, 3, fg);
+    GUIRect bar(x0 + 10, y0 + h / 2 - 2, x0 + w - 10, y0 + h / 2 + 2);
+    GUIWindow::FillRoundRect(bar, 2, fg);
     // seis puntos en cada mitad
-    const int r = 16;
-    int cx[2] = {x0 + 44, x0 + w - 44};
+    const int r = 10;
+    int cx[2] = {x0 + 26, x0 + w - 26};
     for (int half = 0; half < 2; half++) {
         int top = y0 + half * (h / 2);
         for (int k = 0; k < 3; k++) {
-            int cy = top + (h / 2) * (2 * k + 1) / 6 + (half ? 3 : -3);
+            int cy = top + (h / 2) * (2 * k + 1) / 6 + (half ? 2 : -2);
             for (int c = 0; c < 2; c++) {
                 GUIRect dot(cx[c] - r, cy - r, cx[c] + r, cy + r);
                 GUIWindow::FillRoundRect(dot, r, fg);
@@ -974,7 +975,7 @@ void AppWindow::drawSplash() {
         }
     }
     // el nombre, girado: se lee de abajo hacia arriba
-    int tx = x0 + w + 26;
+    int tx = x0 + w + gap;
     int ty = y0 + h / 2 + textH / 2;     // la base, abajo
     for (int i = 0; i < len; i++) {
         unsigned char ch = ((unsigned char)name[i]) & 127;
