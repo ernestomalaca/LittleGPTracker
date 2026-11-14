@@ -144,6 +144,7 @@ public:
        int GuessSimplerBpm() ;
        // trk2als: rebanadas. Región start..end en cuadros (en cruces por
        // cero) y los bordes de cada rebanada: a, ..., b (n rebanadas = n+1 bordes)
+       SoundSource *currentSource() ;   // el sample elegido (aunque source_ no se haya actualizado)
        bool SimplerRegion(int &a,int &b) ;
        void SliceBounds(std::vector<int> &bounds) ;
        std::vector<int> GetMarks() ;
@@ -225,7 +226,7 @@ private:
 	   void simplerBlock(renderParams *rp,int size) ; // envolvente -> corte, glide
 	   void simplerFilter(renderParams *rp,fixed *buffer,int size) ;
 	   void filterEnvBlock(renderParams *rp,int size) ;
-	   int snapZero(int frame,int lo,int hi,unsigned char note) ;   // cruce por cero más cercano
+	   int snapZero(int frame,int lo,int hi,unsigned char note,SoundSource *src=0) ;   // cruce por cero más cercano
 	   void simplerEnvelope(renderParams *rp,fixed *buffer,int size) ;
 	   float envMs(FourCC id) ;
 	   WarpStretch *stretch_[SI_VOICE_COUNT] ;

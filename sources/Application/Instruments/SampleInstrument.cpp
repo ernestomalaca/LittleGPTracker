@@ -1737,14 +1737,15 @@ bool SampleInstrument::startSimpler(renderParams *rp,int channel,unsigned char n
 // terminar ni al dar la vuelta
 bool SampleInstrument::SimplerRegion(int &a,int &b) {
 	a=b=0 ;
-	if (!source_) return false ;
-	int size=source_->GetSize(-1) ;
+	SoundSource *src=currentSource() ;
+	if (!src) return false ;
+	int size=src->GetSize(-1) ;
 	if (size<=0) return false ;
 	a=int((long long)size*GetSimpler(SIP_S_START)/100) ;
 	b=int((long long)size*GetSimpler(SIP_S_END)/100) ;
 	if (b>size) b=size ;
-	a=snapZero(a,0,size,60) ;
-	if (b<size) b=snapZero(b,a+1,size,60) ;
+	a=snapZero(a,0,size,60,src) ;
+	if (b<size) b=snapZero(b,a+1,size,60,src) ;
 	if (b<=a) b=(a+1<size)?a+1:size ;
 	return true ;
 }
@@ -1766,7 +1767,7 @@ void SampleInstrument::SliceBounds(std::vector<int> &bounds) {
 		if (n<1) n=1 ;
 		int len=(b-a)/n ;
 		for (int k=1;k<n && len>0;k++) {
-			int x=snapZero(a+k*len,bounds.back()+1,b-1,60) ;
+			int x=snapZero(a+k*len,bounds.back()+1,b-1,60,currentSource()) ;
 			if (x>bounds.back() && x<b) bounds.push_back(x) ;
 		}
 	}
@@ -1800,10 +1801,11 @@ void SampleInstrument::SetMarks(const std::vector<int> &marks) {
 }
 
 int SampleInstrument::AddMark(int frame) {
-	if (!source_) return -1 ;
-	int size=source_->GetSize(-1) ;
+	SoundSource *src=currentSource() ;
+	if (!src) return -1 ;
+	int size=src->GetSize(-1) ;
 	if (frame<=0 || frame>=size) return -1 ;
-	frame=snapZero(frame,1,size-1,60) ;
+	frame=snapZero(frame,1,size-1,60,src) ;
 	std::vector<int> m=GetMarks() ;
 	if (m.size()>=127) return -1 ;          // Live: hasta 128 rebanadas
 	m.push_back(frame) ;
@@ -1829,10 +1831,18 @@ bool SampleInstrument::RemoveMarkNear(int frame,int tolerance) {
 // trk2als: el cruce por cero más cercano a 'frame' (dentro de lo..hi), donde
 // la onda cambia de signo; busca hasta ~25 ms a cada lado. Con estéreo mira
 // la suma de los canales
-int SampleInstrument::snapZero(int frame,int lo,int hi,unsigned char note) {
-	short *wav=(short *)source_->GetSampleBuffer(note) ;
-	int size=source_->GetSize(note) ;
-	int ch=source_->GetChannelCount(note) ;
+SoundSource *SampleInstrument::currentSource() {
+	int index=GetSampleIndex() ;
+	SoundSource *src=(index>=0)?SamplePool::GetInstance()->GetSource(index):0 ;
+	return src?src:source_ ;
+}
+
+int SampleInstrument::snapZero(int frame,int lo,int hi,unsigned char note,SoundSource *src) {
+	if (!src) src=source_ ;
+	if (!src) return frame ;
+	short *wav=(short *)src->GetSampleBuffer(note) ;
+	int size=src->GetSize(note) ;
+	int ch=src->GetChannelCount(note) ;
 	if (!wav || size<2 || ch<1) return frame ;
 	if (lo<1) lo=1 ;
 	if (hi>size-1) hi=size-1 ;

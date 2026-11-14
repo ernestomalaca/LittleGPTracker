@@ -38,7 +38,7 @@ public:
 		} else {
 			((AppWindow&)w).SetColor(CD_NORMAL) ;
 		}
-		int size=si_->GetSampleSize() ;
+		SoundSource *ss=si_->currentSource() ; int size=ss?ss->GetSize(-1):0 ;
 		int pos=clampPos() ;
 		int pm=size>0?int((long long)pos*1000/size):0 ;
 		std::vector<int> m=si_->GetMarks() ;
@@ -1162,6 +1162,11 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 		if (slPx.size()>=2) { slPx.front()=a ; slPx.back()=b ; }
 	}
 	int nSl=(slPx.size()>=2)?int(slPx.size())-1:1 ;
+	if (slPx.size()<2) {             // sin región todavía: un solo borde a..b
+		slPx.clear() ;
+		slPx.push_back(a) ;
+		slPx.push_back(b) ;
+	}
 	// slice: la rebanada que está sonando, iluminada
 	if (mode==SM_SLICE && nSl>0 && slPx.size()>=2) {
 		int pos=si->GetPlayPosition() ;
