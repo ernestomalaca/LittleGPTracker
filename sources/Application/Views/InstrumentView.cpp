@@ -1049,6 +1049,19 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 	int l0=b-int((long long)size*si->GetSimpler(SIP_S_LLEN)/100*W/vLen) ;
 	if (l0<a) l0=a ;
 	if (loop) FillRect(l0,Y-4,b-l0,H+8,Mix(bg,hi,16),8) ;
+	// slice: la rebanada que está sonando, iluminada
+	if (mode==SM_SLICE) {
+		int n=si->GetSimpler(SIP_S_SLICES) ;
+		int pos=si->GetPlayPosition() ;
+		if (n>0 && pos>=0) {
+			int px=FPX(pos) ;
+			if (px>=a && px<b) {
+				int k=(px-a)*n/(b-a) ;
+				int x0=a+(b-a)*k/n, x1=a+(b-a)*(k+1)/n ;
+				FillRect(x0,Y-4,x1-x0,H+8,Mix(bg,hi,22),4) ;
+			}
+		}
+	}
 
 	// --- la envolvente de volumen sobre la onda, calculada a C3 ---
 	// px -> milisegundos: cuadros del sample por ms de salida (con warp, al
@@ -1148,13 +1161,16 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 			FillRect((dir)>0?(xx):(xx)-w,Y-4+q,w,1,hi2) ; } }
 	if (mode==SM_SLICE) {
 		int every=1 ;
-		while ((b-a)*every/nSl<14) every*=2 ;   // numerar sin amontonar
+		while ((b-a)*every/nSl<30) every*=2 ;   // nombres sin amontonar
 		for (int k=0;k<nSl;k++) {
 			int x=a+(b-a)*k/nSl ;
 			FillRect(x-1,Y-4,2,H+8,hi2) ;
 			if (k%every==0) {
 				char num[8] ;
-				sprintf(num,"%d",k+1) ;
+				// la nota que dispara la rebanada (C1 = la primera, como en Simpler)
+				static const char *names[12]={"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"} ;
+				int note=36+k ;
+				sprintf(num,"%s%d",names[note%12],note/12-2) ;
 				DrawText(x+4,Y+1,num,hi2,0) ;
 			}
 		}
