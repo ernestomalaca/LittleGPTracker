@@ -545,7 +545,7 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
     // complex la estira y transpone por separado
     rp->sWarp_=SW_OFF ;
     rp->warpTranspose_=1.0f ;
-    if (rp->simpler_ && GetSimpler(SIP_S_MODE)!=SM_SLICE && GetSimpler(SIP_S_WARP)!=SW_OFF) {
+    if (rp->simpler_ && GetSimpler(SIP_S_WARP)!=SW_OFF) {   // también en slice
         int bpm=GetSimpler(SIP_S_BPM) ;
         if (bpm<=0) bpm=GuessSimplerBpm() ;
         float tick=SyncMaster::GetInstance()->GetTickSampleCount() ;

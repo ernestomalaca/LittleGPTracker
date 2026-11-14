@@ -23,6 +23,53 @@
 
 // trk2als: frecuencia de corte en Hz. A+izq/der: un semitono; A+arr/aba:
 // una octava. Se muestra en Hz o kHz
+// trk2als: rebanadas del Sampler en un solo campo: "slices: 8" (partes
+// iguales) o "slices: manual" (marcas a mano, como Slice by: Manual de
+// Simpler). Por debajo de 2 pasa a manual; desde manual, → regresa a partes
+// iguales. Es el campo de "slice by" para la vista (GetVariableID)
+class UISlicesField : public UIIntVarField {
+public:
+	UISlicesField(GUIPoint &p, Variable &by, Variable &count) : UIIntVarField(p,by,"",0,1,1,1), count_(count) {}
+	virtual void Draw(GUIWindow &w,int offset=0) {
+		GUITextProperties props ;
+		GUIPoint position=GetPosition() ;
+		position._y+=offset ;
+		if (focus_) {
+			((AppWindow&)w).SetColor(CD_HILITE2) ;
+			props.invert_=true ;
+		} else {
+			((AppWindow&)w).SetColor(CD_NORMAL) ;
+		}
+		char buffer[32] ;
+		if (src_.GetInt()==SSB_MANUAL) strcpy(buffer,"slices: manual") ;
+		else sprintf(buffer,"slices: %d",count_.GetInt()) ;
+		w.DrawString(buffer,position,props) ;
+	}
+	virtual void ProcessArrow(unsigned short mask) {
+		int n=count_.GetInt() ;
+		if (n<2) n=2 ;
+		if (src_.GetInt()==SSB_MANUAL) {
+			if (mask==EPBM_RIGHT || mask==EPBM_UP) src_.SetInt(SSB_REGION) ;
+			return ;
+		}
+		switch (mask) {
+			case EPBM_RIGHT: n+=1 ; break ;
+			case EPBM_LEFT:  n-=1 ; break ;
+			case EPBM_UP:    n+=4 ; break ;
+			case EPBM_DOWN:  n-=4 ; break ;
+			default: return ;
+		}
+		if (n<2) {                    // menos de 2: marcas a mano
+			src_.SetInt(SSB_MANUAL) ;
+			return ;
+		}
+		if (n>64) n=64 ;
+		count_.SetInt(n) ;
+	}
+private:
+	Variable &count_ ;
+} ;
+
 class UIFreqVarField : public UIIntVarField {
 public:
 	UIFreqVarField(GUIPoint &p, Variable &v) : UIIntVarField(p,v,"freq: %d",30,22000,1,12) {}
@@ -223,17 +270,10 @@ void InstrumentView::fillSampleParameters() {
 		gaps=4 ;
 		v=instrument->FindVariable(SIP_S_MODE) ;
 		ADD(new UIIntVarField(AT(L),*v,"mode: %s",0,2,1,1)) ;
-		// warp como en Simpler (en slice no: las rebanadas siguen las notas)
-		bool warp=(mode!=SM_SLICE) ;
-		bool warped=warp && instrument->GetSimpler(SIP_S_WARP)!=SW_OFF ;
-		if (warp) {
-			v=instrument->FindVariable(SIP_S_WARP) ;
-			ADD(new UIIntVarField(AT(R),*v,"warp: %s",0,2,1,1)) ;
-		} else {
-			// slice by: partes iguales o marcas a mano (como Slice by de Simpler)
-			v=instrument->FindVariable(SIP_S_SLICEBY) ;
-			ADD(new UIIntVarField(AT(R),*v,"slice by: %s",0,1,1,1)) ;
-		}
+		// warp como en Simpler (también en slice: las rebanadas van a tempo)
+		bool warped=instrument->GetSimpler(SIP_S_WARP)!=SW_OFF ;
+		v=instrument->FindVariable(SIP_S_WARP) ;
+		ADD(new UIIntVarField(AT(R),*v,"warp: %s",0,2,1,1)) ;
 		if (warped && instrument->GetSimpler(SIP_S_BPM)<=0) {
 			instrument->FindVariable(SIP_S_BPM)->SetInt(instrument->GuessSimplerBpm()) ;
 		}
@@ -241,11 +281,9 @@ void InstrumentView::fillSampleParameters() {
 
 		LABEL("PLAYBACK") ;
 		if (mode==SM_SLICE) {
-			// en manual las rebanadas salen de las marcas (se editan en la onda)
-			if (instrument->GetSimpler(SIP_S_SLICEBY)!=SSB_MANUAL) {
-				v=instrument->FindVariable(SIP_S_SLICES) ;
-				ADD(new UIIntVarField(AT(L),*v,"slices: %d",2,64,1,4)) ;
-			}
+			// partes iguales o marcas a mano (en manual se editan en la onda)
+			ADD(new UISlicesField(AT(L),*instrument->FindVariable(SIP_S_SLICEBY),
+			                      *instrument->FindVariable(SIP_S_SLICES))) ;
 			v=instrument->FindVariable(SIP_S_TRIG) ;
 			ADD(new UIIntVarField(AT(R),*v,"trigger: %s",0,1,1,1)) ;
 			row++ ;
@@ -263,6 +301,12 @@ void InstrumentView::fillSampleParameters() {
 				ADD(new UIIntVarField(AT(R),*v,"loop len: %d%%",1,100,1,10)) ;
 			}
 			row++ ;
+			if (warped) {
+				v=instrument->FindVariable(SIP_S_BPM) ;
+				ADD(new UIIntVarField(AT(L),*v,"bpm: %d",40,300,1,10)) ;
+				row++ ;
+			}
+		} else if (mode==SM_SLICE) {
 			if (warped) {
 				v=instrument->FindVariable(SIP_S_BPM) ;
 				ADD(new UIIntVarField(AT(L),*v,"bpm: %d",40,300,1,10)) ;
@@ -1084,7 +1128,7 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 
 	SoundSource *src=SamplePool::GetInstance()->GetSource(si->GetSampleIndex()) ;
 	int rate=src?src->GetSampleRate(-1):0 ;
-	bool warped=(mode!=SM_SLICE && si->GetSimpler(SIP_S_WARP)!=SW_OFF) ;
+	bool warped=(si->GetSimpler(SIP_S_WARP)!=SW_OFF) ;
 	if (rate>0) {
 		char info[48] ;
 		int cs=int((long long)size*100/rate) ;
