@@ -19,6 +19,8 @@ public:
   virtual void ProcessButtonMask(unsigned short mask, bool pressed);
 
   std::string GetName();
+  // trk2als: un nombre al azar que no exista en dir ("lgpt_" + nombre)
+  static std::string RandomProjectName(const Path &dir);
   // trk2als: también sirve para nombrar presets
   void SetPrefix(const std::string &p) { prefix_ = p; }
   void SetTitle(const std::string &t) { title_ = t; }

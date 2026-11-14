@@ -14,18 +14,6 @@ static char *buttonText[3] = {"Load", "New", "Exit"};
 Path SelectProjectDialog::lastFolder_("root:") ;
 int SelectProjectDialog::lastProject_ = 0 ;
 
-static void NewProjectCallback(View &v,ModalView &dialog) {
-
-	NewProjectDialog &npd=(NewProjectDialog &)dialog ;
-	if (dialog.GetReturnCode()>0) {
-		std::string selected=npd.GetName() ;
-		SelectProjectDialog &spd=(SelectProjectDialog&)v ;
-		Result result = spd.OnNewProject(selected) ;
-        if (result.Failed()) {
-            Trace::Error(result.GetDescription().c_str());
-        }
-    }
-}
 
 static void DeleteProjectCallback(View &v, ModalView &dialog) {
     SelectProjectDialog &spd = (SelectProjectDialog&) v;
@@ -247,9 +235,12 @@ void SelectProjectDialog::ProcessButtonMask(unsigned short mask,bool pressed) {
 			}
 			case 1: // new
 			{
-                NewProjectDialog *npd =
-                    new NewProjectDialog(*this, currentPath_);
-                DoModal(npd,NewProjectCallback) ;
+                // trk2als: sin preguntar: un nombre al azar y directo a la Song
+                std::string name = NewProjectDialog::RandomProjectName(currentPath_);
+                Result result = OnNewProject(name);
+                if (result.Failed()) {
+                    Trace::Error(result.GetDescription().c_str());
+                }
 				break ;
             }
             case 2: // Exit ;

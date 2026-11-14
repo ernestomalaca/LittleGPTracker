@@ -305,3 +305,12 @@ std::string NewProjectDialog::GetName() {
     name += name_;
 	return name;
 }
+
+std::string NewProjectDialog::RandomProjectName(const Path &dir) {
+    std::string name;
+    for (int tries = 0; tries < 200; tries++) {
+        name = std::string("lgpt_") + getRandomName();
+        if (!Path(dir).Descend(name).Exists()) break;
+    }
+    return name;
+}
