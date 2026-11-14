@@ -1603,7 +1603,14 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 			int sp=Player::GetInstance()->GetStreamPosition() ;
 			SoundSource *src=si->currentSource() ;
 			if (sp>=0 && src) {
-				int lat=int((long long)Audio::GetInstance()->GetAudioBufferSize()*2*
+				// config.xml: <SLICETAPLATENCY value="40"/> en ms (si no, ~2 bloques de audio)
+				static int latMs=-2 ;
+				if (latMs==-2) {
+					const char *v=Config::GetInstance()->GetValue("SLICETAPLATENCY") ;
+					latMs=v?atoi(v):-1 ;
+				}
+				int lat=(latMs>=0)?int((long long)latMs*src->GetSampleRate(-1)/1000) :
+				        int((long long)Audio::GetInstance()->GetAudioBufferSize()*2*
 				            src->GetSampleRate(-1)/44100) ;
 				int at=si->AddMark(sp-lat>a?sp-lat:a+1) ;
 				if (at>=0) markVar_.SetInt(at) ;

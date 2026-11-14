@@ -9,6 +9,8 @@
 #include "System/System/System.h"
 #include <math.h>
 #include <stdlib.h>
+#include "Application/Model/Config.h"
+#include <stdlib.h>
 
 PlayerMixer::PlayerMixer() {
 
@@ -219,13 +221,22 @@ void PlayerMixer::Unlock() {
 // 1.5 kHz en el 1 del compás), a -12 dB
 bool MetronomeModule::Render(fixed *buffer,int samplecount) {
 	if (left_<=0) return false ;
+	// config.xml: <METRONOMEVOLUME value="50"/>, 0..100 (50 = normal)
+	static float vol=-1 ;
+	if (vol<0) {
+		const char *cv=Config::GetInstance()->GetValue("METRONOMEVOLUME") ;
+		int v=cv?atoi(cv):50 ;
+		if (v<0) v=0 ;
+		if (v>100) v=100 ;
+		vol=v/50.0f ;
+	}
 	float freq=accent_?1500.0f:1000.0f ;
 	float w=2.0f*3.14159265f*freq/44100.0f ;
 	for (int i=0;i<samplecount;i++) {
 		float v=0 ;
 		if (left_>0) {
 			float env=float(left_)/1600.0f ;
-			v=0.25f*env*env*sinf(w*pos_) ;
+			v=0.25f*vol*env*env*sinf(w*pos_) ;
 			pos_++ ;
 			left_-- ;
 		}
