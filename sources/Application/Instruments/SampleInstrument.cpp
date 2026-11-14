@@ -1759,8 +1759,9 @@ void SampleInstrument::SliceBounds(std::vector<int> &bounds) {
 	bounds.push_back(a) ;
 	if (GetSimpler(SIP_S_SLICEBY)==SSB_MANUAL) {
 		std::vector<int> m=GetMarks() ;
+		int gap=MinMarkGap() ;   // marcas demasiado pegadas no hacen rebanada
 		for (size_t i=0;i<m.size() && bounds.size()<128;i++) {
-			if (m[i]>bounds.back() && m[i]<b) bounds.push_back(m[i]) ;
+			if (m[i]>=bounds.back()+gap && m[i]<=b-gap) bounds.push_back(m[i]) ;
 		}
 	} else {
 		int n=GetSimpler(SIP_S_SLICES) ;
@@ -1808,11 +1809,24 @@ int SampleInstrument::AddMark(int frame) {
 	frame=snapZero(frame,1,size-1,60,src) ;
 	std::vector<int> m=GetMarks() ;
 	if (m.size()>=127) return -1 ;          // Live: hasta 128 rebanadas
+	// no tan pegada a otra marca ni a start/end (si no, la rebanada no se oye)
+	int gap=MinMarkGap() ;
+	int a,b ;
+	if (SimplerRegion(a,b) && (frame<a+gap || frame>b-gap)) return -1 ;
+	for (size_t i=0;i<m.size();i++) if (abs(m[i]-frame)<gap) return -1 ;
 	m.push_back(frame) ;
 	std::sort(m.begin(),m.end()) ;
 	m.erase(std::unique(m.begin(),m.end()),m.end()) ;
 	SetMarks(m) ;
 	return frame ;
+}
+
+// distancia mínima entre marcas: 30 ms del sample
+int SampleInstrument::MinMarkGap() {
+	SoundSource *src=currentSource() ;
+	int rate=src?src->GetSampleRate(-1):44100 ;
+	if (rate<=0) rate=44100 ;
+	return rate*30/1000 ;
 }
 
 bool SampleInstrument::RemoveMarkNear(int frame,int tolerance) {

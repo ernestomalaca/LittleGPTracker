@@ -3,6 +3,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include <algorithm>
 #include "Application/Instruments/MidiInstrument.h"
 #include "Application/Instruments/SampleInstrument.h"
 #include "Application/Instruments/SamplePool.h"
@@ -1606,6 +1607,7 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 				            src->GetSampleRate(-1)/44100) ;
 				int at=si->AddMark(sp-lat>a?sp-lat:a+1) ;
 				if (at>=0) markVar_.SetInt(at) ;
+				else View::SetNotification("muy cerca de otra marca") ;
 			}
 			return true ;
 		}
@@ -1651,6 +1653,7 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 			if (lastAPress_ && now-lastAPress_<400) {   // doble toque: marca
 				int at=si->AddMark(c) ;
 				if (at>=0) markVar_.SetInt(at) ;
+				else View::SetNotification("muy cerca de otra marca") ;
 				lastAPress_=0 ;
 			} else {
 				lastAPress_=now ;
@@ -1680,8 +1683,10 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 	if ((mask==EPBM_LEFT || mask==EPBM_RIGHT) && waveSel_==1) {
 		int k=nearMark(m) ;
 		if (k>=0) {
-			int lo=(k>0)?m[k-1]+1:a+1 ;
-			int hi=(k+1<(int)m.size())?m[k+1]-1:b-1 ;
+			int gap=si->MinMarkGap() ;           // no se pega a sus vecinas
+			int lo=((k>0)?m[k-1]:a)+gap ;
+			int hi=((k+1<(int)m.size())?m[k+1]:b)-gap ;
+			if (hi<lo) hi=lo ;
 			int p=m[k]+((mask==EPBM_RIGHT)?step:-step) ;
 			if (p<lo) p=lo ;
 			if (p>hi) p=hi ;
@@ -1703,10 +1708,17 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 		if (waveSel_==1) {                         // soltar la marca, en el cruce por cero
 			int k=nearMark(m) ;
 			if (k>=0) {
+				int old=m[k] ;
 				m.erase(m.begin()+k) ;
 				si->SetMarks(m) ;
 				int at=si->AddMark(c) ;
-				if (at>=0) markVar_.SetInt(at) ;
+				if (at<0) {                          // no cupo en el cruce: se queda donde estaba
+					m.push_back(old) ;
+					std::sort(m.begin(),m.end()) ;
+					si->SetMarks(m) ;
+					at=old ;
+				}
+				markVar_.SetInt(at) ;
 			}
 			waveSel_=0 ;
 		} else if (waveSel_) waveSel_=0 ;

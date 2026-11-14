@@ -149,7 +149,8 @@ public:
        void SliceBounds(std::vector<int> &bounds) ;
        std::vector<int> GetMarks() ;
        void SetMarks(const std::vector<int> &marks) ;
-       int AddMark(int frame) ;              // devuelve dónde quedó (en el cruce por cero)
+       int AddMark(int frame) ;              // devuelve dónde quedó (en el cruce por cero); -1 si no cabe
+       int MinMarkGap() ;                    // cuadros mínimos entre marcas (30 ms)
        bool RemoveMarkNear(int frame,int tolerance) ;
        void InitAudioClip() ;    // trk2als: volumen de LGPT -> gain en dB (una vez)
        void declickVoice(renderParams *rp,fixed *buffer,int size) ;   // tempo probable de la región (compases enteros)
