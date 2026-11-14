@@ -27,7 +27,8 @@ static void loadText(char *out) {
     GetAudioLoad(now, peak);
     int est = peak * factor;
     if (est > 999) est = 999;
-    sprintf(out, "%2d%% rg%3d%%", peak > 99 ? 99 : peak, est);
+    (void)peak;   // solo cabe el estimado de la consola (5 caracteres)
+    sprintf(out, "rg%3d", est > 999 ? 999 : est);
 }
 
 MixerView::MixerView(GUIWindow &w,ViewData *viewData):View(w,viewData) {

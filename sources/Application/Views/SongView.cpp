@@ -35,7 +35,8 @@ static void loadText(char *out) {
     GetAudioLoad(now, peak);
     int est = peak * factor;
     if (est > 999) est = 999;
-    sprintf(out, "%2d%% rg%3d%%", peak > 99 ? 99 : peak, est);
+    (void)peak;   // solo cabe el estimado de la consola (5 caracteres)
+    sprintf(out, "rg%3d", est > 999 ? 999 : est);
 }
 
 /****************
@@ -175,6 +176,7 @@ void SongView::updateSongOffset(int offset) {
 
 void SongView::updateCursor(int dx, int dy) {
     viewData_->UpdateSongCursor(dx, dy);
+    clampTrackCursor();   // trk2als
     isDirty_ = true;
     canDeepClone_ = false;
 }
@@ -1037,29 +1039,46 @@ void SongView::processNormalButtonMask(unsigned int mask) {
    cambia de columna, abajo regresa a las celdas
  ******************************************************/
 
-static const char *trackTypeNames[3] = {"MIDI", "Audio", "MIDI"};
-
 static void TrackTypeCallback(View &v, ModalView &dialog) {
     SongView &sv = (SongView &)v;
     int code = dialog.GetReturnCode();
     if (code >= 0 && sv.pendingTypeCh_ >= 0) {
-        sv.ApplyTrackType(sv.pendingTypeCh_, code & 0xFF, (code & TTD_CLEAR) != 0);
+        sv.ApplyTrackType(sv.pendingTypeCh_, code, false);
     }
     sv.pendingTypeCh_ = -1;
 }
 
-void SongView::ApplyTrackType(int channel, int type, bool clear) {
-    if (clear) {
-        unsigned char *data = viewData_->song_->data_;
-        for (int r = 0; r < SONG_ROW_COUNT; r++) {
-            data[r * SONG_CHANNEL_COUNT + channel] = 0xFF;
+// trk2als: agregar (code = tipo) o borrar (TTD_DELETE) la pista
+void SongView::ApplyTrackType(int channel, int code, bool) {
+    Project *project = viewData_->project_;
+    char msg[40];
+    if (code == TTD_DELETE) {
+        if (Player::GetInstance()->IsRunning()) {   // nada de borrar lo que suena
+            View::SetNotification("deten la musica para borrar");
+            return;
         }
+        std::string name = project->GetTrackName(channel);
+        project->DeleteTrack(channel);
+        snprintf(msg, sizeof(msg), "pista %s borrada", name.c_str());
+        View::SetNotification(msg);
+    } else {
+        int ch = project->AddTrack(code == TT_AUDIO ? TT_AUDIO : TT_MIDI);
+        if (ch < 0) return;
+        viewData_->songX_ = ch;
+        snprintf(msg, sizeof(msg), "nueva: %s", project->GetTrackName(ch));
+        View::SetNotification(msg);
     }
-    viewData_->project_->FindVariable(VAR_TRACKTYPE(channel))->SetInt(type);
-    char msg[32];
-    snprintf(msg, sizeof(msg), "Pista %d: %s", channel, trackTypeNames[type]);
-    View::SetNotification(msg);
+    clampTrackCursor();
     isDirty_ = true;
+}
+
+// el cursor solo anda por pistas que existen; en la cabecera, también por el '+'
+void SongView::clampTrackCursor() {
+    int count = viewData_->project_->TrackCount();
+    if (count == 0) headerMode_ = true;   // sin pistas solo queda el '+'
+    int maxX = headerMode_ ? (count < SONG_CHANNEL_COUNT ? count : count - 1) : count - 1;
+    if (viewData_->songX_ > maxX) viewData_->songX_ = maxX;
+    if (viewData_->songX_ < 0) viewData_->songX_ = 0;
 }
 
 void SongView::processHeaderButtonMask(unsigned int mask) {
@@ -1073,24 +1092,21 @@ void SongView::processHeaderButtonMask(unsigned int mask) {
         onStart();
         return;
     }
-    if (mask == EPBM_A) { // A: ventana para elegir el tipo de esta pista
+    if (mask == EPBM_A) { // A: en el '+' agregar una pista; en una pista, borrarla
         int ch = viewData_->songX_;
-        bool empty = true;
-        unsigned char *data = viewData_->song_->data_;
-        for (int r = 0; r < SONG_ROW_COUNT; r++) {
-            if (data[r * SONG_CHANNEL_COUNT + ch] != 0xFF) empty = false;
-        }
+        Project *project = viewData_->project_;
+        bool adding = !project->TrackExists(ch);
         pendingTypeCh_ = ch;
-        TrackTypeDialog *d = new TrackTypeDialog(
-            *this, ch, viewData_->project_->GetTrackType(ch), !empty);
+        TrackTypeDialog *d = new TrackTypeDialog(*this, ch, adding, project->GetTrackName(ch));
         DoModal(d, TrackTypeCallback);
         return;
     }
     if (mask & EPBM_A) return;
     if (mask & EPBM_LEFT) updateCursor(-1, 0);
     if (mask & EPBM_RIGHT) updateCursor(1, 0);
-    if (mask & EPBM_DOWN) {
+    if ((mask & EPBM_DOWN) && viewData_->project_->TrackCount() > 0) {
         headerMode_ = false;
+        clampTrackCursor();
         isDirty_ = true;
     }
 }
@@ -1316,6 +1332,17 @@ void SongView::DrawView() {
 
     DrawString(pos._x, pos._y, buffer.c_str(), props);
 
+    // trk2als: el nombre de la pista donde está el cursor
+    clampTrackCursor();
+    {
+        Project *project = viewData_->project_;
+        const char *tname = project->TrackExists(viewData_->songX_)
+                                ? project->GetTrackName(viewData_->songX_) : "agregar pista";
+        SetColor(CD_HILITE2);
+        DrawString(pos._x + 23, pos._y, tname, props);
+        SetColor(CD_NORMAL);
+    }
+
     // Compute song grid location
 
     GUIPoint anchor = GetAnchor();
@@ -1339,10 +1366,17 @@ void SongView::DrawView() {
     SetColor(CD_COL_TITLE);
     char chbuf[4];
     short dx = 3;
+    int trackCount = viewData_->project_->TrackCount();
     for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
-        // trk2als: tipo de pista + número: M2 midi, A6 audio
+        // trk2als: tipo de pista + número: M2 midi, A6 audio; después de la
+        // última, '+' para agregar una
+        if (i > trackCount) break;
         TrackType type = viewData_->project_->GetTrackType(i);
-        snprintf(chbuf, sizeof(chbuf), "%c%d", type == TT_AUDIO ? 'A' : 'M', i);
+        if (i == trackCount) {
+            snprintf(chbuf, sizeof(chbuf), "+ ");
+        } else {
+            snprintf(chbuf, sizeof(chbuf), "%c%d", type == TT_AUDIO ? 'A' : 'M', i + 1);
+        }
         SetColor(type == TT_AUDIO ? CD_HILITE1 : CD_COL_TITLE);
         bool here = headerMode_ && i == viewData_->songX_;
         if (here) SetColor(CD_CURSOR);
@@ -1384,6 +1418,11 @@ void SongView::DrawView() {
             // draw current step
 
             unsigned char d = *data++;
+
+            if (!viewData_->project_->TrackExists(i)) { // trk2als: pista que no existe
+                pos._x += dx;
+                continue;
+            }
 
             if (d != 0xFF && isAudioColumn(i)) {
                 SetColor(CD_HILITE1); // trk2als: loop de audio

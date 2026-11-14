@@ -25,7 +25,8 @@
 #define VAR_TRACKTYPE(ch) MAKE_FOURCC('T', 'Y', 'P', '0' + (ch))
 // TT_TRACKER solo existe para leer proyectos guardados con él: al abrirlos
 // pasa a TT_MIDI (las pistas MIDI se escriben con chains y phrases)
-enum TrackType { TT_TRACKER = 0, TT_AUDIO = 1, TT_MIDI = 2 };
+enum TrackType { TT_TRACKER = 0, TT_AUDIO = 1, TT_MIDI = 2, TT_OFF = 3 }; // OFF: la pista no existe
+#define VAR_TRACKNAME(ch) MAKE_FOURCC('T', 'N', 'M', '0' + (ch))
 
 #define PROJECT_NUMBER "1"
 #define PROJECT_RELEASE "6"
@@ -56,6 +57,13 @@ public:
   TrackType GetTrackType(int channel); // TRK: tracker (sale como audio), AUD: loops, MID: notas
   bool IsAudioChannel(int channel); // canal de audio: sus celdas son loops, no chains
   bool IsAudioInstrument(int instrument); // ¿algún loop de una pista de audio usa este instrumento?
+  // trk2als: las pistas existen de la 0 a TrackCount()-1 (como en Live: se
+  // agregan y se borran, no cambian de tipo)
+  int TrackCount();
+  bool TrackExists(int channel);
+  const char *GetTrackName(int channel);
+  int AddTrack(TrackType type);      // canal nuevo, o -1 si ya hay 8
+  void DeleteTrack(int channel);     // con sus chains, phrases e instrumentos que nadie más usa
   void Trigger();
 
   static const unsigned int MAX_RENDER_MODE = 3;

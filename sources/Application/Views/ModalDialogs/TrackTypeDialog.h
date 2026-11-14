@@ -3,15 +3,17 @@
 
 #include "Application/Views/BaseClasses/ModalView.h"
 
-// trk2als: elegir el tipo de una pista desde la cabecera de la Song.
-// Si el cambio deja celdas que no sirven en el nuevo tipo, pregunta antes de
-// borrarlas. GetReturnCode(): -1 = cancelar; tipo | TTD_CLEAR = vaciar antes.
+// trk2als: ventana de la cabecera de la Song. En el '+': elegir si la pista
+// nueva es MIDI o de audio. En una pista: borrarla (con confirmación).
+// Como en Live, una pista no cambia de tipo: se borra y se agrega otra.
+// GetReturnCode(): -1 = cancelar; TT_MIDI / TT_AUDIO = agregar; TTD_DELETE = borrar
 
-#define TTD_CLEAR 0x100
+#define TTD_DELETE 0x200
 
 class TrackTypeDialog : public ModalView {
 public:
-	TrackTypeDialog(View &view, int channel, int current, bool hasContent) ;
+	// adding: ventana del '+'; si no, de la pista 'channel' llamada 'name'
+	TrackTypeDialog(View &view, int channel, bool adding, const char *name) ;
 	virtual ~TrackTypeDialog() ;
 	virtual void DrawView() ;
 	virtual void OnPlayerUpdate(PlayerEventType, unsigned int) ;
@@ -19,10 +21,10 @@ public:
 	virtual void ProcessButtonMask(unsigned short mask, bool pressed) ;
 private:
 	int channel_ ;
-	int current_ ;
-	bool hasContent_ ;
+	bool adding_ ;
+	char name_[24] ;
 	int selected_ ;
-	bool confirming_ ;   // segunda página: ¿borrar las celdas?
+	bool confirming_ ;   // segunda página: ¿borrar la pista?
 	bool yes_ ;
 } ;
 #endif

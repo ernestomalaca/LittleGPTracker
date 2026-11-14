@@ -67,6 +67,7 @@ class SongView : public View {
     bool isAudioColumn(int x); // .trk2als: la columna es una pista de audio
   public: // trk2als: tipo de pista desde la cabecera de la columna
     void ApplyTrackType(int channel, int type, bool clear);
+    void clampTrackCursor();
     int pendingTypeCh_, pendingType_; // .cambio que espera confirmación
   private:
     bool headerMode_; // .el cursor está en la cabecera de las columnas
