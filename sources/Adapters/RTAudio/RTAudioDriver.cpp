@@ -1,3 +1,4 @@
+#include <time.h>
 
 #include "RTAudioDriver.h"
 #include "Adapters/W32/Midi/W32MidiService.h"
@@ -164,6 +165,17 @@ void RTAudioDriver::fillBuffer(short *stream, int frameCount) {
         if (pool_[poolPlayPosition_].buffer_ == 0) {
             // underrun, let's fill the buffer with blank and bail out
             SYS_MEMSET(stream, 0, len);
+            // trk2als: que se vea en la Terminal (una línea por segundo como mucho)
+            {
+                static int count = 0;
+                static time_t last = 0;
+                count++;
+                time_t now = time(0);
+                if (now != last) {
+                    last = now;
+                    Trace::Log("AUDIO", "underrun (el audio no alcanzó) x%d", count);
+                }
+            }
             return;
         } else {
             memcpy(mainBuffer_, mainBuffer_ + bufferPos_,
