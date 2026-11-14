@@ -1238,6 +1238,7 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 				static const char *names[12]={"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"} ;
 				int note=36+k ;
 				sprintf(num,"%s%d",names[note%12],note/12-2) ;
+				FillRect(x+2,Y,8*int(strlen(num))+4,13,bg) ;   // legible sobre la envolvente
 				DrawText(x+4,Y+1,num,hi2,0) ;
 			}
 		}
@@ -1269,7 +1270,7 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 			DrawText(X+4,Y+H-12,tag,fg,0) ;
 			{
 				const char *help=tapPlay_?"sonando: A marca  START para  L+START de nuevo" :
-				                         "START toca  A rebanada  AA marca  B+<> mueve  B+A borra" ;
+				                         "START toca  A escucha  AA marca  B+<> mueve  A+^v zoom" ;
 				DrawText(632-8*int(strlen(help)),3,help,dim2,0) ;
 			}
 			// lo que suena al escuchar (A)
@@ -1388,15 +1389,19 @@ void InstrumentView::OnPresetSave(const std::string &name) {
 /************************************************************
  trk2als: slice manual, editar marcas sobre la onda
 
-   ← →            mover el cursor
-   A              escuchar desde el cursor (mientras se mantenga)
+   (al entrar suena la región, y la canción si no estaba sonando)
+   A              mientras suena: marca donde va sonando
+   START          tocar / parar la región desde el cursor
+   L + START      borrar las marcas y rebanar de nuevo desde el inicio
+   ← →            mover el cursor (o la marca agarrada)
+   A              escuchar del cursor a la siguiente marca
    A + ← →        moverse escuchando
    A, A           poner una marca en el cursor (doble toque)
-   B + ← →        saltar a la marca anterior / siguiente
+   A + ↑ ↓        acercar / alejar
+   B + ← →        saltar a la marca anterior / siguiente (queda agarrada)
    B + A          borrar la marca del cursor (o las seleccionadas)
    Select + B     seleccionar: una vez la marca del cursor, otra vez todas
-   ↑ / B + ↓      acercar / alejar
-   ↓              terminar (queda en "slice by")
+   ↓              soltar la marca agarrada / terminar (queda en "slice by")
  ************************************************************/
 
 void InstrumentView::enterWaveEdit() {
@@ -1589,10 +1594,6 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 			for (size_t i=0;i<m.size();i++) if (m[i]<c && m[i]>prev) prev=m[i] ;
 			markVar_.SetInt(prev) ;
 			waveSel_=(prev>a)?1:0 ;
-		} else if (mask&EPBM_UP) {              // B + ↑ / ↓: zoom
-			if (waveZoom_<64) waveZoom_*=2 ;
-		} else if (mask&EPBM_DOWN) {
-			if (waveZoom_>1) waveZoom_/=2 ;
 		}
 		return true ;
 	}
@@ -1607,9 +1608,9 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 				lastAPress_=now ;
 			}
 			waveSel_=0 ;
-			int f,t ;                    // suena la rebanada que dispara esa nota
+			int f,t ;                    // del cursor (o su marca) a la siguiente marca
 			sliceAt(c,f,t) ;
-			startPreview(f,t) ;
+			startPreview(c,t) ;
 			return true ;
 		}
 		if (mask&(EPBM_LEFT|EPBM_RIGHT)) {        // A + ← →: moverse escuchando
@@ -1648,10 +1649,6 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 		if (c<a) c=a ;
 		if (c>b) c=b ;
 		markVar_.SetInt(c) ;
-		return true ;
-	}
-	if (mask==EPBM_UP) {
-		if (waveZoom_<64) waveZoom_*=2 ;
 		return true ;
 	}
 	if (mask==EPBM_DOWN) {                       // terminar: queda en "slice by"
