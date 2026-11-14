@@ -53,6 +53,8 @@ private:
 	const char *labelText_[8] ;
 	// trk2als: presets (campos "cargar"/"guardar" al final del Sampler)
 	Variable presetLoadVar_, presetSaveVar_ ;
+	Variable markVar_ ;      // trk2als: cursor de las marcas (slice manual)
+	bool markTap_ ;
 	void openPresetLoad() ;
 	void openPresetSave() ;
 public:

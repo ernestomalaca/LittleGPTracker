@@ -105,6 +105,10 @@ enum SampleInstrumentLoopMode {
 #define SIP_S_FVEL  MAKE_FOURCC('S', 'F', 'V', 'L')   // velocity -> corte 0..100 %
 #define SIP_S_FEVER MAKE_FOURCC('S', 'F', 'E', 'V')   // 1 = ya con su envolvente
 #define SIP_S_ETAB  MAKE_FOURCC('S', 'E', 'T', 'B')   // pantalla: amp / filter
+#define SIP_S_SLICEBY MAKE_FOURCC('S', 'S', 'B', 'Y') // slice by: region / manual
+#define SIP_S_MARKS MAKE_FOURCC('S', 'M', 'R', 'K')   // marcas manuales (cuadros, "a,b,c")
+
+enum SimplerSliceBy { SSB_REGION=0, SSB_MANUAL=1 } ;
 // trk2als: clip de audio estilo Live
 #define SIP_A_GAIN  MAKE_FOURCC('A', 'G', 'A', 'N')   // ganancia del clip en dB
 #define SIP_A_DET   MAKE_FOURCC('A', 'D', 'E', 'T')   // detune en cents (complex)
@@ -138,6 +142,14 @@ public:
    public:
        int GetSimpler(FourCC id) { return FindVariable(id)->GetInt() ; } ;
        int GuessSimplerBpm() ;
+       // trk2als: rebanadas. Región start..end en cuadros (en cruces por
+       // cero) y los bordes de cada rebanada: a, ..., b (n rebanadas = n+1 bordes)
+       bool SimplerRegion(int &a,int &b) ;
+       void SliceBounds(std::vector<int> &bounds) ;
+       std::vector<int> GetMarks() ;
+       void SetMarks(const std::vector<int> &marks) ;
+       int AddMark(int frame) ;              // devuelve dónde quedó (en el cruce por cero)
+       bool RemoveMarkNear(int frame,int tolerance) ;
        void InitAudioClip() ;    // trk2als: volumen de LGPT -> gain en dB (una vez)
        void declickVoice(renderParams *rp,fixed *buffer,int size) ;   // tempo probable de la región (compases enteros)
        void RefreshSample() { updateInstrumentData(true) ; } ; // trk2als: presets

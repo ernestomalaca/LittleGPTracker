@@ -1,4 +1,6 @@
 #include "SampleInstrument.h"
+#include <algorithm>
+#include <stdlib.h>
 #include "SamplePool.h"
 #include "System/Console/Trace.h"
 #include "System/io/Status.h"
@@ -188,6 +190,9 @@ SampleInstrument::SampleInstrument() {
 	 Insert(new Variable("s loop len",SIP_S_LLEN,100)) ;
 	 Insert(new Variable("s trigger",SIP_S_TRIG,trigModes,2,0)) ;
 	 Insert(new Variable("s slices",SIP_S_SLICES,4)) ;
+	 static const char *sliceBy[2]={"region","manual"} ;
+	 Insert(new Variable("s slice by",SIP_S_SLICEBY,sliceBy,2,SSB_REGION)) ;
+	 Insert(new Variable("s marks",SIP_S_MARKS,"")) ;
 	 Insert(new Variable("s transpose",SIP_S_TRANSP,0)) ;
 	 Insert(new Variable("s detune",SIP_S_DETUNE,0)) ;
 	 Insert(new Variable("s glide",SIP_S_GLIDE,0)) ;
@@ -1680,14 +1685,8 @@ bool SampleInstrument::startSimpler(renderParams *rp,int channel,unsigned char n
                                     int &first,bool &sliced,float &offset) {
 	int size=source_->GetSize(rp->midiNote_) ;
 	int mode=GetSimpler(SIP_S_MODE) ;
-	int a=int((long long)size*GetSimpler(SIP_S_START)/100) ;
-	int b=int((long long)size*GetSimpler(SIP_S_END)/100) ;
-	if (b>size) b=size ;
-	// trk2als: como el Snap de Simpler: inicio y final en el cruce por cero
-	// más cercano, para que no truene al entrar, al terminar ni al dar la vuelta
-	a=snapZero(a,0,size,rp->midiNote_) ;
-	if (b<size) b=snapZero(b,a+1,size,rp->midiNote_) ;
-	if (b<=a) b=(a+1<size)?a+1:size ;
+	int a,b ;
+	SimplerRegion(a,b) ;
 	offset=GetSimpler(SIP_S_TRANSP)+GetSimpler(SIP_S_DETUNE)/100.0f ;
 	rp->simplerLoop_=SILM_ONESHOT ;
 	rp->gate_=true ;
@@ -1717,20 +1716,113 @@ bool SampleInstrument::startSimpler(renderParams *rp,int channel,unsigned char n
 			rp->gate_=(GetSimpler(SIP_S_TRIG)==1) ;
 			break ;
 		case SM_SLICE: {
-			int n=GetSimpler(SIP_S_SLICES) ;
-			if (n<1) n=1 ;
+			std::vector<int> bounds ;
+			SliceBounds(bounds) ;
 			int idx=int(note)-36 ;     // C1 = rebanada 1, como Simpler
-			if (idx<0 || idx>=n) return false ;
-			int len=(b-a)/n ;
-			if (len<1) return false ;
-			rp->rendLoopStart_=snapZero(a+idx*len,a,b,rp->midiNote_) ;
-			rp->rendLoopEnd_=(idx+1<n)?snapZero(a+(idx+1)*len,rp->rendLoopStart_+1,b,rp->midiNote_):b ;
+			if (idx<0 || idx+1>=(int)bounds.size()) return false ;
+			if (bounds[idx+1]<=bounds[idx]) return false ;
+			rp->rendLoopStart_=bounds[idx] ;
+			rp->rendLoopEnd_=bounds[idx+1] ;
 			first=rp->rendLoopStart_ ;
 			rp->gate_=(GetSimpler(SIP_S_TRIG)==1) ;
 			break ;
 		}
 	}
 	sliced=(mode==SM_SLICE) ;
+	return true ;
+}
+
+// trk2als: región start..end en cuadros, como el Snap de Simpler: inicio y
+// final en el cruce por cero más cercano, para que no truene al entrar, al
+// terminar ni al dar la vuelta
+bool SampleInstrument::SimplerRegion(int &a,int &b) {
+	a=b=0 ;
+	if (!source_) return false ;
+	int size=source_->GetSize(-1) ;
+	if (size<=0) return false ;
+	a=int((long long)size*GetSimpler(SIP_S_START)/100) ;
+	b=int((long long)size*GetSimpler(SIP_S_END)/100) ;
+	if (b>size) b=size ;
+	a=snapZero(a,0,size,60) ;
+	if (b<size) b=snapZero(b,a+1,size,60) ;
+	if (b<=a) b=(a+1<size)?a+1:size ;
+	return true ;
+}
+
+// Bordes de las rebanadas dentro de la región: partes iguales (region) o las
+// marcas que puso el usuario (manual). La primera empieza en start
+void SampleInstrument::SliceBounds(std::vector<int> &bounds) {
+	bounds.clear() ;
+	int a,b ;
+	if (!SimplerRegion(a,b)) return ;
+	bounds.push_back(a) ;
+	if (GetSimpler(SIP_S_SLICEBY)==SSB_MANUAL) {
+		std::vector<int> m=GetMarks() ;
+		for (size_t i=0;i<m.size() && bounds.size()<128;i++) {
+			if (m[i]>bounds.back() && m[i]<b) bounds.push_back(m[i]) ;
+		}
+	} else {
+		int n=GetSimpler(SIP_S_SLICES) ;
+		if (n<1) n=1 ;
+		int len=(b-a)/n ;
+		for (int k=1;k<n && len>0;k++) {
+			int x=snapZero(a+k*len,bounds.back()+1,b-1,60) ;
+			if (x>bounds.back() && x<b) bounds.push_back(x) ;
+		}
+	}
+	bounds.push_back(b) ;
+}
+
+std::vector<int> SampleInstrument::GetMarks() {
+	std::vector<int> m ;
+	const char *s=FindVariable(SIP_S_MARKS)->GetString() ;
+	while (s && *s) {
+		char *end ;
+		long v=strtol(s,&end,10) ;
+		if (end==s) break ;
+		if (v>0) m.push_back(int(v)) ;
+		s=end ;
+		while (*s==',' || *s==' ') s++ ;
+	}
+	std::sort(m.begin(),m.end()) ;
+	m.erase(std::unique(m.begin(),m.end()),m.end()) ;
+	return m ;
+}
+
+void SampleInstrument::SetMarks(const std::vector<int> &marks) {
+	std::string out ;
+	char num[16] ;
+	for (size_t i=0;i<marks.size();i++) {
+		sprintf(num,i?",%d":"%d",marks[i]) ;
+		out+=num ;
+	}
+	FindVariable(SIP_S_MARKS)->SetString(out.c_str()) ;
+}
+
+int SampleInstrument::AddMark(int frame) {
+	if (!source_) return -1 ;
+	int size=source_->GetSize(-1) ;
+	if (frame<=0 || frame>=size) return -1 ;
+	frame=snapZero(frame,1,size-1,60) ;
+	std::vector<int> m=GetMarks() ;
+	if (m.size()>=127) return -1 ;          // Live: hasta 128 rebanadas
+	m.push_back(frame) ;
+	std::sort(m.begin(),m.end()) ;
+	m.erase(std::unique(m.begin(),m.end()),m.end()) ;
+	SetMarks(m) ;
+	return frame ;
+}
+
+bool SampleInstrument::RemoveMarkNear(int frame,int tolerance) {
+	std::vector<int> m=GetMarks() ;
+	int best=-1, dist=tolerance+1 ;
+	for (size_t i=0;i<m.size();i++) {
+		int d=abs(m[i]-frame) ;
+		if (d<dist) { dist=d ; best=int(i) ; }
+	}
+	if (best<0) return false ;
+	m.erase(m.begin()+best) ;
+	SetMarks(m) ;
 	return true ;
 }
 
@@ -2128,6 +2220,7 @@ int SampleInstrument::GetVolume() {
 
 int SampleInstrument::GetSampleSize(int channel) {
 	if (source_) {
+		if (channel<0) return source_->GetSize(-1) ;   // trk2als: antes leía renderParams_[-1]
 		 renderParams *rp=renderParams_+channel ;
 		return source_->GetSize(rp->midiNote_) ;
 	} ;

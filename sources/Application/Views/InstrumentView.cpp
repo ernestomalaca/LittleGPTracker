@@ -22,6 +22,74 @@
 
 // trk2als: frecuencia de corte en Hz. A+izq/der: un semitono; A+arr/aba:
 // una octava. Se muestra en Hz o kHz
+// trk2als: slice manual. Cursor sobre la onda (en cuadros del sample):
+// A+←/→ lo mueve, A+↑/↓ salta a la marca siguiente/anterior; A (al soltar)
+// pone una marca ahí y B+A la quita (lo hace InstrumentView)
+class UIMarkField : public UIIntVarField {
+public:
+	UIMarkField(GUIPoint &p, Variable &v, SampleInstrument *si) : UIIntVarField(p,v,"",0,0,1,1), si_(si) {}
+	virtual void Draw(GUIWindow &w,int offset=0) {
+		GUITextProperties props ;
+		GUIPoint position=GetPosition() ;
+		position._y+=offset ;
+		if (focus_) {
+			((AppWindow&)w).SetColor(CD_HILITE2) ;
+			props.invert_=true ;
+		} else {
+			((AppWindow&)w).SetColor(CD_NORMAL) ;
+		}
+		int size=si_->GetSampleSize() ;
+		int pos=clampPos() ;
+		int pm=size>0?int((long long)pos*1000/size):0 ;
+		std::vector<int> m=si_->GetMarks() ;
+		int on=-1 ;
+		for (size_t i=0;i<m.size();i++) if (m[i]==pos) on=int(i) ;
+		char buffer[40] ;
+		if (on>=0) sprintf(buffer,"marca %d/%d: %d.%d%%",on+1,int(m.size()),pm/10,pm%10) ;
+		else sprintf(buffer,"marca: %d.%d%%",pm/10,pm%10) ;
+		w.DrawString(buffer,position,props) ;
+	}
+	virtual void ProcessArrow(unsigned short mask) {
+		int a,b ;
+		if (!si_->SimplerRegion(a,b)) return ;
+		int pos=clampPos() ;
+		int step=(b-a)/256 ;
+		if (step<1) step=1 ;
+		std::vector<int> m=si_->GetMarks() ;
+		switch (mask) {
+			case EPBM_RIGHT: pos+=step ; break ;
+			case EPBM_LEFT:  pos-=step ; break ;
+			case EPBM_UP: {     // la marca siguiente (o el final)
+				int next=b ;
+				for (size_t i=0;i<m.size();i++) if (m[i]>pos && m[i]<next) next=m[i] ;
+				pos=next ;
+				break ;
+			}
+			case EPBM_DOWN: {   // la anterior (o el inicio)
+				int prev=a ;
+				for (size_t i=0;i<m.size();i++) if (m[i]<pos && m[i]>prev) prev=m[i] ;
+				pos=prev ;
+				break ;
+			}
+			default: return ;
+		}
+		if (pos<a) pos=a ;
+		if (pos>b) pos=b ;
+		src_.SetInt(pos) ;
+	}
+private:
+	int clampPos() {
+		int a,b ;
+		int pos=src_.GetInt() ;
+		if (si_->SimplerRegion(a,b)) {
+			if (pos<a) pos=a ;
+			if (pos>b) pos=b ;
+		}
+		return pos ;
+	}
+	SampleInstrument *si_ ;
+} ;
+
 class UIFreqVarField : public UIIntVarField {
 public:
 	UIFreqVarField(GUIPoint &p, Variable &v) : UIIntVarField(p,v,"freq: %d",30,22000,1,12) {}
@@ -66,6 +134,7 @@ void ImportSampleDialogCallback(View &v, ModalView &dialog) {
 
 #define IV_PRESET_LOAD MAKE_FOURCC('P','R','S','L')
 #define IV_PRESET_SAVE MAKE_FOURCC('P','R','S','S')
+#define IV_MARK MAKE_FOURCC('M','R','K','C')
 
 static void PresetLoadCallback(View &v, ModalView &dialog) {
 	if (dialog.GetReturnCode()==1) {
@@ -81,7 +150,9 @@ static void PresetSaveCallback(View &v, ModalView &dialog) {
 
 InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data),
 	presetLoadVar_("preset load",IV_PRESET_LOAD,(int)0,0),
-	presetSaveVar_("preset save",IV_PRESET_SAVE,(int)0,0) {
+	presetSaveVar_("preset save",IV_PRESET_SAVE,(int)0,0),
+	markVar_("mark",IV_MARK,(int)0,0) {
+	markTap_=false ;
 
 	project_=data->project_ ;
 	lastFocusID_=0 ;
@@ -216,6 +287,10 @@ void InstrumentView::fillSampleParameters() {
 		if (warp) {
 			v=instrument->FindVariable(SIP_S_WARP) ;
 			ADD(new UIIntVarField(AT(R),*v,"warp: %s",0,2,1,1)) ;
+		} else {
+			// slice by: partes iguales o marcas a mano (como Slice by de Simpler)
+			v=instrument->FindVariable(SIP_S_SLICEBY) ;
+			ADD(new UIIntVarField(AT(R),*v,"slice by: %s",0,1,1,1)) ;
 		}
 		if (warped && instrument->GetSimpler(SIP_S_BPM)<=0) {
 			instrument->FindVariable(SIP_S_BPM)->SetInt(instrument->GuessSimplerBpm()) ;
@@ -224,8 +299,12 @@ void InstrumentView::fillSampleParameters() {
 
 		LABEL("PLAYBACK") ;
 		if (mode==SM_SLICE) {
-			v=instrument->FindVariable(SIP_S_SLICES) ;
-			ADD(new UIIntVarField(AT(L),*v,"slices: %d",2,64,1,4)) ;
+			if (instrument->GetSimpler(SIP_S_SLICEBY)==SSB_MANUAL) {
+				ADD(new UIMarkField(AT(L),markVar_,instrument)) ;
+			} else {
+				v=instrument->FindVariable(SIP_S_SLICES) ;
+				ADD(new UIIntVarField(AT(L),*v,"slices: %d",2,64,1,4)) ;
+			}
 			v=instrument->FindVariable(SIP_S_TRIG) ;
 			ADD(new UIIntVarField(AT(R),*v,"trigger: %s",0,1,1,1)) ;
 			row++ ;
@@ -525,7 +604,31 @@ void InstrumentView::warpToNext(int offset) {
 
 void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 
-	if (!pressed) return ;
+	// trk2als: slice manual: A tocada (sin flechas) pone una marca al soltarla
+	bool onMark=GetFocus() && !GetFocus()->IsStatic() &&
+	            ((UIIntVarField *)GetFocus())->GetVariableID()==IV_MARK &&
+	            current_ && current_->GetType()==IT_SAMPLE ;
+	if (!pressed) {
+		if (markTap_ && !(mask&EPBM_A)) {
+			markTap_=false ;
+			SampleInstrument *si=(SampleInstrument *)current_ ;
+			int at=si->AddMark(markVar_.GetInt()) ;
+			if (at>=0) markVar_.SetInt(at) ;
+			isDirty_=true ;
+		}
+		return ;
+	}
+	markTap_=onMark && mask==EPBM_A ;
+	if (onMark && (mask&EPBM_B) && (mask&EPBM_A)) {
+		SampleInstrument *si=(SampleInstrument *)current_ ;
+		int a,b ;
+		si->SimplerRegion(a,b) ;
+		int tol=(b-a)/100 ;           // la marca bajo el cursor (o casi)
+		if (tol<1) tol=1 ;
+		si->RemoveMarkNear(markVar_.GetInt(),tol) ;
+		isDirty_=true ;
+		return ;
+	}
 
 	isDirty_=false ;
 
@@ -631,7 +734,8 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 	// cambiar el warp muestra u oculta 'transpose'
 	// ... y el loop mode (en pistas de tracker) muestra u oculta bars y bpm
 	if ((editedID==SIP_WARP || editedID==SIP_LOOPMODE || editedID==SIP_S_MODE ||
-	     editedID==SIP_S_LOOP || editedID==SIP_S_WARP || editedID==SIP_S_ETAB) &&
+	     editedID==SIP_S_LOOP || editedID==SIP_S_WARP || editedID==SIP_S_ETAB ||
+	     editedID==SIP_S_SLICEBY) &&
 	    current_->FindVariable(editedID)->GetInt()!=editedBefore) {
 		lastFocusID_=editedID ;
 		onInstrumentChange() ;
@@ -1049,16 +1153,25 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 	int l0=b-int((long long)size*si->GetSimpler(SIP_S_LLEN)/100*W/vLen) ;
 	if (l0<a) l0=a ;
 	if (loop) FillRect(l0,Y-4,b-l0,H+8,Mix(bg,hi,16),8) ;
-	// slice: la rebanada que está sonando, iluminada
+	// slice: los bordes de cada rebanada en px (partes iguales o marcas)
+	std::vector<int> slPx ;
 	if (mode==SM_SLICE) {
-		int n=si->GetSimpler(SIP_S_SLICES) ;
+		std::vector<int> bounds ;
+		si->SliceBounds(bounds) ;
+		for (size_t i=0;i<bounds.size();i++) slPx.push_back(FPX(bounds[i])) ;
+		if (slPx.size()>=2) { slPx.front()=a ; slPx.back()=b ; }
+	}
+	int nSl=(slPx.size()>=2)?int(slPx.size())-1:1 ;
+	// slice: la rebanada que está sonando, iluminada
+	if (mode==SM_SLICE && nSl>0 && slPx.size()>=2) {
 		int pos=si->GetPlayPosition() ;
-		if (n>0 && pos>=0) {
+		if (pos>=0) {
 			int px=FPX(pos) ;
-			if (px>=a && px<b) {
-				int k=(px-a)*n/(b-a) ;
-				int x0=a+(b-a)*k/n, x1=a+(b-a)*(k+1)/n ;
-				FillRect(x0,Y-4,x1-x0,H+8,Mix(bg,hi,22),4) ;
+			for (int k=0;k<nSl;k++) {
+				if (px>=slPx[k] && px<slPx[k+1]) {
+					FillRect(slPx[k],Y-4,slPx[k+1]-slPx[k],H+8,Mix(bg,hi,22),4) ;
+					break ;
+				}
 			}
 		}
 	}
@@ -1082,14 +1195,12 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 		int db=si->GetSimpler(SIP_S_SUS) ;
 		sus=(db<=-60)?0:powf(10.0f,db/20.0f) ;
 	}
-	int nSl=(mode==SM_SLICE)?si->GetSimpler(SIP_S_SLICES):1 ;
-	if (nSl<1) nSl=1 ;
 	// ganancia en el px x (dentro de la región; en slice, cada rebanada empieza
 	// su propia envolvente)
 	#define ENV_AT(xx,out) { \
 		int s0=a, s1=b ; \
-		if (nSl>1) { int k=((xx)-a)*nSl/(b-a) ; if (k>=nSl) k=nSl-1 ; \
-		             s0=a+(b-a)*k/nSl ; s1=a+(b-a)*(k+1)/nSl ; } \
+		if (nSl>1) { for (int kk=0;kk<nSl;kk++) if ((xx)>=slPx[kk] && (xx)<slPx[kk+1]) \
+		             { s0=slPx[kk] ; s1=slPx[kk+1] ; break ; } } \
 		float t=((xx)-s0)*msPerPx ; float gg ; \
 		if (t<atk) gg=(atk<1)?1:t/atk ; \
 		else if (t<atk+dec) gg=1.0f-(1.0f-sus)*(t-atk)/dec ; \
@@ -1160,12 +1271,12 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 		for (int q=0;q<10;q++) { int w=(q<5)?2*q+3:21-2*q ; \
 			FillRect((dir)>0?(xx):(xx)-w,Y-4+q,w,1,hi2) ; } }
 	if (mode==SM_SLICE) {
-		int every=1 ;
-		while ((b-a)*every/nSl<30) every*=2 ;   // nombres sin amontonar
+		int lastName=-1000 ;
 		for (int k=0;k<nSl;k++) {
-			int x=a+(b-a)*k/nSl ;
+			int x=slPx[k] ;
 			FillRect(x-1,Y-4,2,H+8,hi2) ;
-			if (k%every==0) {
+			if (x-lastName>=30) {                 // nombres sin amontonar
+				lastName=x ;
 				char num[8] ;
 				// la nota que dispara la rebanada (C1 = la primera, como en Simpler)
 				static const char *names[12]={"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"} ;
@@ -1175,6 +1286,22 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 			}
 		}
 		FillRect(b-1,Y-4,2,H+8,hi2) ;
+		// slice manual: el cursor donde va la próxima marca
+		if (si->GetSimpler(SIP_S_SLICEBY)==SSB_MANUAL) {
+			int ca,cb ;
+			si->SimplerRegion(ca,cb) ;
+			int cpos=markVar_.GetInt() ;
+			if (cpos<ca) cpos=ca ;
+			if (cpos>cb) cpos=cb ;
+			int cx=FPX(cpos) ;
+			bool focused=GetFocus() && !GetFocus()->IsStatic() &&
+			             ((UIIntVarField *)GetFocus())->GetVariableID()==IV_MARK ;
+			GUIColor cc=focused?fg:dim2 ;
+			for (int yy=Y-4;yy<Y+H+4;yy+=6) FillRect(cx-1,yy,2,4,cc) ;
+			if (focused) {
+				for (int q=0;q<5;q++) FillRect(cx-q,Y+H+4+q,2*q+1,1,fg) ;
+			}
+		}
 	} else {
 		FLAG(a,1)
 		FLAG(b,-1)
