@@ -27,3 +27,8 @@ projects/lgpt-garlic.elf
 projects/lgpt-garlicplus.elf
 projects/lgpt-rg35xxplus.elf
 projects/LittleGPTracker.app
+
+# trk2als: estado local del tracker, nunca va al repo
+projects/last_project
+projects/config.xml
+projects/presets/
