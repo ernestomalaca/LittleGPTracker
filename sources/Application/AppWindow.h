@@ -83,10 +83,7 @@ class AppWindow : public GUIWindow, I_Observer, Status {
     bool _selectFirst;   // Select se sostuvo antes que B
     void joyButton(unsigned short v, bool pressed, bool repeat);
     unsigned short joyLegacy(unsigned short phys);
-    void joyNavigate(unsigned short dir);
     void joyStep(unsigned short dir);
-    void joySwitch(int viewType);
-    int joyCurrentType();
     ViewData *_viewData;
     SongView *_songView;
     ChainView *_chainView;

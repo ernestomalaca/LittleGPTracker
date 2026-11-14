@@ -1666,6 +1666,10 @@ bool SampleInstrument::startSimpler(renderParams *rp,int channel,unsigned char n
 	int a=int((long long)size*GetSimpler(SIP_S_START)/100) ;
 	int b=int((long long)size*GetSimpler(SIP_S_END)/100) ;
 	if (b>size) b=size ;
+	// trk2als: como el Snap de Simpler: inicio y final en el cruce por cero
+	// más cercano, para que no truene al entrar, al terminar ni al dar la vuelta
+	a=snapZero(a,0,size,rp->midiNote_) ;
+	if (b<size) b=snapZero(b,a+1,size,rp->midiNote_) ;
 	if (b<=a) b=(a+1<size)?a+1:size ;
 	offset=GetSimpler(SIP_S_TRANSP)+GetSimpler(SIP_S_DETUNE)/100.0f ;
 	rp->simplerLoop_=SILM_ONESHOT ;
@@ -1678,6 +1682,7 @@ bool SampleInstrument::startSimpler(renderParams *rp,int channel,unsigned char n
 				int len=int((long long)size*GetSimpler(SIP_S_LLEN)/100) ;
 				int ls=b-len ;
 				if (ls<a) ls=a ;
+				ls=snapZero(ls,a,b-1,rp->midiNote_) ;
 				if (ls>=b) ls=b-1 ;
 				rp->rendLoopStart_=ls ;
 				rp->simplerLoop_=SILM_LOOP ;
@@ -1701,8 +1706,8 @@ bool SampleInstrument::startSimpler(renderParams *rp,int channel,unsigned char n
 			if (idx<0 || idx>=n) return false ;
 			int len=(b-a)/n ;
 			if (len<1) return false ;
-			rp->rendLoopStart_=a+idx*len ;
-			rp->rendLoopEnd_=a+(idx+1)*len ;
+			rp->rendLoopStart_=snapZero(a+idx*len,a,b,rp->midiNote_) ;
+			rp->rendLoopEnd_=(idx+1<n)?snapZero(a+(idx+1)*len,rp->rendLoopStart_+1,b,rp->midiNote_):b ;
 			first=rp->rendLoopStart_ ;
 			rp->gate_=(GetSimpler(SIP_S_TRIG)==1) ;
 			break ;
@@ -1710,6 +1715,33 @@ bool SampleInstrument::startSimpler(renderParams *rp,int channel,unsigned char n
 	}
 	sliced=(mode==SM_SLICE) ;
 	return true ;
+}
+
+// trk2als: el cruce por cero más cercano a 'frame' (dentro de lo..hi), donde
+// la onda cambia de signo; busca hasta ~25 ms a cada lado. Con estéreo mira
+// la suma de los canales
+int SampleInstrument::snapZero(int frame,int lo,int hi,unsigned char note) {
+	short *wav=(short *)source_->GetSampleBuffer(note) ;
+	int size=source_->GetSize(note) ;
+	int ch=source_->GetChannelCount(note) ;
+	if (!wav || size<2 || ch<1) return frame ;
+	if (lo<1) lo=1 ;
+	if (hi>size-1) hi=size-1 ;
+	if (frame<lo || frame>hi) return frame ;
+	#define SMP(i) (ch==1?int(wav[i]):int(wav[(i)*ch])+int(wav[(i)*ch+1]))
+	for (int d=0;d<1100;d++) {
+		for (int s=-1;s<=1;s+=2) {
+			int i=frame+s*d ;
+			if (i<lo || i>hi) continue ;
+			int p=SMP(i-1), q=SMP(i) ;
+			if (q==0 || (p<0)!=(q<0)) {
+				// de las dos muestras del cruce, la más cercana a cero
+				return (abs(p)<abs(q))?i-1:i ;
+			}
+		}
+	}
+	#undef SMP
+	return frame ;
 }
 
 // Filtro del Sampler: state variable de 12 dB/oct (forma TPT de Cytomic),

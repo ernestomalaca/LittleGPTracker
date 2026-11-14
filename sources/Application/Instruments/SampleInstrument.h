@@ -213,6 +213,7 @@ private:
 	   void simplerBlock(renderParams *rp,int size) ; // envolvente -> corte, glide
 	   void simplerFilter(renderParams *rp,fixed *buffer,int size) ;
 	   void filterEnvBlock(renderParams *rp,int size) ;
+	   int snapZero(int frame,int lo,int hi,unsigned char note) ;   // cruce por cero más cercano
 	   void simplerEnvelope(renderParams *rp,fixed *buffer,int size) ;
 	   float envMs(FourCC id) ;
 	   WarpStretch *stretch_[SI_VOICE_COUNT] ;

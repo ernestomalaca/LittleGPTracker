@@ -600,9 +600,7 @@ void AppWindow::LayoutChildren() {};
 /************************************************************
  trk2als: botones como en Joy2Live / LSDJ
 
-   Select + flechas   zonas: ↑ Song, ↓ instrumento, ← / → como siempre
-                      (en la Song, → abre la phrase)
-   Select + R         Project → Mixer → Song
+   Select + flechas   pantallas, como el R + flechas de LGPT
    Select + A         pegar          (L + A de LGPT)
    Select, B          marcar / clonar (L + B de LGPT)
    Select + Start     detener        (R + Start de LGPT)
@@ -612,51 +610,10 @@ void AppWindow::LayoutChildren() {};
  Los atajos de LGPT con L y R siguen funcionando.
  ************************************************************/
 
-int AppWindow::joyCurrentType() {
-    if (_currentView == _songView) return VT_SONG;
-    if (_currentView == _chainView) return VT_CHAIN;
-    if (_currentView == _phraseView) return VT_PHRASE;
-    if (_currentView == _instrumentView) return VT_INSTRUMENT;
-    if (_currentView == _projectView) return VT_PROJECT;
-    if (_currentView == _mixerView) return VT_MIXER;
-    if (_currentView == _tableView) return VT_TABLE;
-    return -1;
-}
-
-void AppWindow::joySwitch(int viewType) {
-    ViewType vt = (ViewType)viewType;
-    ViewEvent ve(VET_SWITCH_VIEW, &vt);
-    Update(*_currentView, &ve);
-}
-
 // un paso de LGPT: R + flecha (y soltar)
 void AppWindow::joyStep(unsigned short dir) {
     _currentView->ProcessButton(EPBM_R | dir, true);
     _currentView->ProcessButton(0, false);
-}
-
-void AppWindow::joyNavigate(unsigned short dir) {
-    int cur = joyCurrentType();
-    switch (dir) {
-    case EPBM_UP:
-        if (cur != VT_SONG) joySwitch(VT_SONG);
-        break;
-    case EPBM_DOWN:   // al instrumento: Song → chain → phrase → instrumento
-        for (int i = 0; i < 3 && (cur == VT_SONG || cur == VT_CHAIN || cur == VT_PHRASE); i++) {
-            joyStep(EPBM_RIGHT);
-            int now = joyCurrentType();
-            if (now == cur) break;
-            cur = now;
-        }
-        break;
-    case EPBM_RIGHT:
-        joyStep(EPBM_RIGHT);
-        if (cur == VT_SONG && joyCurrentType() == VT_CHAIN) joyStep(EPBM_RIGHT);
-        break;
-    case EPBM_LEFT:
-        joyStep(EPBM_LEFT);
-        break;
-    }
 }
 
 unsigned short AppWindow::joyLegacy(unsigned short phys) {
@@ -688,16 +645,10 @@ void AppWindow::joyButton(unsigned short v, bool pressed, bool repeat) {
         if ((v == EPBM_SELECT || v == EPBM_START) && (phys & EPBM_B) && !_selectFirst)
             _bGesture = true;
     }
-    // zonas: Select + flechas / Select + R (sin repetir al sostener)
-    if ((phys & EPBM_SELECT) && !_bGesture && (v & (arrows | EPBM_R))) {
-        if (pressed && !repeat) {
-            if (v == EPBM_R) {
-                int cur = joyCurrentType();
-                joySwitch(cur == VT_PROJECT ? VT_MIXER : (cur == VT_MIXER ? VT_SONG : VT_PROJECT));
-            } else {
-                joyNavigate(v);
-            }
-        }
+    // pantallas: Select + flechas = el R + flechas de LGPT (Song ⇄ Chain ⇄
+    // Phrase ⇄ Instrument ⇄ Table; en la Song, ↑ Project y ↓ Mixer)
+    if ((phys & EPBM_SELECT) && !_bGesture && (v & arrows)) {
+        if (pressed && !repeat) joyStep(v);
         return;
     }
     _currentView->ProcessButton(joyLegacy(phys), pressed);

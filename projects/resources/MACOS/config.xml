@@ -6,7 +6,6 @@
 	<KEY_A value="a"/>
 	<KEY_B value="s"/>
 	<KEY_LSHOULDER value="x" />
-	<KEY_RSHOULDER value="left shift" />
 
 	<KEY_UP value="up" />
 	<KEY_DOWN value="down" />
@@ -14,7 +13,7 @@
 	<KEY_RIGHT value="right" />
 
 	<KEY_START value="space" />
-	<KEY_SELECT value="z" /> <!-- trk2als: Select, como en Joy2Live -->
+	<KEY_SELECT value="left shift" /> <!-- trk2als: Select (pantallas, marcar, pegar...), como en Joy2Live -->
 
     <!-- Default colors below -->
     <BACKGROUND   value = "1D0A1F" />
