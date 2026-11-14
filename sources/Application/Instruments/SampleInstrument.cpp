@@ -1011,8 +1011,9 @@ bool SampleInstrument::renderVoice(int channel, fixed *buffer, int size, int fla
 		fixed fpattenuate=fp_mul(rp->attenuate_,volscale) ;
 
 	  int pan=fp2i(rp->pan_) ;
-		fixed fixedpanl=panlaw[pan] ;
-		fixed fixedpanr=panlaw[254-pan] ;
+		// trk2als: panlaw sube con el índice; pan 00 = izquierda, como en Live
+		fixed fixedpanl=panlaw[254-pan] ;
+		fixed fixedpanr=panlaw[pan] ;
 
 		// filter constants
 
@@ -1251,8 +1252,9 @@ bool SampleInstrument::renderVoice(int channel, fixed *buffer, int size, int fla
 						volfactor=fp_mul(rp->volume_,volscale) ;
 						fpattenuate=fp_mul(rp->attenuate_,volscale) ;
 						pan=fp2i(rp->pan_) ;
-						fixed fixedpanl=panlaw[pan] ;
-						fixed fixedpanr=panlaw[254-pan] ;
+						// trk2als: panlaw sube con el índice; pan 00 = izquierda, como en Live
+						fixed fixedpanl=panlaw[254-pan] ;
+						fixed fixedpanr=panlaw[pan] ;
 
 						if (complex) {
 							fpSpeed=FP_ONE ;   // trk2als: la velocidad la pone el time-stretch
@@ -1404,6 +1406,12 @@ bool SampleInstrument::renderVoice(int channel, fixed *buffer, int size, int fla
 				if (channelCount==1) {
 					t2=s2 ;
 					feedbackPick++ ;
+				} else {
+					// trk2als: el bucle deja el canal izquierdo en t2 y el
+					// derecho en s2; sin esto el estéreo salía invertido
+					fixed tmp=s2 ;
+					s2=t2 ;
+					t2=tmp ;
 				}
 
 				if (feedbackPick>=feedbackEnd) {
@@ -1824,6 +1832,12 @@ float SampleInstrument::envMs(FourCC id) {
 
 // Una vez por bloque: parámetros en vivo, glide y la envolvente sobre el filtro
 void SampleInstrument::simplerBlock(renderParams *rp,int size) {
+	// trk2als: cuánto le falta a la voz para el final de la región, antes de
+	// renderizar este bloque (para el fade del final)
+	{
+		float sp=fp2fl(rp->speed_) ;
+		rp->toEnd_=(sp>0)?(rp->rendLoopEnd_-rp->position_)/sp:1e9f ;
+	}
 	// solo lo que cambió en la pantalla, para no pisar los comandos de la phrase
 	int v ;
 	if ((v=GetSimpler(SIP_S_VOL))!=rp->sLive_[0]) {
@@ -1903,16 +1917,17 @@ void SampleInstrument::simplerEnvelope(renderParams *rp,fixed *buffer,int size) 
 		sus=(db<=-60)?0:powf(10.0f,db/20.0f) ;
 	}
 	float rel=(oneShot?envMs(SIP_S_FOUT):envMs(SIP_S_REL))*msr ;
+	// al soltar la nota nunca de golpe: 3 ms como mínimo (el click del final)
+	if (rel<3*msr) rel=3*msr ;
 	// STOP o nota cortada: un release corto (no de golpe: eso es un click)
-	if (rp->chokeMs_>0 && (rel<1 || rel>rp->chokeMs_*msr)) rel=rp->chokeMs_*msr ;
-	// one-shot: el fade out cae al final de la región (como en Simpler);
-	// muestras de salida que le faltan a la voz al terminar este bloque
+	if (rp->chokeMs_>0 && rel>rp->chokeMs_*msr) rel=rp->chokeMs_*msr ;
+	// one-shot: el fade out cae al final de la región (como en Simpler); sin
+	// loop, en cualquier modo, al menos 3 ms antes del final para que la voz
+	// no se corte en seco. Muestras de salida que le faltan a la voz al
+	// terminar este bloque
 	float fadeOut=oneShot?envMs(SIP_S_FOUT)*msr:0 ;
-	float leftEnd=0 ;
-	if (fadeOut>=1) {
-		float sp=fp2fl(rp->speed_) ;
-		leftEnd=(sp>0)?(rp->rendLoopEnd_-rp->position_)/sp:0 ;
-	}
+	if (rp->simplerLoop_!=SILM_LOOP && fadeOut<3*msr) fadeOut=3*msr ;
+	float leftEnd=rp->toEnd_ ;   // calculado antes de renderizar el bloque
 	for (int i=0;i<size;i++) {
 		float l=rp->envLevel_ ;
 		switch (rp->envStage_) {
@@ -1937,7 +1952,7 @@ void SampleInstrument::simplerEnvelope(renderParams *rp,fixed *buffer,int size) 
 		rp->envLevel_=l ;
 		rp->envClock_++ ;
 		if (fadeOut>=1) {
-			float left=leftEnd+(size-i) ;
+			float left=leftEnd-i ;
 			if (left<fadeOut) l*=(left>0)?left/fadeOut:0 ;
 		}
 		fixed f=fl2fp(l) ;

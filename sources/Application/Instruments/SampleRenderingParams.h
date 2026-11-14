@@ -52,6 +52,7 @@ struct renderParams {
     int declickIn_ ;         // trk2als: clip de audio: muestras del fade de entrada (-1 = no)
     int declickOut_, declickOutLen_ ; // fade de salida en curso
     bool audioClip_ ;        // la voz es un clip de audio con 'fade: on'
+    float toEnd_ ;           // trk2als: muestras de salida hasta el final de la región, al empezar el bloque
     float chokeMs_ ;         // trk2als: >0 = release corto (STOP 10 ms, nota cortada 4 ms)
     float svfIc1_[2], svfIc2_[2] ; // trk2als: estado del filtro del Sampler
     float svfG_, svfK_ ;     // coeficientes del bloque
