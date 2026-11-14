@@ -1,5 +1,7 @@
 #include "SampleInstrument.h"
 #include <algorithm>
+#include <ctype.h>
+#include <strings.h>
 #include <stdlib.h>
 #include "SamplePool.h"
 #include "Application/Model/Config.h"
@@ -2234,6 +2236,36 @@ int SampleInstrument::DetectBpm(const char *name, float secs, bool allowGuess) {
 		if (bpm>=80 && bpm<=160) return int(bpm+0.5f) ;
 	}
 	return 0 ;
+}
+
+// auto: los loops (bpm en el nombre, o "loop" en el nombre y una duración de
+// compases enteros) con complex; lo demás (one-shots, notas) sin warp
+int SampleInstrument::DefaultWarp(int *bpm) {
+	static int mode=-2 ;          // -1 = auto
+	if (mode==-2) {
+		const char *v=Config::GetInstance()->GetValue("DEFAULTWARP") ;
+		mode=-1 ;
+		if (v) {
+			if (!strcasecmp(v,"off")) mode=SW_OFF ;
+			else if (!strcasecmp(v,"re-pitch") || !strcasecmp(v,"repitch")) mode=SW_REPITCH ;
+			else if (!strcasecmp(v,"complex")) mode=SW_COMPLEX ;
+		}
+	}
+	int index=GetSampleIndex() ;
+	SoundSource *src=currentSource() ;
+	if (bpm) *bpm=0 ;
+	if (index<0 || !src || src->GetSampleRate(-1)<=0) return SW_OFF ;
+	const char *name=SamplePool::GetInstance()->GetNameList()[index] ;
+	float secs=float(src->GetSize(-1))/src->GetSampleRate(-1) ;
+	int found=DetectBpm(name,secs,false) ;
+	if (!found) {
+		std::string low(name) ;
+		for (size_t i=0;i<low.size();i++) low[i]=tolower(low[i]) ;
+		if (low.find("loop")!=std::string::npos) found=DetectBpm(name,secs,true) ;
+	}
+	if (bpm) *bpm=found ;
+	if (mode>=0) return mode ;
+	return found?SW_COMPLEX:SW_OFF ;
 }
 
 int SampleInstrument::GetSampleIndex() {

@@ -192,6 +192,13 @@ void InstrumentView::onInstrumentChange() {
 		if (current_==old && lastSampleIdx_!=-2 && idx!=lastSampleIdx_ && idx>=0) {
 			// 0 si no parece un loop: así no arrastra el BPM del sample anterior
 			si->FindVariable(SIP_LOOPBPM)->SetInt(si->DetectLoopBpm()) ;
+			// el warp con el que arranca (DEFAULTWARP en config.xml; auto: los
+			// loops con complex y su bpm, lo demás sin warp)
+			if (!audioMode_ && si->FindVariable(SIP_LOOPMODE)->GetInt()!=SILM_LOOPSYNC) {
+				int bpm=0 ;
+				si->FindVariable(SIP_S_WARP)->SetInt(si->DefaultWarp(&bpm)) ;
+				si->FindVariable(SIP_S_BPM)->SetInt(bpm>0?bpm:si->GuessSimplerBpm()) ;
+			}
 			// las marcas del slice manual eran del sample anterior
 			si->SetMarks(std::vector<int>()) ;
 			markVar_.SetInt(0) ;

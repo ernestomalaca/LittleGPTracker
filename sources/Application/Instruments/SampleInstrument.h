@@ -142,6 +142,10 @@ public:
    public:
        int GetSimpler(FourCC id) { return FindVariable(id)->GetInt() ; } ;
        int GuessSimplerBpm() ;
+       // trk2als: warp con el que arranca un sample nuevo en el Sampler
+       // (DEFAULTWARP en config.xml: off, re-pitch, complex o auto). Deja el
+       // bpm en *bpm si lo encontró
+       int DefaultWarp(int *bpm) ;
        // trk2als: rebanadas. Región start..end en cuadros (en cruces por
        // cero) y los bordes de cada rebanada: a, ..., b (n rebanadas = n+1 bordes)
        SoundSource *currentSource() ;   // el sample elegido (aunque source_ no se haya actualizado)
