@@ -1274,6 +1274,8 @@ void Player::StopStreaming() { mixer_->StopStreaming(); }
 
 int Player::GetStreamPosition() { return mixer_->GetStreamPosition(); }
 
+void Player::SetStreamEnd(int frame) { mixer_->SetStreamEnd(frame); }
+
 std::string Player::GetAudioAPI() {
     AudioOut *out = mixer_->GetAudioOut();
     return (out)?out->GetAudioAPI():"";

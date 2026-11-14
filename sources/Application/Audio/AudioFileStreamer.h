@@ -20,6 +20,7 @@ public:
 	// antes de sonar, startFrac es el punto de arranque (0-1) y loop repite
 	bool Start(const Path &, double speed, double delaySecs, double startFrac, bool loop) ;
 	void Stop() ;
+	void SetEnd(int frame) { end_=frame ; } // trk2als: parar en ese cuadro (-1 = al final)
 	// trk2als: cuadro que suena; -2 = arrancando (aún sin abrir), -1 = parado
 	int GetPosition() { return (mode_!=AFSM_PLAYING)?-1:(wav_ && !newPath_?position_:-2) ; }
 protected:
@@ -34,6 +35,7 @@ protected:
 	bool loop_ ;
 	double frac_ ;   // trk2als: posición fraccionaria para respetar la frecuencia del archivo
 	int shift_ ;
+	int end_ ;
 } ;
 
 #endif 

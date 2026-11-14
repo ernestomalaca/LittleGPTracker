@@ -94,6 +94,7 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data),
 	previewPos_=-1 ;
 	tapPlay_=false ;
 	songByTap_=false ;
+	slicePlay_=false ;
 
 	project_=data->project_ ;
 	lastFocusID_=0 ;
@@ -1267,8 +1268,8 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 			sprintf(tag,"marcas %d  %d.%d%%  zoom x%d",int(m.size()),pm/10,pm%10,waveZoom_) ;
 			DrawText(X+4,Y+H-12,tag,fg,0) ;
 			{
-				const char *help=tapPlay_?"sonando: A marca  START para" :
-				                         "START toca  A escucha  AA marca  B+<> mueve  B+A borra" ;
+				const char *help=tapPlay_?"sonando: A marca  START para  L+START de nuevo" :
+				                         "START toca  A rebanada  AA marca  B+<> mueve  B+A borra" ;
 				DrawText(632-8*int(strlen(help)),3,help,dim2,0) ;
 			}
 			// lo que suena al escuchar (A)
@@ -1312,6 +1313,11 @@ void InstrumentView::AnimationUpdate() {
 			ClearShapes() ;
 			drawWaveform() ;
 			return ;
+		}
+		if (sp==-1 && !tapPlay_) {
+			previewing_=false ;
+			slicePlay_=false ;
+			px=-2 ;
 		}
 		if (sp>=0 && sp!=previewPos_) {
 			previewPos_=sp ;
@@ -1411,7 +1417,10 @@ void InstrumentView::enterWaveEdit() {
 // sonando): con A se marca donde va sonando
 void InstrumentView::startTapPlay(int from) {
 	markVar_.SetInt(from) ;
-	startPreview() ;
+	int ra,rb ;
+	((SampleInstrument *)current_)->SimplerRegion(ra,rb) ;
+	startPreview(from,rb) ;
+	slicePlay_=false ;
 	tapPlay_=previewing_ ;
 	Player *player=Player::GetInstance() ;
 	if (tapPlay_ && !player->IsRunning()) {
@@ -1436,22 +1445,40 @@ void InstrumentView::exitWaveEdit() {
 	waveZoom_=1 ;
 }
 
-void InstrumentView::startPreview() {
+// suena desde 'from' (o el cursor) hasta 'end' (o el final del sample)
+void InstrumentView::startPreview(int from,int end) {
 	if (!current_ || current_->GetType()!=IT_SAMPLE) return ;
 	SampleInstrument *si=(SampleInstrument *)current_ ;
 	int index=si->GetSampleIndex() ;
 	SoundSource *src=si->currentSource() ;
 	if (index<0 || !src || src->GetSize(-1)<=0) return ;
+	if (from<0) from=markVar_.GetInt() ;
 	std::string name=SamplePool::GetInstance()->GetNameList()[index] ;
-	double frac=double(markVar_.GetInt())/src->GetSize(-1) ;
-	Player::GetInstance()->StartStreaming(Path(std::string("samples:")+name),1.0,0,frac,false) ;
+	double frac=double(from)/src->GetSize(-1) ;
+	Player *player=Player::GetInstance() ;
+	player->StartStreaming(Path(std::string("samples:")+name),1.0,0,frac,false) ;
+	player->SetStreamEnd(end) ;
 	previewing_=true ;
+	slicePlay_=(end>0) ;
+}
+
+// la rebanada donde está 'frame': de su marca a la siguiente
+void InstrumentView::sliceAt(int frame,int &from,int &to) {
+	SampleInstrument *si=(SampleInstrument *)current_ ;
+	std::vector<int> bounds ;
+	si->SliceBounds(bounds) ;
+	from=frame ; to=-1 ;
+	for (size_t k=0;k+1<bounds.size();k++) {
+		if (frame>=bounds[k] && frame<bounds[k+1]) { from=bounds[k] ; to=bounds[k+1] ; return ; }
+	}
+	if (bounds.size()>=2 && frame>=bounds.back()) { from=bounds[bounds.size()-2] ; to=bounds.back() ; }
 }
 
 void InstrumentView::stopPreview() {
 	if (previewing_) Player::GetInstance()->StopStreaming() ;
 	previewing_=false ;
 	tapPlay_=false ;
+	slicePlay_=false ;
 }
 
 // la marca más cercana al cursor (dentro de 1% de la región), o -1
@@ -1479,7 +1506,7 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 		return false ;
 	}
 	if (!pressed) {
-		if (previewing_ && !tapPlay_ && !(mask&EPBM_A)) stopPreview() ;
+		if (previewing_ && !tapPlay_ && !slicePlay_ && !(mask&EPBM_A)) stopPreview() ;
 		return true ;
 	}
 	// cambiar de pantalla (Select + flechas, o R + flechas) termina la edición.
@@ -1500,6 +1527,15 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 	std::vector<int> m=si->GetMarks() ;
 	isDirty_=true ;
 
+	// L + Start (o ← + Start): rebanar de nuevo, sin marcas, desde el inicio
+	if ((mask&EPBM_START) && (mask&EPBM_L)) {
+		stopTapPlay() ;
+		m.clear() ;
+		si->SetMarks(m) ;
+		waveSel_=0 ;
+		startTapPlay(a) ;
+		return true ;
+	}
 	// Start: tocar / parar la región desde el cursor (y la canción)
 	if (mask==EPBM_START) {
 		if (tapPlay_) stopTapPlay() ;
@@ -1571,7 +1607,9 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 				lastAPress_=now ;
 			}
 			waveSel_=0 ;
-			startPreview() ;
+			int f,t ;                    // suena la rebanada que dispara esa nota
+			sliceAt(c,f,t) ;
+			startPreview(f,t) ;
 			return true ;
 		}
 		if (mask&(EPBM_LEFT|EPBM_RIGHT)) {        // A + ← →: moverse escuchando
@@ -1580,7 +1618,13 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 			if (c>b) c=b ;
 			markVar_.SetInt(c) ;
 			lastAPress_=0 ;
-			startPreview() ;
+			int f,t ;                    // del cursor hasta la siguiente marca
+			sliceAt(c,f,t) ;
+			startPreview(c,t) ;
+		} else if (mask&EPBM_UP) {                // A + ↑ / ↓: zoom
+			if (waveZoom_<64) waveZoom_*=2 ;
+		} else if (mask&EPBM_DOWN) {
+			if (waveZoom_>1) waveZoom_/=2 ;
 		}
 		return true ;
 	}

@@ -69,7 +69,9 @@ private:
 	void enterWaveEdit() ;
 	void exitWaveEdit() ;
 	bool processWaveEdit(unsigned short mask,bool pressed) ;
-	void startPreview() ;
+	void startPreview(int from=-1,int end=-1) ;
+	void sliceAt(int frame,int &from,int &to) ;
+	bool slicePlay_ ;          // suena una rebanada (sigue al soltar A)
 	void stopPreview() ;
 	int nearMark(const std::vector<int> &m) ;
 	void openPresetLoad() ;

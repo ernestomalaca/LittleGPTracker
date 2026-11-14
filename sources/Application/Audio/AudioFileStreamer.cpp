@@ -7,6 +7,7 @@
 
 AudioFileStreamer::AudioFileStreamer() {
 	wav_=0 ;
+	end_=-1 ;
 	shift_=1 ;
 	mode_=AFSM_STOPPED ;
 	newPath_=false ;
@@ -36,6 +37,7 @@ bool AudioFileStreamer::Start(const Path &path, double speed, double delaySecs, 
 	startFrac_=(startFrac>=0 && startFrac<1)?startFrac:0.0 ;
 	delay_=long(delaySecs*Audio::GetInstance()->GetSampleRate()) ;
 	loop_=loop ;
+	end_=-1 ;
 	newPath_=true ;
 	mode_=AFSM_PLAYING ;
 	return true ;
@@ -81,6 +83,8 @@ bool AudioFileStreamer::Render(fixed *buffer,int samplecount) {
 	// trk2als: el archivo puede tener otra frecuencia (p. ej. 22050 Hz); se
 	// avanza en proporción para que el preview suene a su altura real
 	long size=wav_->GetSize(-1) ;
+	long full=size ;
+	if (end_>0 && end_<size) size=end_ ;   // trk2als: termina antes (una rebanada)
 	int fileRate=wav_->GetSampleRate(-1) ;
 	int outRate=Audio::GetInstance()->GetSampleRate() ;
 	double step=(fileRate>0 && outRate>0)?double(fileRate)/double(outRate):1.0 ;
@@ -116,8 +120,15 @@ bool AudioFileStreamer::Render(fixed *buffer,int samplecount) {
 		int idx=int(frac_+i*step) ;
 		if (idx>=count) break ;
 		short *s=src+idx*channel ;
-		fixed v=*dst++=i2fp((*s)>>(1+shift_)) ;
-		*dst++=(channel==2)?i2fp((s[1])>>(1+shift_)):v ;
+		int l=(*s)>>(1+shift_) ;
+		int r=(channel==2)?(s[1])>>(1+shift_):l ;
+		// trk2als: al cortar antes del final, sin click: baja en ~3 ms
+		if (size<full) {
+			long left=size-(position_+idx) ;
+			if (left<128) { l=int(l*left/128) ; r=int(r*left/128) ; }
+		}
+		*dst++=i2fp(l) ;
+		*dst++=i2fp(r) ;
 	}
 	double advance=frac_+i*step ;
 	int whole=int(advance) ;
