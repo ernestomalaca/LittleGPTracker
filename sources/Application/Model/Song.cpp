@@ -5,6 +5,7 @@
 #include "Table.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 #include <assert.h>
 
 
@@ -38,6 +39,18 @@ void Song::SaveContent(TiXmlNode *node) {
 	saveHexBuffer(node,"PARAM1",phrase_->param1_,PHRASE_COUNT*16) ;
 	saveHexBuffer(node,"COMMAND2",phrase_->cmd2_,PHRASE_COUNT*16) ;
 	saveHexBuffer(node,"PARAM2",phrase_->param2_,PHRASE_COUNT*16) ;
+	// trk2als: nombres de los chains
+	TiXmlElement names("CHAINNAMES") ;
+	for (int i=0;i<CHAIN_COUNT;i++) {
+		if (chainName_[i].empty()) continue ;
+		TiXmlElement n("NAME") ;
+		char id[4] ;
+		sprintf(id,"%02X",i) ;
+		n.SetAttribute("ID",id) ;
+		n.SetAttribute("VALUE",chainName_[i].c_str()) ;
+		names.InsertEndChild(n) ;
+	}
+	node->InsertEndChild(names) ;
 
 } ;
 
@@ -69,6 +82,14 @@ void Song::RestoreContent(TiXmlElement *element) {
 		} ;
 		if (!strcmp("COMMAND2",value)) {
 			restoreHexBuffer(current,(uchar *)phrase_->cmd2_) ;
+		} ;
+		if (!strcmp("CHAINNAMES",value)) {   // trk2als
+			for (TiXmlElement *n=current->FirstChildElement("NAME");n;n=n->NextSiblingElement("NAME")) {
+				const char *id=n->Attribute("ID") ;
+				const char *v=n->Attribute("VALUE") ;
+				int c=id?int(strtol(id,0,16)):-1 ;
+				if (c>=0 && c<CHAIN_COUNT && v) chainName_[c]=v ;
+			}
 		} ;
 		if (!strcmp("PARAM2",value)) {
 			restoreHexBuffer(current,(uchar *)phrase_->param2_) ;

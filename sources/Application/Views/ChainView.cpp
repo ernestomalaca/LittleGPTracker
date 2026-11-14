@@ -695,6 +695,14 @@ void ChainView::DrawView() {
     SetColor(CD_NORMAL);
     sprintf(title, "Chain %2.2x", viewData_->currentChain_);
     DrawString(pos._x, pos._y, title, props);
+    {   // trk2als: el nombre del chain ("woodblock 1")
+        const std::string &cn = viewData_->song_->GetChainName(viewData_->currentChain_);
+        if (!cn.empty()) {
+            SetColor(CD_HILITE2);
+            DrawString(pos._x + 12, pos._y, cn.substr(0, 26).c_str(), props);
+            SetColor(CD_NORMAL);
+        }
+    }
 
     // Compute song grid location
 

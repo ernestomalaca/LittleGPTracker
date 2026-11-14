@@ -69,6 +69,9 @@ class SongView : public View {
   public: // trk2als: tipo de pista desde la cabecera de la columna
     void ApplyTrackType(int channel, int type, bool clear);
     void clampTrackCursor();
+    GUIPoint gridAnchor();
+    std::string cellName();
+    void nameNewChain(unsigned char chain);
     void LoadTrackPreset(const std::string &name);
     int presetCh_;
     void pickAudio();

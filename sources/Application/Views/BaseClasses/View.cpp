@@ -156,12 +156,12 @@ void View::drawMap() {
 	}//!minilayout
 }
 
-void View::drawNotes() {
+void View::drawNotes(int x0, int dx) {
 
     if (!miniLayout_) {
 
 		GUIPoint anchor=GetAnchor() ;
-		int initialX = View::margin_+10 ;
+		int initialX = (x0 >= 0) ? x0 : View::margin_+10 ;
 		int initialY = anchor._y+23 ;
 		GUIPoint pos(initialX,initialY) ;
 		GUITextProperties props ;
@@ -190,7 +190,7 @@ void View::drawNotes() {
 				DrawString(pos._x,pos._y,"  ",props) ; //draw instrument number
 			}
 			pos._y = initialY ;
-			pos._x+= 3;
+			pos._x+= dx;
 		}
      }
 }

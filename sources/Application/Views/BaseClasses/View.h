@@ -161,7 +161,7 @@ class View : public Observable {
     GUIPoint GetTitlePosition();
 
     void drawMap();
-    void drawNotes();
+    void drawNotes(int x0 = -1, int dx = 3) ; // trk2als: x0/dx de la grilla de la Song
     void drawVUMeter(uint8_t leftBars, uint8_t rightBars, GUIPoint pos,
                      GUITextProperties props, int vuIndex,
                      bool forceRedraw = false);

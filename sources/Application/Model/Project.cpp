@@ -292,6 +292,7 @@ void Project::DeleteTrack(int channel) {
         if (!chainMine[i] || chainOther[i]) continue;
         memset(chain->data_ + i * 16, 0xFF, 16);
         memset(chain->transpose_ + i * 16, 0, 16);
+        song_->SetChainName(i, "");
     }
     for (int p = 0; p < PHRASE_COUNT; p++) {
         if (!phraseMine[p] || phraseOther[p]) continue;
@@ -417,6 +418,7 @@ void Project::Purge() {
 				*data++=0xFF ;
 				*data2++=0x00 ;
 			} 
+			song_->SetChainName(i,"") ;   // trk2als
 		}
     }
 

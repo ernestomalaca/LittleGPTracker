@@ -4,6 +4,7 @@
 #include "Chain.h"
 #include "Phrase.h"
 #include "Application/Persistency/Persistent.h"
+#include <string>
 
 #define SONG_CHANNEL_COUNT 8
 #define SONG_ROW_COUNT 256
@@ -24,6 +25,12 @@ public:
 	unsigned char *data_ ;
 	Chain *chain_ ;
 	Phrase *phrase_ ;
+
+	// trk2als: nombre de cada chain ("woodblock 1"); vacío = sin nombre
+	const std::string &GetChainName(int chain) { return chainName_[chain] ; }
+	void SetChainName(int chain,const std::string &name) { chainName_[chain]=name ; }
+private:
+	std::string chainName_[CHAIN_COUNT] ;
 } ;
 
 #endif

@@ -1,4 +1,5 @@
 #include "SongView.h"
+#define SONG_COL_W 4   // trk2als: ancho de cada pista en la grilla
 #include "Application/Commands/ApplicationCommandDispatcher.h"
 #include "Application/Mixer/MixerService.h"
 #include "Application/Model/ProjectDatas.h"
@@ -96,6 +97,55 @@ SongView::~SongView() {
 
 bool SongView::isAudioColumn(int x) {
     return viewData_->project_->IsAudioChannel(x);
+}
+
+// la grilla va pegada a la izquierda: 8 pistas de 4 caracteres ("A04 ")
+GUIPoint SongView::gridAnchor() {
+    GUIPoint a = GetAnchor();
+    a._x = 3;
+    return a;
+}
+
+// lo que se ve arriba: el clip o chain bajo el cursor, o el nombre de la pista
+std::string SongView::cellName() {
+    Project *project = viewData_->project_;
+    unsigned char d = *viewData_->GetCurrentSongPointer();
+    if (headerMode_ || d == 0xFF) return project->GetTrackName(viewData_->songX_);
+    char buf[48];
+    if (isAudioColumn(viewData_->songX_)) {
+        I_Instrument *instr = project->GetInstrumentBank()->GetInstrument(d);
+        std::string n = instr ? instr->GetName() : "";
+        size_t dot = n.rfind('.');
+        if (dot != std::string::npos) n = n.substr(0, dot);
+        snprintf(buf, sizeof(buf), "A%02X %s", d, n.c_str());
+        return buf;
+    }
+    const std::string &cn = viewData_->song_->GetChainName(d);
+    if (!cn.empty()) return cn;
+    snprintf(buf, sizeof(buf), "chain %02X", d);
+    return buf;
+}
+
+// trk2als: un chain nuevo en una pista MIDI se llama como la primera palabra
+// del preset de la pista más un número: "woodblock 1", "woodblock 2"...
+void SongView::nameNewChain(unsigned char chain) {
+    if (chain == 0xFF || isAudioColumn(viewData_->songX_)) return;
+    std::string base = viewData_->project_->GetTrackName(viewData_->songX_);
+    size_t sp = base.find(' ');
+    if (sp != std::string::npos) base = base.substr(0, sp);
+    if (base.size() > 12) base = base.substr(0, 12);
+    int next = 1;
+    Song *song = viewData_->song_;
+    for (int c = 0; c < CHAIN_COUNT; c++) {
+        const std::string &n = song->GetChainName(c);
+        if (n.size() > base.size() + 1 && n.compare(0, base.size() + 1, base + " ") == 0) {
+            int k = atoi(n.c_str() + base.size() + 1);
+            if (k >= next) next = k + 1;
+        }
+    }
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%s %d", base.c_str(), next);
+    song->SetChainName(chain, buf);
 }
 
 void SongView::prepareClip(unsigned char clip) {
@@ -290,6 +340,7 @@ void SongView::createClip() {
     }
     setChain((unsigned char)chain);
     viewData_->song_->chain_->SetUsed((unsigned char)chain);
+    nameNewChain((unsigned char)chain);
     unsigned char *row0 = viewData_->song_->chain_->data_ + 16 * chain;
     if (*row0 == 0xFF) {
         unsigned short phrase = viewData_->song_->phrase_->GetNext();
@@ -361,6 +412,7 @@ void SongView::clonePosition() {
         *dst++ = *src++;
     };
     setChain((unsigned char)next);
+    nameNewChain((unsigned char)next);
     isDirty_ = true;
 };
 
@@ -865,6 +917,7 @@ void SongView::ProcessButtonMask(unsigned short mask, bool pressed) {
             unsigned short next = viewData_->song_->chain_->GetNext();
             if (next != NO_MORE_CHAIN) {
                 setChain((unsigned char)next);
+                nameNewChain((unsigned char)next);
                 isDirty_ = true;
             }
             mask &= (0xFFFF - EPBM_A);
@@ -1424,16 +1477,17 @@ void SongView::DrawView() {
     clampTrackCursor();
     {
         Project *project = viewData_->project_;
-        const char *tname = project->TrackExists(viewData_->songX_)
-                                ? project->GetTrackName(viewData_->songX_) : "agregar pista";
+        std::string tname = project->TrackExists(viewData_->songX_)
+                                ? cellName() : std::string("agregar pista");
+        if (tname.size() > 17) tname = tname.substr(0, 17);
         SetColor(CD_HILITE2);
-        DrawString(pos._x + 23, pos._y, tname, props);
+        DrawString(pos._x + 23, pos._y, tname.c_str(), props);
         SetColor(CD_NORMAL);
     }
 
     // Compute song grid location
 
-    GUIPoint anchor = GetAnchor();
+    GUIPoint anchor = gridAnchor();   // trk2als: más a la izquierda, celdas de 4
 
     // Display row numbers
 
@@ -1453,7 +1507,7 @@ void SongView::DrawView() {
     pos._y -= 1;
     SetColor(CD_COL_TITLE);
     char chbuf[4];
-    short dx = 3;
+    short dx = SONG_COL_W;
     int trackCount = viewData_->project_->TrackCount();
     for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
         // trk2als: tipo de pista + número: M2 midi, A6 audio; después de la
@@ -1478,7 +1532,7 @@ void SongView::DrawView() {
     pos = anchor;
     unsigned char *data =
         viewData_->song_->data_ + (SONG_CHANNEL_COUNT * viewData_->songOffset_);
-    dx = 3;
+    dx = SONG_COL_W;
     short dy = 1;
     for (int j = 0; j < View::songRowCount_; j++) {
 
@@ -1527,7 +1581,12 @@ void SongView::DrawView() {
                 props.invert_ = true;
             }
 
-            if (d == 0xFF) {
+            if (isAudioColumn(i)) {   // trk2als: los clips de audio son A00, A01...
+                char clip[4];
+                if (d == 0xFF) strcpy(clip, "---");
+                else snprintf(clip, sizeof(clip), "A%02X", d);
+                DrawString(pos._x, pos._y, clip, props);
+            } else if (d == 0xFF) {
                 DrawString(pos._x, pos._y, "--", props);
             } else {
                 hex2char(d, row);
@@ -1550,7 +1609,7 @@ void SongView::DrawView() {
     SetColor(CD_NORMAL);
 
     drawMap();
-    drawNotes();
+    drawNotes(gridAnchor()._x, SONG_COL_W);
 
     if (player->IsRunning()) {
         OnPlayerUpdate(PET_UPDATE);
@@ -1572,7 +1631,7 @@ void SongView::OnPlayerUpdate(PlayerEventType eventType, unsigned int tick) {
 
     Player *player = Player::GetInstance();
 
-    GUIPoint anchor = GetAnchor();
+    GUIPoint anchor = gridAnchor();   // trk2als
     GUIPoint pos = anchor;
     pos._x -= 1;
 
@@ -1639,7 +1698,7 @@ void SongView::OnPlayerUpdate(PlayerEventType eventType, unsigned int tick) {
                 }
             };
         }
-        pos._x += 3;
+        pos._x += SONG_COL_W;
     }
 
     SetColor(CD_NORMAL);
@@ -1650,7 +1709,7 @@ void SongView::OnPlayerUpdate(PlayerEventType eventType, unsigned int tick) {
         pos._y = 0;
         pos._x = 25;
     } else {
-        pos = anchor;
+        pos = GetAnchor();   // el panel de la derecha no se mueve
         pos._x += 25;
     }
 
@@ -1691,7 +1750,7 @@ void SongView::OnPlayerUpdate(PlayerEventType eventType, unsigned int tick) {
         pos._y += 1;
         DrawString(pos._x, pos._y, strbuffer, props);
     }
-    drawNotes();
+    drawNotes(gridAnchor()._x, SONG_COL_W);
 };
 
 void SongView::nudgeTempo(int direction) {
