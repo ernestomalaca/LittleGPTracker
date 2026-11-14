@@ -38,6 +38,8 @@ struct renderParams {
     int complexLatency_ ;    // trk2als: cuadros que el time-stretch va adelantado
     int warpMode_ ;          // trk2als: warp con el que suena la voz (el cambio espera al inicio del loop)
     bool justWrapped_ ;      // trk2als: el loop acaba de volver al principio
+    void *warpCache_ ;       // trk2als: complex ya estirado que lee esta voz (WarpCache), o 0
+    int cacheIdx_ ;          // trk2als: cuadro de salida siguiente en warpCache_
     // trk2als: sampler estilo Simpler (pistas MIDI)
     bool simpler_ ;          // la voz usa los parámetros del Sampler
     int simplerLoop_ ;       // loop mode efectivo (ONESHOT o LOOP)

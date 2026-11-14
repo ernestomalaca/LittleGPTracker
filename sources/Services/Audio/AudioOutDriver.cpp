@@ -58,6 +58,18 @@ static double fineSeconds() {
 #else
 static double fineSeconds() { return TimeService::GetInstance()->GetTime(); }
 #endif
+// tiempo de CPU de este hilo (para medir sin el ruido de otros procesos)
+static double cpuSeconds() {
+#if defined(CLOCK_THREAD_CPUTIME_ID)
+    struct timespec t;
+    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &t);
+    return t.tv_sec + t.tv_nsec / 1e9;
+#else
+    return fineSeconds();
+#endif
+}
+extern int g_warpRealtimeBlocks, g_warpCacheBlocks;
+static double g_busy = 0, g_busyCpu = 0, g_span = 0;
 
 void GetAudioLoad(int &current, int &peak) {
     current = g_loadNow;
@@ -67,6 +79,7 @@ void GetAudioLoad(int &current, int &peak) {
 void AudioOutDriver::Trigger() {
 
     double before = fineSeconds();
+    double beforeCpu = cpuSeconds();
 
     prepareMixBuffers();
     hasSound_=AudioMixer::Render(primarySoundBuffer_,sampleCount_) ;
@@ -76,6 +89,9 @@ void AudioOutDriver::Trigger() {
     double now = fineSeconds();
     if (sampleCount_ > 0) {
         int load = int((now - before) * 44100.0 / sampleCount_ * 100.0 + 0.5);
+        g_busy += now - before;
+        g_busyCpu += cpuSeconds() - beforeCpu;
+        g_span += sampleCount_ / 44100.0;
         g_loadNow = load;
         if (load > g_loadWindow) g_loadWindow = load;
         if (now - g_loadSince >= 1.0) {      // el pico del último segundo
@@ -84,7 +100,11 @@ void AudioOutDriver::Trigger() {
             g_loadSince = now;
             static int logIt = -1;          // TRK_LOADLOG=1: una línea por segundo
             if (logIt < 0) logIt = getenv("TRK_LOADLOG") ? 1 : 0;
-            if (logIt) Trace::Log("AUDIO", "carga pico %d%%", g_loadPeak);
+            if (logIt) Trace::Log("AUDIO", "carga pico %d%% media %.1f%% cpu %.1f%% warp rt %d pre %d", g_loadPeak,
+                                  g_span > 0 ? g_busy / g_span * 100 : 0, g_span > 0 ? g_busyCpu / g_span * 100 : 0,
+                                  g_warpRealtimeBlocks, g_warpCacheBlocks);
+            g_warpRealtimeBlocks = g_warpCacheBlocks = 0;
+            g_busy = g_busyCpu = g_span = 0;
         }
     }
     driver_->AddBuffer(mixBuffer_,sampleCount_) ;

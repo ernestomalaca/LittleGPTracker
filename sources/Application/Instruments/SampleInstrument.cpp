@@ -79,11 +79,28 @@ int SampleInstrument::lastMidiNote_[SI_VOICE_COUNT]= {
 #define KRATE_SAMPLE_COUNT 100
 
 SampleInstrument::SampleInstrument() {
+	 memset(varCacheId_,0,sizeof(varCacheId_)) ;   // trk2als
+	 static bool warpCfg=false ;   // trk2als: WARPQUALITY / WARPSPLIT de config.xml
+	 if (!warpCfg) {
+		 warpCfg=true ;
+		 const char *q=Config::GetInstance()->GetValue("WARPQUALITY") ;
+		 const char *sp=Config::GetInstance()->GetValue("WARPSPLIT") ;
+		 WarpStretch::SetQuality((q && !strcasecmp(q,"cheaper"))?1:0,
+		                         !(sp && !strcasecmp(sp,"off"))) ;
+		 const char *wc=Config::GetInstance()->GetValue("WARPCACHE") ;   // MB; 0 = sin pre-render
+		 if (wc) {
+			 int mb=atoi(wc) ;
+			 if (mb<=0) WarpCache::SetEnabled(false) ;
+			 else WarpCache::SetBudget(mb) ;
+		 }
+	 }
 	 for (int ch=0;ch<SI_VOICE_COUNT;ch++) {   // trk2als
 		 voiceClock_[ch]=0 ;
 		 stretch_[ch]=0 ;
 		 lastWarpT_[ch]=warpTarget_[ch]=1.0f ;
 		 renderParams_[ch].simpler_=false ;
+		 renderParams_[ch].warpCache_=0 ;
+		 renderParams_[ch].cacheIdx_=0 ;
 		 renderParams_[ch].finished_=true ;
 		 renderParams_[ch].envStage_=4 ;
 		 renderParams_[ch].envLevel_=0 ;
@@ -286,7 +303,10 @@ SampleInstrument::SampleInstrument() {
 }
 
 SampleInstrument::~SampleInstrument() {
-	for (int ch=0;ch<SI_VOICE_COUNT;ch++) delete stretch_[ch] ; // trk2als
+	for (int ch=0;ch<SI_VOICE_COUNT;ch++) {   // trk2als
+		delete stretch_[ch] ;
+		dropCache(renderParams_+ch) ;
+	}
 }
 
 bool SampleInstrument::Init() {
@@ -585,6 +605,7 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 	rp->finished_=false ;
 	if (loopmode!=SILM_LOOPSYNC && rp->sWarp_==SW_OFF) rp->syncTickSamples_=0 ;
 	rp->complexPrimed_=false ; // trk2als
+	dropCache(rp) ;
 	rp->warpMode_=warp_->GetInt() ;
 	rp->justWrapped_=false ;
 
@@ -863,7 +884,9 @@ void SampleInstrument::startTail(int channel) {
     renderParams *rp=renderParams_+channel ;
     renderParams *tp=renderParams_+t ;
     std::vector<I_SRPUpdater *> own=tp->updaters_ ;   // los de la cola apuntan a la cola
+    dropCache(tp) ;
     *tp=*rp ;
+    WarpCache::AddRef(tp->warpCache_) ;   // la cola sigue leyendo el mismo pre-render
     tp->updaters_=own ;
     tp->activeUpdaters_.clear() ;   // los comandos de la phrase siguen con la nota nueva
     memcpy(feedback_[t],feedback_[channel],sizeof(feedback_[t])) ;
@@ -1535,6 +1558,8 @@ void SampleInstrument::readLoop(renderParams *rp,int n) {
 	rp->complexPos_=pos ;
 }
 
+int g_warpRealtimeBlocks=0, g_warpCacheBlocks=0 ;
+
 void SampleInstrument::renderComplex(int channel,renderParams *rp,int size) {
 	int ch=rp->channelCount_>1?2:1 ;
 	WarpStretch *ws=stretch_[channel] ;
@@ -1561,6 +1586,46 @@ void SampleInstrument::renderComplex(int channel,renderParams *rp,int size) {
 	}
 	float *ins[2]={0,0}, *outs[2]={&warpOut2_[0][0],&warpOut2_[1][0]} ;
 
+	// trk2als: pre-render. Si la voz ya lee uno y nada cambió, solo copiar
+	float transpose=rate/mixRate*semisFactor ;
+	if (rp->warpCache_ && rp->complexPrimed_) {
+		if (WarpCache::Matches(rp->warpCache_,speed,transpose)) {
+			g_warpCacheBlocks++ ;
+			readCache(rp,size,speed) ;
+			return ;
+		}
+		// cambió el tempo o la nota (glide, comandos): seguir en tiempo real
+		// desde donde va
+		dropCache(rp) ;
+		rp->complexPrimed_=false ;
+	}
+	WarpCacheKey key ;
+	if (!rp->complexPrimed_) {
+		if (cacheKey(rp,int(rp->position_),speed,transpose,key)) {
+			void *h=WarpCache::Acquire(key) ;
+			if (h) {
+				rp->warpCache_=h ;
+				rp->cacheIdx_=0 ;
+				rp->complexPrimed_=true ;
+				readCache(rp,size,speed) ;
+				return ;
+			}
+		}
+	} else if (rp->justWrapped_ && cacheKey(rp,rp->complexFirst_,speed,transpose,key) && key.loop) {
+		// el loop acaba de dar la vuelta en tiempo real: si el pre-render ya
+		// está, seguir desde ahí con él
+		void *h=WarpCache::Acquire(key) ;
+		if (h) {
+			int ls=WarpCache::LoopStart(h), period=WarpCache::Length(h)-ls ;
+			double into=(rp->position_-key.loopStart)/speed ;
+			if (into<0) into=0 ;
+			rp->warpCache_=h ;
+			rp->cacheIdx_=ls+int(fmod(into,double(period))) ;
+			readCache(rp,size,speed) ;
+			return ;
+		}
+	}
+	g_warpRealtimeBlocks++ ;   // trk2als: para TRK_LOADLOG
 	if (!rp->complexPrimed_) {
 		ws->Reset() ;
 		rp->complexPos_=int(rp->position_) ;
@@ -1609,6 +1674,64 @@ void SampleInstrument::renderComplex(int channel,renderParams *rp,int size) {
 		warpOut_[size*ch+c]=warpOut_[(size-1)*ch+c] ;
 		warpOut_[(size+1)*ch+c]=warpOut_[(size-1)*ch+c] ;
 	}
+}
+
+
+// trk2als: la llave del pre-render para esta voz, con el mismo inicio y
+// vueltas que usa readLoop
+bool SampleInstrument::cacheKey(renderParams *rp,int start,double speed,float transpose,WarpCacheKey &k) {
+	if (!WarpCache::Enabled() || !rp->sampleBuffer_) return false ;
+	k.data=(const short *)rp->sampleBuffer_ ;
+	k.channels=rp->channelCount_>1?2:1 ;
+	if (rp->channelCount_>2) return false ;
+	k.loopStart=rp->rendLoopStart_ ;
+	k.loopEnd=rp->rendLoopEnd_ ;
+	k.simpler=rp->simpler_ ;
+	k.loop=!(rp->simpler_ && rp->simplerLoop_!=SILM_LOOP) ;
+	if (!k.simpler && (start<k.loopStart || start>=k.loopEnd)) start=k.loopStart ;
+	k.start=start ;
+	k.speed=speed ;
+	k.transpose=transpose ;
+	return k.loopEnd>k.loopStart && start>=0 && start<k.loopEnd ;
+}
+
+void SampleInstrument::dropCache(renderParams *rp) {
+	if (rp->warpCache_) WarpCache::Release(rp->warpCache_) ;
+	rp->warpCache_=0 ;
+}
+
+// Copia 'size' cuadros del pre-render a warpOut_ (como renderComplex) y deja
+// complexPos_ en el cuadro del sample que está sonando
+void SampleInstrument::readCache(renderParams *rp,int size,double speed) {
+	void *h=rp->warpCache_ ;
+	const short *f=WarpCache::Frames(h) ;
+	int len=WarpCache::Length(h), ls=WarpCache::LoopStart(h) ;
+	int ch=rp->channelCount_>1?2:1 ;
+	if ((int)warpOut_.size()<(size+2)*ch) warpOut_.resize((size+2)*ch) ;
+	int idx=rp->cacheIdx_ ;
+	for (int i=0;i<size+2;i++) {   // dos cuadros extra para la interpolación
+		int j=idx+i ;
+		if (j>=len) {
+			if (ls<0) {
+				for (int c=0;c<ch;c++) warpOut_[i*ch+c]=0 ;
+				continue ;
+			}
+			j=ls+(j-ls)%(len-ls) ;
+		}
+		for (int c=0;c<ch;c++) warpOut_[i*ch+c]=f[j*ch+c] ;
+	}
+	idx+=size ;
+	if (ls>=0 && idx>=len) idx=ls+(idx-ls)%(len-ls) ;
+	rp->cacheIdx_=idx ;
+	double p ;
+	if (ls>=0 && idx>=ls) p=rp->rendLoopStart_+(idx-ls)*speed ;
+	else p=WarpCache::Start(h)+idx*speed ;
+	if (ls<0 && idx>=len) p=rp->rendLoopEnd_ ;   // sin loop: se acabó
+	rp->complexPos_=int(p) ;
+	rp->complexLatency_=0 ;
+	// que el ajuste de después (p<complexFirst_ -> +len) no la mueva
+	int st=WarpCache::Start(h) ;
+	rp->complexFirst_=st<rp->rendLoopStart_?st:rp->rendLoopStart_ ;
 }
 
 /************************************************************

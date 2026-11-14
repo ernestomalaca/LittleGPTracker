@@ -10,7 +10,7 @@ include $(PWD)/Makefile.$(PLATFORM)
 
 # trk2als: el time-stretch (warp complex) necesita C++11 y siempre va optimizado
 SIGNALSMITH := $(PWD)/../sources/Externals/signalsmith
-WarpStretch.o: CXXFLAGS += -std=gnu++11 -O2 \
+WarpStretch.o: CXXFLAGS += -std=gnu++11 -O3 -ffast-math $(WARP_ARCH) \
 	-I$(SIGNALSMITH)/signalsmith-stretch/include -I$(SIGNALSMITH)/signalsmith-linear/include
 
 #---------------------------------------------------------------------------------

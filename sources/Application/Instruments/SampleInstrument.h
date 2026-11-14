@@ -138,9 +138,25 @@ public:
        // trk2als: Sampler estilo Simpler
        void InitSimpler() ;       // la primera vez: traducir lo de LGPT
    private:
+       FourCC varCacheId_[128] ;
+       Variable *varCache_[128] ;
        void initSimplerFromLGPT() ;
    public:
-       int GetSimpler(FourCC id) { return FindVariable(id)->GetInt() ; } ;
+       // trk2als: los parámetros se leen miles de veces por segundo desde el
+       // render; FindVariable recorre la lista, así que se recuerda dónde está
+       // cada uno (las variables viven lo mismo que el instrumento)
+       int GetSimpler(FourCC id) {
+           unsigned h=((unsigned)id*2654435761u)>>25 ;   // 128 casillas
+           while (varCacheId_[h]!=id) {
+               if (varCacheId_[h]==0) {
+                   varCacheId_[h]=id ;
+                   varCache_[h]=FindVariable(id) ;
+                   break ;
+               }
+               h=(h+1)&127 ;
+           }
+           return varCache_[h]->GetInt() ;
+       } ;
        int GuessSimplerBpm() ;
        // trk2als: warp con el que arranca un sample nuevo en el Sampler
        // (DEFAULTWARP en config.xml: off, re-pitch, complex o auto). Deja el
@@ -227,6 +243,9 @@ private:
 	   // trk2als: warp complex; deja size cuadros estirados en warpOut_
 	   void renderComplex(int channel,renderParams *rp,int size) ;
 	   void readLoop(renderParams *rp,int n) ;
+	   bool cacheKey(renderParams *rp,int start,double speed,float transpose,WarpCacheKey &k) ;
+	   void readCache(renderParams *rp,int size,double speed) ;
+	   void dropCache(renderParams *rp) ;
 	   bool startSimpler(renderParams *rp,int channel,unsigned char note,int &first,bool &sliced,float &offset) ;
 	   void simplerBlock(renderParams *rp,int size) ; // envolvente -> corte, glide
 	   void simplerFilter(renderParams *rp,fixed *buffer,int size) ;
