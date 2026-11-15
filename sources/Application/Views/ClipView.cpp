@@ -45,6 +45,7 @@ ClipView::ClipView(GUIWindow &w, ViewData *viewData) : View(w, viewData) {
     aPending_ = bPending_ = false;
     msgTime_ = 0;
     chainShown_ = -1;
+    fold_ = false;
 }
 
 ClipView::~ClipView() {}
@@ -531,9 +532,43 @@ void ClipView::moveCursor(int dt, int dp) {
 
 void ClipView::keepVisible() {
     if (cursorPitch_ > topPitch_) topPitch_ = cursorPitch_;
-    if (cursorPitch_ < topPitch_ - ROWS + 1) topPitch_ = cursorPitch_ + ROWS - 1;
-    if (topPitch_ > MAX_PITCH) topPitch_ = MAX_PITCH;
-    if (topPitch_ < ROWS - 1) topPitch_ = ROWS - 1;
+    buildRows();
+    if (rowOf(cursorPitch_) < 0) {   // quedó abajo: el cursor pasa a la última fila
+        topPitch_ = cursorPitch_;
+        int n = 1;
+        for (int q = cursorPitch_ + 1; q <= MAX_PITCH && n < ROWS; q++) {
+            if (allowed_[q]) {
+                topPitch_ = q;
+                n++;
+            }
+        }
+        buildRows();
+    }
+    // sin hueco abajo: si las filas se acaban antes del fondo, sube la vista
+    while ((int)rows_.size() < ROWS && topPitch_ < MAX_PITCH) {
+        topPitch_++;
+        buildRows();
+    }
+}
+
+void ClipView::buildRows() {
+    int scale = viewData_->project_->GetScale();
+    int root = viewData_->project_->GetScaleRoot();
+    bool folding = fold_ && scale > 0;
+    std::vector<Note> notes;
+    if (folding) readNotes(notes);
+    for (int p = 0; p <= MAX_PITCH; p++) allowed_[p] = !folding || InScale(scale, root, p);
+    for (size_t i = 0; i < notes.size(); i++)
+        if (notes[i].pitch >= 0 && notes[i].pitch <= MAX_PITCH) allowed_[notes[i].pitch] = true;
+    rows_.clear();
+    for (int p = topPitch_; p >= 0 && (int)rows_.size() < ROWS; p--)
+        if (allowed_[p]) rows_.push_back(p);
+}
+
+int ClipView::rowOf(int pitch) {
+    for (size_t r = 0; r < rows_.size(); r++)
+        if (rows_[r] == pitch) return int(r);
+    return -1;
 }
 
 void ClipView::audition(int step) {
@@ -649,6 +684,21 @@ void ClipView::ProcessButtonMask(unsigned short mask, bool pressed) {
             viewData_->currentPhrase_ = p;
             viewData_->chainRow_ = cursorStep_ / 16;
             switchView(VT_PHRASE);
+        }
+        isDirty_ = true;
+        return;
+    }
+    if (v == EPBM_Y) {   // fold: solo las notas de la escala, como en Live
+        if (viewData_->project_->GetScale() == 0) {
+            fold_ = false;
+            message("Fold: primero elige una escala en Project");
+        } else {
+            fold_ = !fold_;
+            int scale = viewData_->project_->GetScale();
+            int root = viewData_->project_->GetScaleRoot();
+            if (fold_ && !InScale(scale, root, cursorPitch_)) cursorPitch_ = stepPitch(cursorPitch_, 1);
+            keepVisible();
+            message(fold_ ? "Fold: solo la escala" : "Fold apagado");
         }
         isDirty_ = true;
         return;
@@ -776,8 +826,8 @@ void ClipView::DrawView() {
         } else {
             DrawText(10, 34, info, fg, 0);
             if (scale > 0) {   // la escala, como en Live
-                std::string sc = std::string(scaleNotes[root]) + " " + scaleNames[scale];
-                if (sc.size() > 16) sc = sc.substr(0, 16);
+                std::string sc = std::string(fold_ ? "FOLD " : "") + scaleNotes[root] + " " + scaleNames[scale];
+                if (sc.size() > 18) sc = sc.substr(0, 18);
                 DrawText(466 - 8 * int(sc.size()), 34, sc.c_str(), hi, 0);
             }
         }
@@ -798,8 +848,11 @@ void ClipView::DrawView() {
 
     // la rejilla
     const int gw = 16 * STEP_W;
-    for (int r = 0; r < ROWS; r++) {
-        int pitch = topPitch_ - r;
+    buildRows();
+    if ((int)rows_.size() < ROWS)
+        FillRect(GRID_X, GRID_Y, gw, ROWS * ROW_H, bg);
+    for (int r = 0; r < (int)rows_.size(); r++) {
+        int pitch = rows_[r];
         int y = GRID_Y + r * ROW_H;
         bool black = isBlack(pitch);
         bool in = InScale(scale, root, pitch);
@@ -834,7 +887,13 @@ void ClipView::DrawView() {
         int s0, s1, q0, q1;
         selRect(s0, s1, q0, q1);
         int a = std::max(s0, p0), b = std::min(s1, p0 + 15);
-        int r0 = std::max(0, topPitch_ - q1), r1 = std::min(ROWS - 1, topPitch_ - q0);
+        int r0 = -1, r1 = -2;
+        for (int r = 0; r < (int)rows_.size(); r++) {
+            if (rows_[r] <= q1 && rows_[r] >= q0) {
+                if (r0 < 0) r0 = r;
+                r1 = r;
+            }
+        }
         if (a <= b && r0 <= r1) {
             int x = GRID_X + (a - p0) * STEP_W, y = GRID_Y + r0 * ROW_H;
             int w = (b - a + 1) * STEP_W, h = (r1 - r0 + 1) * ROW_H;
@@ -851,9 +910,9 @@ void ClipView::DrawView() {
         if (s0 < 0) s0 = 0;
         if (s1 > 16) s1 = 16;
         GUIColor c = Mix(bg, hi2, 35 + 65 * n.vel / 127);
-        int r = topPitch_ - n.pitch;
-        if (r < 0 || r >= ROWS) {        // fuera de la vista: una rayita en el borde
-            int y = r < 0 ? GRID_Y - 3 : GRID_Y + ROWS * ROW_H + 1;
+        int r = rowOf(n.pitch);
+        if (r < 0) {        // fuera de la vista: una rayita en el borde
+            int y = n.pitch > topPitch_ ? GRID_Y - 3 : GRID_Y + ROWS * ROW_H + 1;
             FillRect(GRID_X + s0 * STEP_W + 2, y, (s1 - s0) * STEP_W - 4, 2, c);
             continue;
         }
@@ -865,8 +924,8 @@ void ClipView::DrawView() {
     }
 
     // el cursor: una nota fantasma
-    if (cur < 0 || notes[cur].pitch != cursorPitch_) {
-        int r = topPitch_ - cursorPitch_;
+    if ((cur < 0 || notes[cur].pitch != cursorPitch_) && rowOf(cursorPitch_) >= 0) {
+        int r = rowOf(cursorPitch_);
         int x = GRID_X + (cursorStep_ - p0) * STEP_W + 1, y = GRID_Y + r * ROW_H + 1;
         FillRect(x, y, STEP_W - 2, ROW_H - 2, Mix(bg, fg, 30), 3);
         FrameRect(x - 1, y - 1, STEP_W, ROW_H, fg, 3, 1);
@@ -893,7 +952,7 @@ void ClipView::DrawView() {
     if (marking_)
         drawHelpBar("flechas:marcar;B:copiar;B+A:cortar;A+<>:mover;SEL+A:duplicar;A:salir");
     else
-        drawHelpBar("A:nota;X+flechas:largo/vel;B+A:cortar;SEL+A:pegar;SEL,B:marcar");
+        drawHelpBar("A:nota;X+<>^v:largo/vel;B+A:cortar;SEL+A:pegar;SEL,B:marcar;Y:fold");
 }
 
 void ClipView::OnPlayerUpdate(PlayerEventType, unsigned int) {
