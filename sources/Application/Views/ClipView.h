@@ -85,6 +85,9 @@ class ClipView : public View {
     void stopAudition();
     void switchView(ViewType vt);
     void keepVisible();
+    // kit de batería: 16 filas fijas, una por pad (como el Move)
+    class SampleInstrument *kit();
+    int kitBase();
     // fold: solo las filas de la escala (y las que tienen notas)
     void buildRows();
     int rowOf(int pitch);

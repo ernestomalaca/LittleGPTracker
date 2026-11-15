@@ -346,8 +346,9 @@ void InstrumentView::fillSampleParameters() {
 	sfMode_=!audioMode_ && !sync && instrument->IsZoned() ;
 	if (sfMode_) {   // trk2als: soundfont
 		char label[48] ;
-		snprintf(label,sizeof(label),"%s (%d zona%s)",instrument->ZoneSetName().c_str(),
-		         instrument->ZoneCount(),instrument->ZoneCount()==1?"":"s") ;
+		bool kit=instrument->IsKit() ;   // trk2als: kit de batería
+		snprintf(label,sizeof(label),"%s (%d %s%s)",instrument->ZoneSetName().c_str(),
+		         instrument->ZoneCount(),kit?"pad":"zona",instrument->ZoneCount()==1?"":"s") ;
 		f1=new UISoundfontField(AT(L),*v,label,v->GetInt()) ;
 	} else {
 		// los .wav de las zonas de cualquier soundfont del proyecto no salen
@@ -390,7 +391,7 @@ void InstrumentView::fillSampleParameters() {
 		if (sfMode_) {
 			// soundfont: cada tecla con su sample entero, sin región, slices
 			// ni warp (en Live es un Sampler con zonas)
-			ADD(new UIStaticField(AT(L),"mode: soundfont")) ;
+			ADD(new UIStaticField(AT(L),instrument->IsKit()?"mode: kit":"mode: soundfont")) ;
 			row++ ;
 		}
 		if (!sfMode_) {   // mode, warp y PLAYBACK: solo con un sample

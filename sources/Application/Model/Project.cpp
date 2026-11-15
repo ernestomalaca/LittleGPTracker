@@ -132,17 +132,40 @@ bool Project::ScaleChanged() {
     return appliedScale_ != GetScale() || appliedRoot_ != GetScaleRoot();
 }
 
+// las phrases que tocan las pistas con kit de batería: sus notas son pads
+void Project::kitPhrases(bool *skip) {
+    for (int p = 0; p < PHRASE_COUNT; p++) skip[p] = false;
+    for (int ch = 0; ch < SONG_CHANNEL_COUNT; ch++) {
+        int owner = GetTrackInstrument(ch);
+        if (owner < 0 || owner >= MAX_SAMPLEINSTRUMENT_COUNT) continue;
+        I_Instrument *in = instrumentBank_->GetInstrument(owner);
+        if (!in || in->GetType() != IT_SAMPLE || !((SampleInstrument *)in)->IsKit()) continue;
+        for (int row = 0; row < 256; row++) {
+            unsigned char c = song_->data_[ch + SONG_CHANNEL_COUNT * row];
+            if (c == 0xFF || c >= CHAIN_COUNT) continue;
+            for (int r = 0; r < 16; r++) {
+                unsigned char p = song_->chain_->data_[16 * c + r];
+                if (p != 0xFF && p < PHRASE_COUNT) skip[p] = true;
+            }
+        }
+    }
+}
+
 // notas de las pistas MIDI (todas las phrases usadas) fuera de la escala
 int Project::OutOfScaleNotes() {
     int scale = GetScale(), root = GetScaleRoot(), n = 0;
     if (scale == 0) return 0;
     Phrase *ph = song_->phrase_;
+    bool skip[PHRASE_COUNT];
+    kitPhrases(skip);
     for (int i = 0; i < PHRASE_COUNT * 16; i++) {
         unsigned char note = ph->note_[i];
+        if (skip[i / 16]) continue;
         if (note != 0xFF && note < 0x80 && !InScale(scale, root, note)) n++;
     }
     for (int i = 0; i < VOICE_LAYERS * PHRASE_COUNT * 16; i++) {   // las capas de acordes
         unsigned char note = ph->voiceNote_[i];
+        if (skip[(i / 16) % PHRASE_COUNT]) continue;
         if (note != 0xFF && note < 0x80 && !InScale(scale, root, note)) n++;
     }
     return n;
@@ -154,9 +177,12 @@ int Project::FitToScale() {
     int scale = GetScale(), root = GetScaleRoot(), n = 0;
     if (scale == 0) return 0;
     Phrase *ph = song_->phrase_;
+    bool skip[PHRASE_COUNT];
+    kitPhrases(skip);   // las baterías no se tocan
     for (int layer = 0; layer < VOICE_COUNT; layer++) {   // la columna de notas y las capas
         uchar *notes = layer == 0 ? ph->note_ : ph->voiceNote_ + (layer - 1) * PHRASE_COUNT * 16;
         for (int i = 0; i < PHRASE_COUNT * 16; i++) {
+            if (skip[i / 16]) continue;
             int note = notes[i];
             if (note == 0xFF || note >= 0x80 || InScale(scale, root, note)) continue;
             for (int d = 1; d < 12; d++) {

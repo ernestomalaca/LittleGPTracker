@@ -3,6 +3,8 @@
 #include "Application/Model/Project.h"
 #include "Application/Instruments/CommandList.h"
 #include "Application/Model/Scale.h"
+#include "Application/Instruments/SampleInstrument.h"
+#include "Application/Instruments/InstrumentBank.h"
 #include "Application/Views/ModalDialogs/MessageBox.h"
 #include "System/System/System.h"
 #include <algorithm>
@@ -699,7 +701,34 @@ void ClipView::duplicateSelection() {
  escala
  ************************************************************/
 
+SampleInstrument *ClipView::kit() {
+    int owner = viewData_->project_->GetTrackInstrument(viewData_->songX_);
+    if (owner < 0 || owner >= MAX_SAMPLEINSTRUMENT_COUNT) return 0;
+    I_Instrument *in = viewData_->project_->GetInstrumentBank()->GetInstrument(owner);
+    if (!in || in->GetType() != IT_SAMPLE) return 0;
+    SampleInstrument *si = (SampleInstrument *)in;
+    return si->IsKit() ? si : 0;
+}
+
+// los 16 pads: C1..D#2 como el Move, salvo que el kit use otras teclas
+int ClipView::kitBase() {
+    SampleInstrument *si = kit();
+    if (!si) return 36;
+    const std::vector<ZoneSource::Zone> &z = si->Zones();
+    int lo = 127, hi = 0;
+    for (size_t i = 0; i < z.size(); i++) {
+        if (z[i].lo < lo) lo = z[i].lo;
+        if (z[i].hi > hi) hi = z[i].hi;
+    }
+    if (lo >= 36 && hi <= 51) return 36;
+    return lo > 112 ? 112 : lo;
+}
+
 int ClipView::stepPitch(int pitch, int dir) {
+    if (kit()) {   // kit: de pad en pad, dentro de los 16
+        int b = kitBase(), p = pitch + dir;
+        return (p < b || p > b + 15) ? pitch : p;
+    }
     int scale = viewData_->project_->GetScale();
     int root = viewData_->project_->GetScaleRoot();
     // las notas que quedaron fuera de la escala también se pueden alcanzar
@@ -839,6 +868,14 @@ void ClipView::moveCursor(int dt, int dp) {
 }
 
 void ClipView::keepVisible() {
+    if (kit()) {
+        int b = kitBase();
+        if (cursorPitch_ < b) cursorPitch_ = b;
+        if (cursorPitch_ > b + 15) cursorPitch_ = b + 15;
+        topPitch_ = b + 15;
+        buildRows();
+        return;
+    }
     if (cursorPitch_ > topPitch_) topPitch_ = cursorPitch_;
     buildRows();
     if (rowOf(cursorPitch_) < 0) {   // quedó abajo: el cursor pasa a la última fila
@@ -860,6 +897,14 @@ void ClipView::keepVisible() {
 }
 
 void ClipView::buildRows() {
+    if (kit()) {
+        int b = kitBase();
+        topPitch_ = b + 15;
+        rows_.clear();
+        for (int p = 0; p <= MAX_PITCH; p++) allowed_[p] = (p >= b && p <= b + 15);
+        for (int p = b + 15; p >= b; p--) rows_.push_back(p);
+        return;
+    }
     int scale = viewData_->project_->GetScale();
     int root = viewData_->project_->GetScaleRoot();
     bool folding = viewData_->project_->GetFold() && scale > 0;
@@ -931,6 +976,13 @@ static int spell7(int scale, int root, int rootLetter, int *letterOf, int *accOf
 }
 
 std::string ClipView::noteName(int pitch) {
+    if (SampleInstrument *si = kit()) {   // kit: el nombre del sample del pad
+        std::string n = si->PadName(pitch);
+        if (!n.empty()) return n;
+        char b[12];
+        sprintf(b, "pad%d", pitch - kitBase() + 1);
+        return b;
+    }
     static const char *sharps[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
     static const char *flats[12] = {"C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"};
     int scale = viewData_->project_->GetScale();
@@ -1233,8 +1285,10 @@ void ClipView::DrawView() {
     int p0 = page * 16;
     int cur = noteAt(notes, cursorStep_, cursorPitch_);
     if (cur >= 0 && notes[cur].pitch != cursorPitch_) cur = -1;   // solo si el cursor está sobre ella
-    int scale = viewData_->project_->GetScale();
+    SampleInstrument *kitInstr = kit();
+    int scale = kitInstr ? 0 : viewData_->project_->GetScale();   // un kit no tiene escala
     int root = viewData_->project_->GetScaleRoot();
+    const int RH = kitInstr ? (ROWS * ROW_H) / 16 : ROW_H;   // 16 pads llenan la rejilla
 
     // barra de arriba
     const std::string &cn = viewData_->song_->GetChainName(viewData_->currentChain_);
@@ -1294,22 +1348,27 @@ void ClipView::DrawView() {
         FillRect(GRID_X, GRID_Y, gw, ROWS * ROW_H, bg);
     for (int r = 0; r < (int)rows_.size(); r++) {
         int pitch = rows_[r];
-        int y = GRID_Y + r * ROW_H;
+        int y = GRID_Y + r * RH;
         bool black = isBlack(pitch);
         bool in = InScale(scale, root, pitch);
         bool isRoot = scale > 0 && (pitch - root) % 12 == 0;
         // con escala: sus filas claras, las demás casi negras (como Live)
         int shade = scale > 0 ? (in ? 9 : 1) : (black ? 3 : 8);
-        FillRect(GRID_X, y, gw, ROW_H, Mix(bg, fg, shade));
+        FillRect(GRID_X, y, gw, RH, Mix(bg, fg, shade));
         if ((scale > 0 ? isRoot : pitch % 12 == 0))
-            FillRect(GRID_X, y + ROW_H - 1, gw, 1, Mix(bg, fg, 22));
+            FillRect(GRID_X, y + RH - 1, gw, 1, Mix(bg, fg, 22));
         // teclado
         GUIColor key = black ? Mix(bg, fg, 22) : Mix(bg, fg, 70);
         if (scale > 0 && !in) key = Mix(bg, fg, black ? 10 : 25);
         if (isRoot) key = Mix(bg, hi, 75);
         if (pitch == cursorPitch_) key = fg;   // la del cursor, en blanco
-        FillRect(8, y + 1, 44, ROW_H - 2, key, 2);
-        if (scale > 0 ? isRoot : pitch % 12 == 0)
+        FillRect(8, y + 1, 44, RH - 2, key, 2);
+        if (kitInstr) {   // cada pad con su sample (los vacíos, apagados)
+            std::string pn = kitInstr->PadName(pitch);
+            if (pn.empty() && pitch != cursorPitch_) key = Mix(bg, fg, 12);
+            FillRect(8, y + 1, 44, RH - 2, key, 2);
+            if (!pn.empty()) DrawText(10, y + (RH - 12) / 2, pn.substr(0, 5).c_str(), bg, 0);
+        } else if (scale > 0 ? isRoot : pitch % 12 == 0)
             DrawText(12, y + 1, noteName(pitch).c_str(), bg, 0);
         else if (pitch == cursorPitch_)   // la tecla del cursor dice qué nota es
             DrawText(12, y + 1, noteName(pitch).c_str(), bg, 0);
@@ -1338,8 +1397,8 @@ void ClipView::DrawView() {
             }
         }
         if (a <= b && r0 <= r1) {
-            int x = GRID_X + (a - p0) * STEP_W, y = GRID_Y + r0 * ROW_H;
-            int w = (b - a + 1) * STEP_W, h = (r1 - r0 + 1) * ROW_H;
+            int x = GRID_X + (a - p0) * STEP_W, y = GRID_Y + r0 * RH;
+            int w = (b - a + 1) * STEP_W, h = (r1 - r0 + 1) * RH;
             FillRect(x, y, w, h, Mix(bg, hi, 22));
             FrameRect(x, y, w, h, hi, 2, 2);
         }
@@ -1359,11 +1418,11 @@ void ClipView::DrawView() {
             FillRect(GRID_X + s0 * STEP_W + 2, y, (s1 - s0) * STEP_W - 4, 2, c);
             continue;
         }
-        int x = GRID_X + s0 * STEP_W + 1, y = GRID_Y + r * ROW_H + 1;
+        int x = GRID_X + s0 * STEP_W + 1, y = GRID_Y + r * RH + 1;
         int w = (s1 - s0) * STEP_W - 2;
-        FillRect(x, y, w, ROW_H - 2, c, 3);
-        if (n.start >= p0) FillRect(x, y, 3, ROW_H - 2, Mix(c, fg, 40), 1);   // dónde empieza
-        if ((int)i == cur) FrameRect(x - 1, y - 1, w + 2, ROW_H, fg, 3, 2);
+        FillRect(x, y, w, RH - 2, c, 3);
+        if (n.start >= p0) FillRect(x, y, 3, RH - 2, Mix(c, fg, 40), 1);   // dónde empieza
+        if ((int)i == cur) FrameRect(x - 1, y - 1, w + 2, RH, fg, 3, 2);
     }
 
     // lo que se va a pegar (Select + A sostenido)
@@ -1376,19 +1435,19 @@ void ClipView::DrawView() {
             int r = rowOf(n.pitch);
             int s0 = n.start - p0, s1 = std::min(16, n.start + n.len - p0);
             if (r < 0 || s0 < 0 || s0 >= 16) continue;
-            int x = GRID_X + s0 * STEP_W + 1, y = GRID_Y + r * ROW_H + 1;
+            int x = GRID_X + s0 * STEP_W + 1, y = GRID_Y + r * RH + 1;
             int w = (s1 - s0) * STEP_W - 2;
-            FillRect(x, y, w, ROW_H - 2, Mix(bg, hi, 35), 3);
-            FrameRect(x - 1, y - 1, w + 2, ROW_H, hi, 3, 1);
+            FillRect(x, y, w, RH - 2, Mix(bg, hi, 35), 3);
+            FrameRect(x - 1, y - 1, w + 2, RH, hi, 3, 1);
         }
     }
 
     // el cursor: una nota fantasma
     if (!pasting_ && (cur < 0 || notes[cur].pitch != cursorPitch_) && rowOf(cursorPitch_) >= 0) {
         int r = rowOf(cursorPitch_);
-        int x = GRID_X + (cursorStep_ - p0) * STEP_W + 1, y = GRID_Y + r * ROW_H + 1;
-        FillRect(x, y, STEP_W - 2, ROW_H - 2, Mix(bg, fg, 30), 3);
-        FrameRect(x - 1, y - 1, STEP_W, ROW_H, fg, 3, 1);
+        int x = GRID_X + (cursorStep_ - p0) * STEP_W + 1, y = GRID_Y + r * RH + 1;
+        FillRect(x, y, STEP_W - 2, RH - 2, Mix(bg, fg, 30), 3);
+        FrameRect(x - 1, y - 1, STEP_W, RH, fg, 3, 1);
     }
 
     // el cabezal

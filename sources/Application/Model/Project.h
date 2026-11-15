@@ -58,6 +58,7 @@ public:
   bool ScaleChanged();
   int OutOfScaleNotes();
   int FitToScale();
+  void kitPhrases(bool *skip);   // trk2als: phrases de pistas de batería (no se ajustan)
   void AcceptScale();
   int appliedScale_, appliedRoot_;
   int GetTempo(); // Takes nudging into account
