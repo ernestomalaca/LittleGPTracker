@@ -483,6 +483,9 @@ void Project::Purge() {
 		}
     }
 
+    for (int i=0;i<PHRASE_COUNT;i++)   // trk2als: las capas de voces de las que no se usan
+        if (!song_->phrase_->IsUsed(i)) song_->phrase_->ClearVoices(i) ;
+
     data=song_->phrase_->note_ ;
     data2=song_->phrase_->instr_ ;
 

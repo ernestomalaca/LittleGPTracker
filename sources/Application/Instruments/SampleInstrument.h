@@ -120,8 +120,10 @@ enum SimplerSliceBy { SSB_REGION=0, SSB_MANUAL=1 } ;
 #define SIP_A_INIT  MAKE_FOURCC('A', 'I', 'N', 'I')   // 1 = ya convertido
 
 // trk2als: cada canal tiene su voz y, con 'voices: 2', una voz más para la
-// cola de la nota anterior (índice canal+SONG_CHANNEL_COUNT)
-#define SI_VOICE_COUNT (SONG_CHANNEL_COUNT*2)
+// cola de la nota anterior (índice canal+SONG_CHANNEL_COUNT); después, las
+// voces 1..3 de los acordes (canal+(1+voz)*SONG_CHANNEL_COUNT)
+#define SI_CHORD_VOICES 3
+#define SI_VOICE_COUNT (SONG_CHANNEL_COUNT*(2+SI_CHORD_VOICES))
 enum SimplerMode { SM_CLASSIC = 0, SM_ONESHOT, SM_SLICE };
 // trk2als: warp del Sampler (como en Simpler): sin warp, re-pitch o complex
 enum SimplerWarp { SW_OFF = 0, SW_REPITCH, SW_COMPLEX };
@@ -164,6 +166,9 @@ public:
        virtual void Stop(int channel) ;
        virtual bool Releasing(int channel) ;
        virtual void Choke(int channel) ;
+       virtual bool StartVoice(int channel,int voice,unsigned char note,int velocity,int flags=1) ;
+       virtual void StopVoice(int channel,int voice) ;
+       static int ChordIdx(int channel,int voice) { return channel+(1+voice)*SONG_CHANNEL_COUNT ; }
        // trk2als: Sampler estilo Simpler
        void InitSimpler() ;       // la primera vez: traducir lo de LGPT
    private:

@@ -72,9 +72,7 @@ void SampleInstrument::applyLive(renderParams *rp) {
 	if ((v=fbMix_->GetInt())!=rp->liveFbMix_) { rp->liveFbMix_=v ; rp->fbMix_=rp->baseFbMix_=fl2fp(v/255.0f) ; }
 }
 
-int SampleInstrument::lastMidiNote_[SI_VOICE_COUNT]= {
-	-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1
-} ;
+int SampleInstrument::lastMidiNote_[SI_VOICE_COUNT] ;   // trk2als: -1 en el constructor
 
 #define KRATE_SAMPLE_COUNT 100
 
@@ -96,6 +94,11 @@ SampleInstrument::SampleInstrument() {
 			 if (mb<=0) WarpCache::SetEnabled(false) ;
 			 else WarpCache::SetBudget(mb) ;
 		 }
+	 }
+	 static bool notesInit=false ;
+	 if (!notesInit) {
+		 notesInit=true ;
+		 for (int ch=0;ch<SI_VOICE_COUNT;ch++) lastMidiNote_[ch]=-1 ;
 	 }
 	 for (int ch=0;ch<SI_VOICE_COUNT;ch++) {   // trk2als
 		 voiceClock_[ch]=0 ;
@@ -718,8 +721,23 @@ void SampleInstrument::Stop(int channel) {
 	 voiceClock_[channel]=0 ;
 }
 
+// trk2als: voces de acorde. Cada una es una voz más del canal (sin cola:
+// suelta con su release y, si vuelve a sonar, arranca de nuevo)
+bool SampleInstrument::StartVoice(int channel,int voice,unsigned char note,int velocity,int flags) {
+	if (voice<1 || voice>SI_CHORD_VOICES || channel<0 || channel>=SONG_CHANNEL_COUNT) return false ;
+	int idx=ChordIdx(channel,voice) ;
+	bool ok=Start(idx,note,flags) ;
+	if (ok && velocity>=0 && velocity!=100) ProcessCommand(idx,I_CMD_MVEL,(ushort)(velocity*2)) ;
+	return ok ;
+}
+
+void SampleInstrument::StopVoice(int channel,int voice) {
+	if (voice<1 || voice>SI_CHORD_VOICES || channel<0 || channel>=SONG_CHANNEL_COUNT) return ;
+	Stop(ChordIdx(channel,voice)) ;
+}
+
 void SampleInstrument::Choke(int channel) {
-	for (int v=0;v<2;v++) {
+	for (int v=0;v<2+SI_CHORD_VOICES;v++) {
 		int idx=channel+v*SONG_CHANNEL_COUNT ;
 		if (idx>=SI_VOICE_COUNT) break ;
 		renderParams *rp=renderParams_+idx ;
@@ -738,9 +756,18 @@ void SampleInstrument::Choke(int channel) {
 	}
 }
 
+static bool voiceAlive(renderParams *rp) {   // trk2als
+	if (rp->finished_) return false ;
+	if (rp->simpler_) return rp->envStage_<4 ;
+	return true ;
+}
+
 bool SampleInstrument::Releasing(int channel) {
 	renderParams *rp=renderParams_+channel ;
 	if (channel<SONG_CHANNEL_COUNT && tailActive(channel)) return true ;
+	if (channel<SONG_CHANNEL_COUNT)   // trk2als: un acorde que sigue sonando
+		for (int v=1;v<=SI_CHORD_VOICES;v++)
+			if (voiceAlive(renderParams_+ChordIdx(channel,v))) return true ;
 	if (rp->audioClip_ && !rp->finished_ && rp->declickOutLen_>0) return true ;
 	return rp->simpler_ && !rp->finished_ && rp->envStage_<4 ;
 }
@@ -825,6 +852,18 @@ void SampleInstrument::updateFeedback(renderParams *rp) {
 // trk2als: la voz del canal y, si la hay, la cola de la nota anterior
 bool SampleInstrument::Render(int channel, fixed *buffer, int size, int flags) {
     bool main=renderVoice(channel,buffer,size,flags) ;
+    if (channel<SONG_CHANNEL_COUNT) {   // trk2als: las voces del acorde
+        for (int v=1;v<=SI_CHORD_VOICES;v++) {
+            int idx=ChordIdx(channel,v) ;
+            if (!voiceAlive(renderParams_+idx)) continue ;
+            if ((int)tailBuffer_.size()<size*2) tailBuffer_.resize(size*2) ;
+            bool on=renderVoice(idx,&tailBuffer_[0],size,flags) ;
+            if (!on) continue ;
+            if (!main) memcpy(buffer,&tailBuffer_[0],size*2*sizeof(fixed)) ;
+            else for (int i=0;i<size*2;i++) buffer[i]+=tailBuffer_[i] ;
+            main=true ;
+        }
+    }
     if (channel>=SONG_CHANNEL_COUNT || !tailActive(channel)) return main ;
     int t=channel+SONG_CHANNEL_COUNT ;
     if ((int)tailBuffer_.size()<size*2) tailBuffer_.resize(size*2) ;

@@ -14,6 +14,8 @@ public:
 	void StartInstrument(I_Instrument *instr,unsigned char note,bool cleanStart) ;
 	void StopInstrument() ;
 	void ChokeInstrument() ;
+	void StartVoice(I_Instrument *instr,int voice,unsigned char note,int velocity) ;   // trk2als
+	void StopVoice(int voice) ;
 	I_Instrument *GetInstrument() ;
 	void SetMute(bool muted) ;
 	bool IsMuted() ;

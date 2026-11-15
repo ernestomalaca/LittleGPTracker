@@ -38,6 +38,21 @@ void PlayerChannel::StartInstrument(I_Instrument *instr,unsigned char note,bool 
    };
 } ;
 
+// trk2als: una nota de acorde (voz 1..3) en el mismo instrumento del canal
+void PlayerChannel::StartVoice(I_Instrument *instr,int voice,unsigned char note,int velocity) {
+   if (instr_ && instr_!=instr) {
+      StopInstrument() ;
+      instr_=0 ;
+   }
+   if (instr->StartVoice(index_,voice,note,velocity,1|(muted_<<1))) {
+      instr_=instr ;
+   }
+}
+
+void PlayerChannel::StopVoice(int voice) {
+   if (instr_) instr_->StopVoice(index_,voice) ;
+}
+
 // trk2als: STOP: las voces que siguen sonando solas (one-shot, colas) se callan
 void PlayerChannel::ChokeInstrument() {
      if (instr_) instr_->Choke(index_) ;

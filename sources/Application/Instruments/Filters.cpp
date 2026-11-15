@@ -4,11 +4,12 @@ hope it will work :D
 [2006-09-25 .. 2006-09-30]
 ****************************/
 
+#include "SampleInstrument.h"
 #include "Filters.h"
 #include <math.h>
 #include "System/Console/Trace.h"
 
-static filter_t filter[16];   // trk2als: 8 canales + 8 colas del Sampler
+static filter_t filter[SI_VOICE_COUNT];   // trk2als: canales, colas y voces de acorde del Sampler
 
 bool filters_inited=false;
 
@@ -17,7 +18,7 @@ fixed fp_inv_255 ;
 void init_filters(void)
 {
 
-	for(int i=0;i<16;i++)
+	for(int i=0;i<SI_VOICE_COUNT;i++)
 	{	//set sensible default values
 		//lowpass filter where everything passes with no resonance
 		set_filter(i,FLT_LOWPASS,i2fp(1),i2fp(0),i2fp(0),false);

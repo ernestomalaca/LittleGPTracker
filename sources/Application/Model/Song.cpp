@@ -41,6 +41,16 @@ void Song::SaveContent(TiXmlNode *node) {
 	saveHexBuffer(node,"PARAM1",phrase_->param1_,PHRASE_COUNT*16) ;
 	saveHexBuffer(node,"COMMAND2",phrase_->cmd2_,PHRASE_COUNT*16) ;
 	saveHexBuffer(node,"PARAM2",phrase_->param2_,PHRASE_COUNT*16) ;
+	// trk2als: las capas de voces (polifonía), solo si hay alguna nota
+	{
+		bool any=false ;
+		for (int i=0;i<VOICE_LAYERS*PHRASE_COUNT*16 && !any;i++) any=phrase_->voiceNote_[i]!=0xFF ;
+		if (any) {
+			saveHexBuffer(node,"VNOTES",phrase_->voiceNote_,VOICE_LAYERS*PHRASE_COUNT*16) ;
+			saveHexBuffer(node,"VVELS",phrase_->voiceVel_,VOICE_LAYERS*PHRASE_COUNT*16) ;
+			saveHexBuffer(node,"VFLAGS",phrase_->voiceFlags_,VOICE_LAYERS*PHRASE_COUNT*16) ;
+		}
+	}
 	// trk2als: nombres de los chains
 	TiXmlElement names("CHAINNAMES") ;
 	for (int i=0;i<CHAIN_COUNT;i++) {
@@ -106,6 +116,9 @@ void Song::RestoreContent(TiXmlElement *element) {
 				if (c>=0 && c<CHAIN_COUNT && v) chainName_[c]=v ;
 			}
 		} ;
+		if (!strcmp("VNOTES",value)) restoreHexBuffer(current,phrase_->voiceNote_) ;   // trk2als
+		if (!strcmp("VVELS",value)) restoreHexBuffer(current,phrase_->voiceVel_) ;
+		if (!strcmp("VFLAGS",value)) restoreHexBuffer(current,phrase_->voiceFlags_) ;
 		if (!strcmp("CHAINLOOPS",value)) {   // trk2als
 			for (TiXmlElement *l=current->FirstChildElement("LOOP");l;l=l->NextSiblingElement("LOOP")) {
 				const char *id=l->Attribute("ID") ;
@@ -170,6 +183,9 @@ void Song::RestoreContent(TiXmlElement *element) {
 	TableHolder *th=TableHolder::GetInstance() ;
 
 	for (int i=0;i<PHRASE_COUNT;i++) {
+        for (int v=1;v<VOICE_COUNT;v++)   // trk2als: una phrase con notas solo en las capas también se usa
+            for (int j=0;j<16;j++)
+                if (phrase_->voiceNote_[Phrase::VIdx(v,i,j)]!=0xFF) phrase_->SetUsed(i) ;
         for (int j=0;j<16;j++) {
             if (*data!=0xFF) {
                 phrase_->SetUsed(i) ;

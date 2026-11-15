@@ -39,6 +39,8 @@ public:
 
 	void StartInstrument(int channel,I_Instrument *instrument,unsigned char note,bool newInstrument) ;
 	void StopInstrument(int channel) ;
+	void StartVoice(int channel,I_Instrument *instrument,int voice,unsigned char note,int velocity) ;   // trk2als
+	void StopVoice(int channel,int voice) ;
 
 	int GetChannelNote(int Channel) ;
 

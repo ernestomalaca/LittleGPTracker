@@ -131,6 +131,15 @@ void PlayerMixer::StartInstrument(int channel,I_Instrument *instrument,unsigned 
 
 } ;
 
+void PlayerMixer::StartVoice(int channel,I_Instrument *instrument,int voice,unsigned char note,int velocity) {
+	channel_[channel]->StartVoice(instrument,voice,note,velocity) ;
+	lastInstrument_[channel]=instrument ;
+}
+
+void PlayerMixer::StopVoice(int channel,int voice) {
+	channel_[channel]->StopVoice(voice) ;
+}
+
 void PlayerMixer::StopInstrument(int channel) {
     channel_[channel]->StopInstrument() ;
     notes_[channel]=0xFF ;

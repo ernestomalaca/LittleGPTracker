@@ -32,6 +32,10 @@ public:
       virtual bool Releasing(int channel) { return false ; } ;
       // trk2als: al detener la reproducción, callar la voz (con un fade corto)
       virtual void Choke(int channel) {} ;
+      // trk2als: polifonía. Voces 1..3 del canal (la 0 es Start/Stop de
+      // siempre): cada una con su nota y su velocity (0-127; <0 = la normal)
+      virtual bool StartVoice(int channel,int voice,unsigned char note,int velocity,int flags=1) { return false ; } ;
+      virtual void StopVoice(int channel,int voice) {} ;
 
 	  // Engine playback  start callback
 

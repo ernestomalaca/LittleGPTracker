@@ -991,6 +991,27 @@ void Player::playCursorPosition(int channel) {
                 }
             }
         }
+        // trk2als: las otras voces del paso (acordes)
+        for (int v = 1; v < VOICE_COUNT; v++) {
+            int vi = Phrase::VIdx(v, currentPhrase, pos);
+            unsigned char vn = phrase->voiceNote_[vi];
+            if (phrase->voiceFlags_[vi] & VF_KILL) mixer_->StopVoice(channel, v);
+            if (vn == 0xFF) continue;
+            InstrumentBank *bank = viewData_->project_->GetInstrumentBank();
+            int owner = project_->GetTrackInstrument(channel);
+            I_Instrument *vinstr = (owner >= 0) ? bank->GetInstrument(owner)
+                                                : mixer_->GetLastInstrument(channel);
+            if (!vinstr) vinstr = bank->GetInstrument(0);
+            if (!vinstr) continue;
+            int chain = viewData_->currentPlayChain_[channel];
+            int chainPos = viewData_->chainPlayPos_[channel];
+            int vnote = vn + (signed char)viewData_->song_->chain_->transpose_[16 * chain + chainPos] +
+                        project_->GetTranspose();
+            if (vnote < 0 || vnote > 127) continue;
+            unsigned char vel = phrase->voiceVel_[vi];
+            mixer_->StartVoice(channel, vinstr, v, (unsigned char)vnote,
+                               vel == VVEL_DEFAULT ? -1 : vel);
+        }
         if ((note != 0xFF) || (instr != 0xFF)) {
             I_Instrument *instrument = mixer_->GetInstrument(channel);
             if (instrument) {
@@ -1164,7 +1185,10 @@ void Player::moveToNextPhrase(int channel, int hop) {
     } else { // Should move to next chain
         // trk2als: como en Live, el clip termina sus notas al acabar (antes la
         // última sonaba hasta la siguiente nota, aunque fuera en otro clip)
-        if (!isAudio(channel)) mixer_->StopInstrument(channel);
+        if (!isAudio(channel)) {
+            for (int v = 1; v < VOICE_COUNT; v++) mixer_->StopVoice(channel, v);
+            mixer_->StopInstrument(channel);
+        }
         if ((mode_==PM_SONG)||(mode_==PM_LIVE)) {
             moveToNextChain(channel, hop); // HOP. here
         } else {

@@ -21,10 +21,35 @@ Phrase::Phrase() {
 	param2_=(unsigned short *)SYS_MALLOC(size*sizeof(short)) ;
 	memset(param2_,0x00,size*sizeof(short)) ;
 
+	int vsize=VOICE_LAYERS*PHRASE_COUNT*16 ;   // trk2als
+	voiceNote_=(uchar *)SYS_MALLOC(vsize) ;
+	memset(voiceNote_,0xFF,vsize) ;
+	voiceVel_=(uchar *)SYS_MALLOC(vsize) ;
+	memset(voiceVel_,VVEL_DEFAULT,vsize) ;
+	voiceFlags_=(uchar *)SYS_MALLOC(vsize) ;
+	memset(voiceFlags_,0,vsize) ;
+
 	for (int i=0;i<PHRASE_COUNT;i++) {
 		isUsed_[i]=false ;
 	}
 } ;
+
+void Phrase::ClearVoices(int phrase) {
+	for (int v=1;v<VOICE_COUNT;v++) {
+		int i=VIdx(v,phrase,0) ;
+		memset(voiceNote_+i,0xFF,16) ;
+		memset(voiceVel_+i,VVEL_DEFAULT,16) ;
+		memset(voiceFlags_+i,0,16) ;
+	}
+}
+
+void Phrase::CopyVoices(int from,int to) {
+	for (int v=1;v<VOICE_COUNT;v++) {
+		memcpy(voiceNote_+VIdx(v,to,0),voiceNote_+VIdx(v,from,0),16) ;
+		memcpy(voiceVel_+VIdx(v,to,0),voiceVel_+VIdx(v,from,0),16) ;
+		memcpy(voiceFlags_+VIdx(v,to,0),voiceFlags_+VIdx(v,from,0),16) ;
+	}
+}
 
 Phrase::~Phrase() {
 	if (note_) SYS_FREE(note_) ;
