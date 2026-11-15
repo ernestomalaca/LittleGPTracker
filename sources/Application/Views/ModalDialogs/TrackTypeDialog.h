@@ -13,6 +13,7 @@
 #define TTD_DELETE 0x200
 #define TTD_LOAD 0x300
 #define TTD_EDIT 0x400
+#define TTD_NEWKIT 0x500   // el instrumento de la pista pasa a un kit vacío
 
 class TrackTypeDialog : public ModalView {
 public:

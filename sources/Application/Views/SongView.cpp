@@ -1287,9 +1287,17 @@ void SongView::ApplyTrackType(int channel, int code, bool) {
         DoModal(new PresetDialog(*this), TrackPresetCallback);
         return;
     }
-    if (code == TTD_EDIT) {   // al instrumento de la pista; B regresa a la Song
+    if (code == TTD_EDIT || code == TTD_NEWKIT) {   // al instrumento de la pista; B regresa a la Song
         int owner = project->GetTrackInstrument(channel);
         if (owner < 0) return;
+        if (code == TTD_NEWKIT) {   // trk2als: un kit vacío para armarlo pad por pad
+            SampleInstrument *si =
+                (SampleInstrument *)project->GetInstrumentBank()->GetInstrument(owner);
+            if (si->GetType() != IT_SAMPLE) return;
+            si->MakeEmptyKit();
+            project->SetTrackName(channel, "Kit");
+            View::SetNotification("kit nuevo: A+flechas elige el pad");
+        }
         viewData_->currentInstrument_ = owner;
         viewData_->instrumentFromSong_ = true;
         headerMode_ = false;   // al volver, el cursor ya está en los clips

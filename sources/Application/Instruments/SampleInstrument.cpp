@@ -117,7 +117,7 @@ SampleInstrument::SampleInstrument() {
 		 renderParams_[ch].audioClip_=false ;
 		 renderParams_[ch].declickIn_=-1 ;
 		 renderParams_[ch].declickOut_=renderParams_[ch].declickOutLen_=0 ;
-		 renderParams_[ch].chokeMs_=0 ;
+		 renderParams_[ch].chokeMs_=0 ; renderParams_[ch].padDecay_=0 ; renderParams_[ch].padClock_=0 ; renderParams_[ch].padChoke_=0 ;
 	 }
 
 
@@ -225,6 +225,7 @@ SampleInstrument::SampleInstrument() {
 	 Insert(new Variable("audio clip",SIP_CLIP,0)) ;
 	 Insert(new Variable("s zones",SIP_S_ZONES,"")) ;
 	 Insert(new Variable("s kit",SIP_S_KIT,0)) ;
+	 Insert(new Variable("s pads",SIP_S_PADS,"")) ;
 	 Insert(new Variable("s transpose",SIP_S_TRANSP,0)) ;
 	 Insert(new Variable("s detune",SIP_S_DETUNE,0)) ;
 	 Insert(new Variable("s glide",SIP_S_GLIDE,0)) ;
@@ -697,6 +698,9 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 			rp->svfIc1_[0]=rp->svfIc1_[1]=rp->svfIc2_[0]=rp->svfIc2_[1]=0 ;
 		}
 		for (int k=0;k<5;k++) rp->sLive_[k]=-9999 ;
+		rp->padDecay_=0 ;   // trk2als: los del pad los pone startKit después
+		rp->padClock_=0 ;
+		rp->padChoke_=0 ;
 		simplerBlock(rp,0) ;
 	}
 	snapshotLive(rp) ; // trk2als
@@ -707,6 +711,7 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 // tres de acorde. El mismo pad se reinicia en su voz; si no, una libre; si no
 // hay, la que empezó antes
 bool SampleInstrument::startKit(int channel,unsigned char note,int velocity,int flags) {
+	if (!IsZoned()) return false ;   // kit sin pads: silencio
 	int slots[2+SI_CHORD_VOICES] ;
 	for (int k=0;k<2+SI_CHORD_VOICES;k++) slots[k]=channel+k*SONG_CHANNEL_COUNT ;
 	int pick=-1 ;
@@ -723,12 +728,37 @@ bool SampleInstrument::startKit(int channel,unsigned char note,int velocity,int 
 		for (int k=1;k<2+SI_CHORD_VOICES;k++)
 			if (kitStartClock_[slots[k]]<kitStartClock_[pick]) pick=slots[k] ;
 	}
+	PadParams pp=GetPad(note) ;
+	if (pp.choke>0) {   // el pad calla a los otros de su grupo (hat abierto / cerrado)
+		for (int k=0;k<2+SI_CHORD_VOICES;k++) {
+			renderParams *o=renderParams_+slots[k] ;
+			if (slots[k]==pick || o->finished_ || o->envStage_>=3) continue ;
+			if (o->padChoke_==pp.choke) {
+				o->envReleaseFrom_=o->envLevel_ ;
+				o->envStage_=3 ;
+				o->envClock_=0 ;
+				o->chokeMs_=8 ;
+			}
+		}
+	}
 	kitStarting_=true ;
 	bool ok=Start(pick,note,flags) ;
 	kitStarting_=false ;
 	if (!ok) return false ;
 	renderParams *rp=renderParams_+pick ;
 	rp->gate_=false ;   // one-shot: no importa el largo de la nota
+	rp->padChoke_=pp.choke ;
+	rp->padClock_=0 ;
+	rp->padDecay_=pp.decay>0?pp.decay*44.1f:0 ;
+	if (pp.gain!=0) {   // volumen del pad
+		float vol=fp2fl(rp->baseVolume_)*powf(10.0f,pp.gain/20.0f) ;
+		if (vol>255.0f) vol=255.0f ;
+		rp->volume_=rp->baseVolume_=fl2fp(vol) ;
+	}
+	if (pp.pan!=0) {
+		int pan=int(fp2fl(rp->basePan_))+pp.pan*127/50 ;
+		rp->pan_=rp->basePan_=i2fp(pan<0?0:(pan>254?254:pan)) ;
+	}
 	kitStartClock_[pick]=System::GetInstance()->GetClock()+1 ;
 	lastKitSlot_[channel]=pick ;
 	if (velocity>=0 && velocity!=100) ProcessCommand(pick,I_CMD_MVEL,(ushort)(velocity*2)) ;
@@ -749,6 +779,112 @@ std::string SampleInstrument::PadName(int note) {
 		}
 	}
 	return "" ;
+}
+
+int SampleInstrument::KitBase() {
+	ensureZones() ;
+	int lo=127, hi=0 ;
+	for (size_t i=0;i<zones_.zones_.size();i++) {
+		if (zones_.zones_[i].lo<lo) lo=zones_.zones_[i].lo ;
+		if (zones_.zones_[i].hi>hi) hi=zones_.zones_[i].hi ;
+	}
+	if (zones_.zones_.empty() || (lo>=36 && hi<=51)) return 36 ;
+	return lo>112?112:lo ;
+}
+
+// los mismos valores que deja adg2kit.py en un kit convertido
+void SampleInstrument::MakeEmptyKit() {
+	Purge() ;
+	FindVariable(SIP_SAMPLE)->SetInt(-1) ;
+	const char *params[][2]={{"s init","1"},{"s mode","classic"},{"s trigger","trigger"},
+		{"s kit","1"},{"s attack","0"},{"s decay","0"},{"s sustain","0"},{"s release","0"},
+		{"s volume","0"},{"s voices","2"},{"s warp","off"},{"s pads",""}} ;
+	for (unsigned k=0;k<sizeof(params)/sizeof(params[0]);k++) {
+		IteratorPtr<Variable> it(GetIterator()) ;
+		for (it->Begin();!it->IsDone();it->Next()) {
+			Variable &var=it->CurrentItem() ;
+			if (!strcmp(var.GetName(),params[k][0])) { var.SetString(params[k][1]) ; break ; }
+		}
+	}
+	SetZones("") ;
+	padsStr_="" ; pads_.clear() ;
+}
+
+void SampleInstrument::parsePads() {
+	const char *str=FindVariable(SIP_S_PADS)->GetString() ;
+	if (padsStr_==str) return ;
+	padsStr_=str ;
+	pads_.clear() ;
+	std::string s=str ;
+	size_t pos=0 ;
+	while (pos<s.size()) {
+		size_t e=s.find(';',pos) ;
+		if (e==std::string::npos) e=s.size() ;
+		std::string item=s.substr(pos,e-pos) ;
+		int n,g,t,p,d,c,st ;
+		if (sscanf(item.c_str(),"%d:%d:%d:%d:%d:%d:%d",&n,&g,&t,&p,&d,&c,&st)==7) {
+			PadParams pp ;
+			pp.gain=g ; pp.tune=t ; pp.pan=p ; pp.decay=d ; pp.choke=c ; pp.start=st ;
+			pads_[n]=pp ;
+		}
+		pos=e+1 ;
+	}
+}
+
+PadParams SampleInstrument::GetPad(int note) {
+	parsePads() ;
+	std::map<int,PadParams>::iterator it=pads_.find(note) ;
+	return it==pads_.end()?PadParams():it->second ;
+}
+
+void SampleInstrument::SetPad(int note,const PadParams &p) {
+	parsePads() ;
+	pads_[note]=p ;
+	std::string out ;
+	char buf[64] ;
+	for (std::map<int,PadParams>::iterator it=pads_.begin();it!=pads_.end();it++) {
+		const PadParams &q=it->second ;
+		if (q.gain==0 && q.tune==0 && q.pan==0 && q.decay==0 && q.choke==0 && q.start==0) continue ;
+		snprintf(buf,sizeof(buf),"%d:%d:%d:%d:%d:%d:%d",it->first,q.gain,q.tune,q.pan,q.decay,q.choke,q.start) ;
+		if (!out.empty()) out+=";" ;
+		out+=buf ;
+	}
+	FindVariable(SIP_S_PADS)->SetString(out.c_str()) ;
+	padsStr_=out ;
+}
+
+std::string SampleInstrument::PadSample(int note) {
+	ensureZones() ;
+	for (size_t i=0;i<zones_.zones_.size();i++)
+		if (zones_.zones_[i].lo==note && zones_.zones_[i].hi==note) return zones_.zones_[i].name ;
+	return "" ;
+}
+
+// cambia (o quita) el sample de un pad y reescribe 's zones'
+void SampleInstrument::SetPadSample(int note,const std::string &wav) {
+	ensureZones() ;
+	std::string out ;
+	char buf[32] ;
+	bool done=false ;
+	std::vector<std::pair<int,std::string> > pads ;
+	for (size_t i=0;i<zones_.zones_.size();i++) {
+		const ZoneSource::Zone &z=zones_.zones_[i] ;
+		if (z.lo==note) { done=true ; if (!wav.empty()) pads.push_back(std::make_pair(note,wav)) ; continue ; }
+		pads.push_back(std::make_pair(z.lo,z.name)) ;
+	}
+	if (!done && !wav.empty()) pads.push_back(std::make_pair(note,wav)) ;
+	std::sort(pads.begin(),pads.end()) ;
+	for (size_t i=0;i<pads.size();i++) {
+		snprintf(buf,sizeof(buf),"%d,%d,%d,0.0,-1,-1,",pads[i].first,pads[i].first,pads[i].first) ;
+		if (!out.empty()) out+=";" ;
+		out+=buf ;
+		out+=pads[i].second ;
+	}
+	SetZones(out) ;
+	if (!pads.empty()) {   // el 'sample' del instrumento: el del primer pad (para la lista)
+		int idx=SamplePool::GetInstance()->IndexOf(pads[0].second.c_str()) ;
+		if (idx>=0) FindVariable(SIP_SAMPLE)->SetInt(idx) ;
+	}
 }
 
 void SampleInstrument::Stop(int channel) {
@@ -1927,6 +2063,11 @@ bool SampleInstrument::startSimpler(renderParams *rp,int channel,unsigned char n
 		offset=GetSimpler(SIP_S_TRANSP)+GetSimpler(SIP_S_DETUNE)/100.0f+
 		       float(int(note)-z->root)+z->cents/100.0f ;
 		first=0 ;
+		if (GetSimpler(SIP_S_KIT)) {   // trk2als: afinación e inicio del pad
+			PadParams pp=GetPad(rp->midiNote_) ;
+			offset+=pp.tune ;
+			first=int(long(zsize)*pp.start/100) ;
+		}
 		rp->gate_=true ;
 		rp->simplerLoop_=SILM_ONESHOT ;
 		rp->rendLoopStart_=0 ;
@@ -2340,6 +2481,12 @@ void SampleInstrument::simplerEnvelope(renderParams *rp,fixed *buffer,int size) 
 		}
 		rp->envLevel_=l ;
 		rp->envClock_++ ;
+		if (rp->padDecay_>0) {   // trk2als: decay del pad: el golpe se apaga en ese tiempo
+			float t=float(rp->padClock_++)/rp->padDecay_ ;
+			float g=t>=1?0:(1-t)*(1-t) ;
+			l*=g ;
+			if (t>=1) rp->envStage_=4 ;
+		}
 		if (fadeOut>=1) {
 			float left=leftEnd-i ;
 			if (left<fadeOut) l*=(left>0)?left/fadeOut:0 ;

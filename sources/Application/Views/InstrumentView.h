@@ -7,6 +7,7 @@
 #include "ViewData.h"
 #include "Foundation/Variables/Variable.h"
 #include <string>
+#include "Application/Instruments/SampleInstrument.h"
 
 class SampleInstrument ;
 
@@ -16,6 +17,7 @@ public:
 	virtual ~InstrumentView() ;
 
 	virtual void ProcessButtonMask(unsigned short mask,bool pressed) ;
+	void processButtonMask(unsigned short mask,bool pressed) ;
 	virtual void DrawView() ;
 	virtual void OnPlayerUpdate(PlayerEventType,unsigned int) {} ;
 	virtual void OnFocus() ;
@@ -89,5 +91,27 @@ public:
 	void OnPresetLoad(const std::string &name) ;
 	void OnPresetSave(const std::string &name) ;
 	void OnPresetFolder(const std::string &folder) ;
+	void OnPadImport(bool ok) ;
+private:
+	// trk2als: editor de kits: una rejilla de 4x4 pads (como el Move); los
+	// campos editan el pad elegido y se escriben en 's pads' / 's zones'
+	bool kitMode_ ;
+	Variable padSelVar_, padSmpVar_, padGainVar_, padTuneVar_, padPanVar_,
+	         padDecayVar_, padChokeVar_, padStartVar_ ;
+	int padShown_ ;          // el pad que muestran los campos
+	bool padBusy_ ;          // cambiando el kit: no reconstruir a medias
+	bool padImport_ ;        // el navegador se abrió para un pad
+	int padImportPrev_ ;
+	bool padClip_ ;          // hay un pad copiado
+	std::string padClipWav_ ;
+	PadParams padClipP_ ;
+	int padNote() ;
+	bool isPadField(FourCC id) ;
+	void loadPadVars() ;
+	void kitSync() ;
+	void refreshKit() ;
+	void previewPad() ;
+	bool processKit(unsigned short mask) ;
+	void drawPadGrid(SampleInstrument *si,int X,int Y,int W,int H) ;
 } ;
 #endif

@@ -713,15 +713,7 @@ SampleInstrument *ClipView::kit() {
 // los 16 pads: C1..D#2 como el Move, salvo que el kit use otras teclas
 int ClipView::kitBase() {
     SampleInstrument *si = kit();
-    if (!si) return 36;
-    const std::vector<ZoneSource::Zone> &z = si->Zones();
-    int lo = 127, hi = 0;
-    for (size_t i = 0; i < z.size(); i++) {
-        if (z[i].lo < lo) lo = z[i].lo;
-        if (z[i].hi > hi) hi = z[i].hi;
-    }
-    if (lo >= 36 && hi <= 51) return 36;
-    return lo > 112 ? 112 : lo;
+    return si ? si->KitBase() : 36;
 }
 
 int ClipView::stepPitch(int pitch, int dir) {

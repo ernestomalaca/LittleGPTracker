@@ -9,12 +9,12 @@ static const char *addName[2] = {"Pista MIDI", "Pista de audio"} ;
 static const char *addInfo[2] = {"notas", "loops"} ;
 
 // opciones de una pista MIDI (la de audio solo tiene la última)
-static const int trackCode[3] = {TTD_LOAD, TTD_EDIT, TTD_DELETE} ;
-static const char *trackOption[3] = {"Cargar preset", "Editar instrumento", "Borrar pista"} ;
+static const int trackCode[4] = {TTD_LOAD, TTD_NEWKIT, TTD_EDIT, TTD_DELETE} ;
+static const char *trackOption[4] = {"Cargar preset", "Nuevo kit", "Editar instrumento", "Borrar pista"} ;
 
 TrackTypeDialog::TrackTypeDialog(View &view, int channel, bool adding, const char *name, bool midi)
 	: ModalView(view), channel_(channel), adding_(adding), midi_(midi),
-	  count_(midi ? 3 : 1), selected_(0), confirming_(false), yes_(false) {
+	  count_(midi ? 4 : 1), selected_(0), confirming_(false), yes_(false) {
 	snprintf(name_, sizeof(name_), "%s", name ? name : "") ;
 }
 
@@ -44,7 +44,7 @@ void TrackTypeDialog::DrawView() {
 		snprintf(line, sizeof(line), "Pista %d: %s", channel_ + 1, name_) ;
 		DrawString((width - strlen(line)) / 2, 0, line, props) ;
 		for (int i = 0; i < count_; i++) {
-			int o = midi_ ? i : 2 ;
+			int o = midi_ ? i : 3 ;
 			snprintf(line, sizeof(line), " %-*s", width - 1, trackOption[o]) ;
 			props.invert_ = (i == selected_) ;
 			DrawString(0, 2 + i, line, props) ;
@@ -88,7 +88,7 @@ void TrackTypeDialog::ProcessButtonMask(unsigned short mask, bool pressed) {
 		} else if (mask & EPBM_DOWN) {
 			selected_ = (selected_ + 1) % count_ ;
 		} else if (mask & EPBM_A) {
-			int code = trackCode[midi_ ? selected_ : 2] ;
+			int code = trackCode[midi_ ? selected_ : 3] ;
 			if (code == TTD_DELETE) {
 				confirming_ = true ;   // avisar antes de borrar
 				yes_ = false ;

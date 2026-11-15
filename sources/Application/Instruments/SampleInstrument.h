@@ -8,6 +8,7 @@
 #include "SoundSource.h"
 #include <string>
 #include <vector>
+#include <map>
 #include "WarpStretch.h"
 #include <vector>
 #include "Application/Model/Song.h" 
@@ -110,6 +111,16 @@ enum SampleInstrumentLoopMode {
 #define SIP_S_SLICEBY MAKE_FOURCC('S', 'S', 'B', 'Y') // slice by: region / manual
 #define SIP_S_MARKS MAKE_FOURCC('S', 'M', 'R', 'K')   // marcas manuales (cuadros, "a,b,c")
 #define SIP_S_KIT MAKE_FOURCC('S', 'K', 'I', 'T')   // trk2als: las zonas son pads de batería (one-shot)
+#define SIP_S_PADS MAKE_FOURCC('S', 'P', 'D', 'S')  // trk2als: ajustes por pad "nota:dB:semitonos:pan:decay ms:choke:inicio %;..."
+struct PadParams {
+	int gain ;     // dB (-36..+12)
+	int tune ;     // semitonos (-24..+24)
+	int pan ;      // -50..+50
+	int decay ;    // ms (0 = completo)
+	int choke ;    // 0 = ninguno, 1..4
+	int start ;    // % del sample (0..99)
+	PadParams():gain(0),tune(0),pan(0),decay(0),choke(0),start(0) {}
+} ;
 #define SIP_S_ZONES MAKE_FOURCC('S', 'Z', 'O', 'N')   // trk2als: zonas "lo,hi,raíz,cents,loopIni,loopFin,sample;..."
 #define SIP_CLIP MAKE_FOURCC('C', 'L', 'I', 'P')      // trk2als: 1 = es un loop de pista de audio (cargado desde la Song)
 
@@ -291,8 +302,19 @@ private:
 	   int LastNote() { return lastNote_ ; }   // la última nota que empezó
 	   // trk2als: kit de batería. Cada zona es un pad (una tecla) que suena
 	   // completo; los golpes se reparten en las 5 voces del canal
-	   bool IsKit() { return IsZoned() && GetSimpler(SIP_S_KIT)!=0 ; }
+	   bool IsKit() { return GetSimpler(SIP_S_KIT)!=0 && (IsZoned() || ZoneCount()==0) ; }
+	   void MakeEmptyKit() ;   // trk2als: un kit nuevo, sin pads
+	   int KitBase() ;         // la nota del primer pad de los 16 (36 = C1, como en Live)
 	   std::string PadName(int note) ;   // nombre corto del sample del pad, o ""
+	   PadParams GetPad(int note) ;
+	   void SetPad(int note,const PadParams &p) ;
+	   std::string PadSample(int note) ;          // el .wav del pad (nombre en el pool) o ""
+	   void SetPadSample(int note,const std::string &wav) ;   // "" = vaciar el pad
+	   private:
+	   void parsePads() ;
+	   std::string padsStr_ ;
+	   std::map<int,PadParams> pads_ ;
+	   public:
 	   private:
 	   bool startKit(int channel,unsigned char note,int velocity,int flags) ;
 	   bool kitStarting_ ;
