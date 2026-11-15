@@ -1047,6 +1047,7 @@ void ClipView::OnFocus() {
         std::vector<Note> notes;
         readNotes(notes);
         if (!notes.empty()) cursorPitch_ = notes[0].pitch;
+        else if (kit()) cursorPitch_ = kitBase();   // kit vacío: en el primer pad (el kick)
         topPitch_ = cursorPitch_ + ROWS / 2;
         keepVisible();
     }
