@@ -117,6 +117,7 @@ std::string InstrumentPresets::SuggestedName(SampleInstrument *instr) {
 	int index = instr->GetSampleIndex() ;
 	if (index < 0) return "preset" ;
 	std::string n = SamplePool::GetInstance()->GetNameList()[index] ;
+	if (instr->IsZoned()) n = instr->ZoneSetName() ;   // soundfont: "marimba" 
 	size_t dot = n.find_last_of('.') ;
 	if (dot != std::string::npos) n = n.substr(0, dot) ;
 	// solo lo que se puede escribir con el teclado de la consola
@@ -150,12 +151,20 @@ bool InstrumentPresets::Save(SampleInstrument *instr, const std::string &name) {
 		return false ;
 	}
 
-	// la copia del sample va junto al preset
+	// la copia del sample va junto al preset (en un soundfont, la de cada zona)
+	std::vector<std::string> samples ;
 	int index = instr->GetSampleIndex() ;
-	if (index >= 0) {
-		std::string sample = SamplePool::GetInstance()->GetNameList()[index] ;
-		Path src(std::string("samples:") + sample) ;
-		Path dst = Path(folder).Descend(sample) ;
+	if (index >= 0) samples.push_back(SamplePool::GetInstance()->GetNameList()[index]) ;
+	if (instr->IsZoned()) {
+		const std::vector<ZoneSource::Zone> &zones = instr->Zones() ;
+		for (size_t i = 0; i < zones.size(); i++) {
+			if (std::find(samples.begin(), samples.end(), zones[i].name) == samples.end())
+				samples.push_back(zones[i].name) ;
+		}
+	}
+	for (size_t i = 0; i < samples.size(); i++) {
+		Path src(std::string("samples:") + samples[i]) ;
+		Path dst = Path(folder).Descend(samples[i]) ;
 		if (!copyFile(src.GetPath(), dst.GetPath())) {
 			Trace::Error("No se pudo copiar %s", src.GetPath().c_str()) ;
 			return false ;
@@ -195,13 +204,38 @@ bool InstrumentPresets::Load(SampleInstrument *instr, const std::string &name) {
 	if (!data) return false ;
 
 	// primero el sample: si el proyecto no lo tiene, se copia desde el preset
-	std::string sample ;
+	std::string sample, zones ;
 	for (TiXmlElement *p = data->FirstChildElement("PARAM"); p; p = p->NextSiblingElement("PARAM")) {
 		const char *n = p->Attribute("NAME") ;
 		const char *v = p->Attribute("VALUE") ;
 		if (n && v && !strcmp(n, "sample")) sample = v ;
+		if (n && v && !strcmp(n, "s zones")) zones = v ;
 	}
 	SamplePool *pool = SamplePool::GetInstance() ;
+	// soundfont: los .wav de todas las zonas
+	if (!zones.empty()) {
+		size_t pos = 0 ;
+		while (pos < zones.size()) {
+			size_t end = zones.find(';', pos) ;
+			if (end == std::string::npos) end = zones.size() ;
+			std::string item = zones.substr(pos, end - pos) ;
+			pos = end + 1 ;
+			size_t comma = std::string::npos ;
+			int commas = 0 ;
+			for (size_t c = 0; c < item.size(); c++) {
+				if (item[c] == ',' && ++commas == 6) { comma = c ; break ; }
+			}
+			if (comma == std::string::npos) continue ;
+			std::string wav = item.substr(comma + 1) ;
+			if (pool->IndexOf(wav.c_str()) >= 0) continue ;
+			Path src = Path(folder).Descend(wav) ;
+			if (!src.Exists()) {
+				Trace::Error("Falta el sample %s del preset", wav.c_str()) ;
+				return false ;
+			}
+			if (pool->ImportSample(src) < 0) return false ;
+		}
+	}
 	int index = -1 ;
 	if (!sample.empty() && sample != "(null)") {
 		for (int i = 0; i < pool->GetNameListSize(); i++) {
@@ -243,6 +277,8 @@ bool InstrumentPresets::Load(SampleInstrument *instr, const std::string &name) {
 			}
 		}
 	}
+	// las zonas, ya con sus samples en el pool (vacío = un solo sample)
+	instr->SetZones(zones) ;
 	// presets de antes del filtro nuevo: se convierte como al abrir un proyecto
 	if (!newFilter) {
 		instr->FindVariable(SIP_S_FVER)->SetInt(0) ;
