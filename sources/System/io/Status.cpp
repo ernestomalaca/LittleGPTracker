@@ -12,7 +12,7 @@ void Status::Set(char *fmt, ...) {
      va_list args;
      va_start(args,fmt);
 
-     vsprintf(buffer,fmt,args ); 
+     vsnprintf(buffer,sizeof(buffer),fmt,args ); // trk2als: acotado
      status->Print(buffer) ; 
 
      va_end(args);

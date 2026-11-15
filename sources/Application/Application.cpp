@@ -52,8 +52,23 @@ static void installCrashLog() {
 	if (getenv("TRK_NOCRASHLOG")) return ;   // p. ej. al depurar con AddressSanitizer
 	Path p("root:crash.log") ;
 	strncpy(crashPath_,p.GetPath().c_str(),sizeof(crashPath_)-1) ;
+	// el registro corre en una pila aparte: si el crash fue por pisar la
+	// pila (un búfer desbordado), la normal ya no sirve para escribir nada
+	static char altStack[64*1024] ;
+	stack_t ss ;
+	ss.ss_sp=altStack ;
+	ss.ss_size=sizeof(altStack) ;
+	ss.ss_flags=0 ;
+	sigaltstack(&ss,0) ;
 	int sigs[5]={SIGSEGV,SIGBUS,SIGFPE,SIGABRT,SIGILL} ;
-	for (int i=0;i<5;i++) signal(sigs[i],crashHandler) ;
+	for (int i=0;i<5;i++) {
+		struct sigaction sa ;
+		memset(&sa,0,sizeof(sa)) ;
+		sa.sa_handler=crashHandler ;
+		sa.sa_flags=SA_ONSTACK ;
+		sigemptyset(&sa.sa_mask) ;
+		sigaction(sigs[i],&sa,0) ;
+	}
 }
 #else
 static void installCrashLog() {}
