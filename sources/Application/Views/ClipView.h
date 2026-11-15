@@ -33,8 +33,9 @@ class ClipView : public View {
     unsigned char *stepPtr(int g, int &phrase, int &pos);
     void readNotes(std::vector<Note> &out);
     void writeNotes(std::vector<Note> &notes);
-    int noteAt(std::vector<Note> &notes, int step);      // la que suena en ese paso
-    int noteStarting(std::vector<Note> &notes, int step);
+    int noteAt(std::vector<Note> &notes, int step, int pitch);   // la que suena ahí
+    int noteStarting(std::vector<Note> &notes, int step, int pitch);
+    bool stolen_;   // writeNotes cortó una nota: había más de 4 a la vez
     bool addPage();
 
     // edición

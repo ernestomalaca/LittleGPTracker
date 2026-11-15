@@ -47,6 +47,7 @@ ClipView::ClipView(GUIWindow &w, ViewData *viewData) : View(w, viewData) {
     msgTime_ = 0;
     chainShown_ = -1;
     pasting_ = false;
+    stolen_ = false;
     lastLoopL_ = 0;
     baPending_ = false;
     prevHas_ = false;
@@ -73,52 +74,108 @@ unsigned char *ClipView::stepPtr(int g, int &phrase, int &pos) {
     return viewData_->song_->phrase_->note_ + 16 * phrase + pos;
 }
 
+// trk2als: polifonía. Cada pista tiene 4 voces: la 0 es la columna de notas
+// de la phrase (con KILL y MVEL en sus comandos) y las 1..3 son las capas
+// (nota, velocity y corte). Aquí se leen todas como una lista de notas.
 void ClipView::readNotes(std::vector<Note> &out) {
     out.clear();
     Phrase *ph = viewData_->song_->phrase_;
     int t = total();
-    for (int g = 0; g < t; g++) {
-        int p, pos;
-        stepPtr(g, p, pos);
-        int i = 16 * p + pos;
-        bool kill = (ph->cmd1_[i] == I_CMD_KILL) || (ph->cmd2_[i] == I_CMD_KILL);
-        if (ph->note_[i] != NO_NOTE) {
-            if (!out.empty() && out.back().len < 0) out.back().len = g - out.back().start;
-            Note n;
-            n.start = g;
-            n.len = -1;
-            n.pitch = ph->note_[i];
-            n.instr = ph->instr_[i];
-            n.vel = 100;
-            if (ph->cmd1_[i] == I_CMD_MVEL) n.vel = (ph->param1_[i] & 0xFF) / 2;
-            if (ph->cmd2_[i] == I_CMD_MVEL) n.vel = (ph->param2_[i] & 0xFF) / 2;
-            if (n.vel < 1) n.vel = 1;
-            out.push_back(n);
-        } else if (kill) {
-            if (!out.empty() && out.back().len < 0) out.back().len = g - out.back().start;
+    for (int v = 0; v < VOICE_COUNT; v++) {
+        int open = -1;   // índice en 'out' de la nota que suena en esta voz
+        for (int g = 0; g < t; g++) {
+            int p, pos;
+            stepPtr(g, p, pos);
+            int i = 16 * p + pos;
+            unsigned char note;
+            bool kill;
+            int vel = 100, instr = 0xFF;
+            if (v == 0) {
+                note = ph->note_[i];
+                kill = (ph->cmd1_[i] == I_CMD_KILL) || (ph->cmd2_[i] == I_CMD_KILL);
+                instr = ph->instr_[i];
+                if (ph->cmd1_[i] == I_CMD_MVEL) vel = (ph->param1_[i] & 0xFF) / 2;
+                if (ph->cmd2_[i] == I_CMD_MVEL) vel = (ph->param2_[i] & 0xFF) / 2;
+            } else {
+                int vi = Phrase::VIdx(v, p, pos);
+                note = ph->voiceNote_[vi];
+                kill = (ph->voiceFlags_[vi] & VF_KILL) != 0;
+                if (ph->voiceVel_[vi] != VVEL_DEFAULT) vel = ph->voiceVel_[vi];
+            }
+            if ((kill || note != NO_NOTE) && open >= 0) {
+                out[open].len = g - out[open].start;
+                open = -1;
+            }
+            if (note != NO_NOTE) {
+                Note n;
+                n.start = g;
+                n.len = -1;
+                n.pitch = note;
+                n.instr = instr;
+                n.vel = vel < 1 ? 1 : vel;
+                out.push_back(n);
+                open = int(out.size()) - 1;
+            }
         }
+        if (open >= 0) out[open].len = t - out[open].start;
     }
-    if (!out.empty() && out.back().len < 0) out.back().len = t - out.back().start;
+    std::stable_sort(out.begin(), out.end(), byStart);
 }
 
 void ClipView::writeNotes(std::vector<Note> &notes) {
     int t = total();
-    std::stable_sort(notes.begin(), notes.end(), byStart);
-    // monofónico: cada nota termina a más tardar donde empieza la siguiente
-    std::vector<Note> ok;
-    for (size_t i = 0; i < notes.size(); i++) {
-        Note n = notes[i];
-        if (n.start < 0 || n.start >= t) continue;
-        if (!ok.empty() && ok.back().start == n.start) ok.pop_back();   // la nueva gana
-        ok.push_back(n);
+    // la última que se agregó gana si hay dos iguales (mismo paso y altura)
+    std::vector<Note> uniq;
+    for (int i = int(notes.size()) - 1; i >= 0; i--) {
+        const Note &n = notes[i];
+        if (n.start < 0 || n.start >= t || n.pitch < 0 || n.pitch > MAX_PITCH) continue;
+        bool dup = false;
+        for (size_t k = 0; k < uniq.size(); k++)
+            if (uniq[k].start == n.start && uniq[k].pitch == n.pitch) dup = true;
+        if (!dup) uniq.push_back(n);
     }
+    std::stable_sort(uniq.begin(), uniq.end(), byStart);
+    std::vector<Note> ok = uniq;
+    // una misma altura no se encima: la de antes termina donde empieza la otra
     for (size_t i = 0; i < ok.size(); i++) {
-        int next = (i + 1 < ok.size()) ? ok[i + 1].start : t;
-        if (ok[i].start + ok[i].len > next) ok[i].len = next - ok[i].start;
+        if (ok[i].start + ok[i].len > t) ok[i].len = t - ok[i].start;
+        for (size_t k = i + 1; k < ok.size(); k++) {
+            if (ok[k].pitch == ok[i].pitch && ok[k].start < ok[i].start + ok[i].len) {
+                ok[i].len = ok[k].start - ok[i].start;
+                break;
+            }
+        }
         if (ok[i].len < 1) ok[i].len = 1;
     }
+    // repartir en las 4 voces: la primera libre; si no hay, la que termina
+    // antes se corta (máximo 4 notas a la vez)
+    std::vector<int> voiceOf(ok.size(), 0);
+    int voiceNote[VOICE_COUNT];
+    for (int v = 0; v < VOICE_COUNT; v++) voiceNote[v] = -1;
+    stolen_ = false;
+    for (size_t i = 0; i < ok.size(); i++) {
+        int pick = -1;
+        for (int v = 0; v < VOICE_COUNT && pick < 0; v++) {
+            int j = voiceNote[v];
+            if (j < 0 || ok[j].start + ok[j].len <= ok[i].start) pick = v;
+        }
+        if (pick < 0) {
+            int best = 0;
+            for (int v = 1; v < VOICE_COUNT; v++)
+                if (ok[voiceNote[v]].start + ok[voiceNote[v]].len <
+                    ok[voiceNote[best]].start + ok[voiceNote[best]].len)
+                    best = v;
+            int j = voiceNote[best];
+            ok[j].len = ok[i].start - ok[j].start;
+            if (ok[j].len < 1) ok[j].len = 1;
+            pick = best;
+            stolen_ = true;
+        }
+        voiceOf[i] = pick;
+        voiceNote[pick] = int(i);
+    }
     Phrase *ph = viewData_->song_->phrase_;
-    // borrar notas, KILL y MVEL del clip (los demás comandos se quedan)
+    // borrar notas, KILL y MVEL del clip (los demás comandos se quedan) y las capas
     for (int g = 0; g < t; g++) {
         int p, pos;
         stepPtr(g, p, pos);
@@ -133,41 +190,64 @@ void ClipView::writeNotes(std::vector<Note> &notes) {
             ph->cmd2_[i] = I_CMD_NONE;
             ph->param2_[i] = 0;
         }
+        for (int v = 1; v < VOICE_COUNT; v++) {
+            int vi = Phrase::VIdx(v, p, pos);
+            ph->voiceNote_[vi] = NO_NOTE;
+            ph->voiceVel_[vi] = VVEL_DEFAULT;
+            ph->voiceFlags_[vi] = 0;
+        }
     }
     for (size_t k = 0; k < ok.size(); k++) {
         const Note &n = ok[k];
+        int v = voiceOf[k];
         int p, pos;
         stepPtr(n.start, p, pos);
         int i = 16 * p + pos;
-        ph->note_[i] = (unsigned char)n.pitch;
-        ph->instr_[i] = (unsigned char)n.instr;
-        if (n.vel != 100) {
-            ushort v = (ushort)(n.vel * 2);
-            if (ph->cmd1_[i] == I_CMD_NONE) { ph->cmd1_[i] = I_CMD_MVEL; ph->param1_[i] = v; }
-            else if (ph->cmd2_[i] == I_CMD_NONE) { ph->cmd2_[i] = I_CMD_MVEL; ph->param2_[i] = v; }
-        }
+        // dónde empieza la siguiente nota de esta voz
+        int next = t;
+        for (size_t m = k + 1; m < ok.size(); m++)
+            if (voiceOf[m] == v) { next = ok[m].start; break; }
         int end = n.start + n.len;
-        int next = (k + 1 < ok.size()) ? ok[k + 1].start : t;
-        if (end < next) {
-            stepPtr(end, p, pos);
-            int j = 16 * p + pos;
-            if (ph->cmd1_[j] == I_CMD_NONE) { ph->cmd1_[j] = I_CMD_KILL; ph->param1_[j] = 0; }
-            else if (ph->cmd2_[j] == I_CMD_NONE) { ph->cmd2_[j] = I_CMD_KILL; ph->param2_[j] = 0; }
+        if (v == 0) {
+            ph->note_[i] = (unsigned char)n.pitch;
+            ph->instr_[i] = (unsigned char)n.instr;
+            if (n.vel != 100) {
+                ushort vv = (ushort)(n.vel * 2);
+                if (ph->cmd1_[i] == I_CMD_NONE) { ph->cmd1_[i] = I_CMD_MVEL; ph->param1_[i] = vv; }
+                else if (ph->cmd2_[i] == I_CMD_NONE) { ph->cmd2_[i] = I_CMD_MVEL; ph->param2_[i] = vv; }
+            }
+            if (end < next) {
+                stepPtr(end, p, pos);
+                int j = 16 * p + pos;
+                if (ph->cmd1_[j] == I_CMD_NONE) { ph->cmd1_[j] = I_CMD_KILL; ph->param1_[j] = 0; }
+                else if (ph->cmd2_[j] == I_CMD_NONE) { ph->cmd2_[j] = I_CMD_KILL; ph->param2_[j] = 0; }
+            }
+        } else {
+            int vi = Phrase::VIdx(v, p, pos);
+            ph->voiceNote_[vi] = (unsigned char)n.pitch;
+            ph->voiceVel_[vi] = (n.vel == 100) ? VVEL_DEFAULT : (unsigned char)n.vel;
+            if (end < next) {
+                stepPtr(end, p, pos);
+                ph->voiceFlags_[Phrase::VIdx(v, p, pos)] |= VF_KILL;
+            }
         }
     }
     notes = ok;
 }
 
-int ClipView::noteAt(std::vector<Note> &notes, int step) {
+// la nota que suena en ese paso y esa altura
+int ClipView::noteAt(std::vector<Note> &notes, int step, int pitch) {
     for (size_t i = 0; i < notes.size(); i++) {
-        if (step >= notes[i].start && step < notes[i].start + notes[i].len) return int(i);
+        if (notes[i].pitch == pitch && step >= notes[i].start &&
+            step < notes[i].start + notes[i].len)
+            return int(i);
     }
     return -1;
 }
 
-int ClipView::noteStarting(std::vector<Note> &notes, int step) {
+int ClipView::noteStarting(std::vector<Note> &notes, int step, int pitch) {
     for (size_t i = 0; i < notes.size(); i++) {
-        if (notes[i].start == step) return int(i);
+        if (notes[i].start == step && notes[i].pitch == pitch) return int(i);
     }
     return -1;
 }
@@ -192,6 +272,7 @@ bool ClipView::addPage() {
         ph->cmd1_[i] = ph->cmd2_[i] = I_CMD_NONE;
         ph->param1_[i] = ph->param2_[i] = 0;
     }
+    ph->ClearVoices(phrase);
     unsigned char *row = viewData_->song_->chain_->data_ + 16 * viewData_->currentChain_;
     row[n] = (unsigned char)phrase;
     viewData_->song_->chain_->transpose_[16 * viewData_->currentChain_ + n] = 0;
@@ -207,16 +288,17 @@ void ClipView::putNote() {
     if (pages() == 0 && !addPage()) return;
     std::vector<Note> notes;
     readNotes(notes);
-    int i = noteAt(notes, cursorStep_);
-    if (i >= 0 && notes[i].pitch == cursorPitch_) {   // ya está: la elige
+    int i = noteAt(notes, cursorStep_, cursorPitch_);
+    if (i >= 0 && notes[i].start == cursorStep_) {   // ya está: la elige
         lastLen_ = notes[i].len;
         lastVel_ = notes[i].vel;
         audition(notes[i].start);
         return;
     }
-    if (i >= 0 && notes[i].start < cursorStep_) {     // la parte en dos
+    if (i >= 0) {     // la misma nota sonando desde antes: la parte en dos
         notes[i].len = cursorStep_ - notes[i].start;
     }
+    // con otras alturas sonando: acorde (hasta 4 notas a la vez)
     int instr = 0xFF;
     if (viewData_->project_->GetTrackInstrument(viewData_->songX_) < 0) {
         // pista sin dueño: el instrumento de la nota anterior
@@ -232,13 +314,14 @@ void ClipView::putNote() {
     n.instr = instr;
     notes.push_back(n);
     writeNotes(notes);
+    if (stolen_) message("Maximo 4 notas a la vez");
     audition(cursorStep_);
 }
 
 void ClipView::cutNote() {
     std::vector<Note> notes;
     readNotes(notes);
-    int i = noteAt(notes, cursorStep_);
+    int i = noteAt(notes, cursorStep_, cursorPitch_);
     if (i < 0) { message("Nada que cortar"); return; }
     clipboard_.clear();
     clipboard_.push_back(notes[i]);
@@ -255,17 +338,20 @@ void ClipView::cutNote() {
 void ClipView::placeNotes(std::vector<Note> &notes, std::vector<Note> &add) {
     for (size_t k = 0; k < add.size(); k++) {
         const Note &n = add[k];
+        // solo la misma altura se reemplaza o se corta; las demás hacen acorde
         for (size_t i = 0; i < notes.size(); i++) {
-            if (notes[i].start < n.start && notes[i].start + notes[i].len > n.start)
+            if (notes[i].pitch == n.pitch && notes[i].start < n.start &&
+                notes[i].start + notes[i].len > n.start)
                 notes[i].len = n.start - notes[i].start;
         }
         for (size_t i = 0; i < notes.size();) {
-            if (notes[i].start == n.start) notes.erase(notes.begin() + i);
+            if (notes[i].start == n.start && notes[i].pitch == n.pitch) notes.erase(notes.begin() + i);
             else i++;
         }
         notes.push_back(n);
     }
     writeNotes(notes);
+    if (stolen_) message("Maximo 4 notas a la vez");
 }
 
 // dónde caería lo copiado: empieza justo en el cursor; lo que se sale de la
@@ -369,6 +455,7 @@ bool ClipView::duplicatePage(bool right) {
     memcpy(ph->cmd2_ + dst, ph->cmd2_ + src, 16 * sizeof(FourCC));
     memcpy(ph->param1_ + dst, ph->param1_ + src, 16 * sizeof(ushort));
     memcpy(ph->param2_ + dst, ph->param2_ + src, 16 * sizeof(ushort));
+    ph->CopyVoices(row[page], np);
     // la copia entra después (derecha) o en su lugar, empujando el original (izquierda)
     int at = right ? page + 1 : page;
     for (int r = n; r > at; r--) {
@@ -458,6 +545,12 @@ void ClipView::takeSnap(Snap &s) {
         s.data.insert(s.data.end(), c2, c2 + 16 * sizeof(FourCC));
         s.data.insert(s.data.end(), p1, p1 + 16 * sizeof(ushort));
         s.data.insert(s.data.end(), p2, p2 + 16 * sizeof(ushort));
+        for (int v = 1; v < VOICE_COUNT; v++) {   // las capas de voces
+            int vi = Phrase::VIdx(v, row[r], 0);
+            s.data.insert(s.data.end(), ph->voiceNote_ + vi, ph->voiceNote_ + vi + 16);
+            s.data.insert(s.data.end(), ph->voiceVel_ + vi, ph->voiceVel_ + vi + 16);
+            s.data.insert(s.data.end(), ph->voiceFlags_ + vi, ph->voiceFlags_ + vi + 16);
+        }
     }
 }
 
@@ -478,6 +571,12 @@ void ClipView::restoreSnap(const Snap &s) {
         memcpy(ph->cmd2_ + i, d, 16 * sizeof(FourCC)); d += 16 * sizeof(FourCC);
         memcpy(ph->param1_ + i, d, 16 * sizeof(ushort)); d += 16 * sizeof(ushort);
         memcpy(ph->param2_ + i, d, 16 * sizeof(ushort)); d += 16 * sizeof(ushort);
+        for (int v = 1; v < VOICE_COUNT; v++) {
+            int vi = Phrase::VIdx(v, row[r], 0);
+            memcpy(ph->voiceNote_ + vi, d, 16); d += 16;
+            memcpy(ph->voiceVel_ + vi, d, 16); d += 16;
+            memcpy(ph->voiceFlags_ + vi, d, 16); d += 16;
+        }
     }
     if (cursorStep_ >= total() && total() > 0) cursorStep_ = total() - 1;
 }
@@ -669,29 +768,22 @@ void ClipView::AnimationUpdate() {
 void ClipView::moveNote(int dt, int dp) {
     std::vector<Note> notes;
     readNotes(notes);
-    int i = noteAt(notes, cursorStep_);
+    int i = noteAt(notes, cursorStep_, cursorPitch_);
     if (i < 0) return;
     Note &n = notes[i];
     if (dp) {   // un semitono, o un grado si hay escala (dp = ±12: octava)
         int p = (dp == 1 || dp == -1) ? stepPitch(n.pitch, dp) : n.pitch + dp;
         if (p < 0 || p > MAX_PITCH) return;
+        int j = noteStarting(notes, n.start, p);
+        if (j >= 0 && j != i) return;   // ahí ya hay esa nota
         n.pitch = p;
         cursorPitch_ = p;
     }
     if (dt) {
         int s = n.start + dt;
         if (s < 0 || s >= total()) return;
-        int j = noteStarting(notes, s);
-        if (j >= 0 && j != i) return;   // ahí empieza otra
-        // la de antes no se alarga al irse esta
-        if (dt > 0 && i > 0) {
-            Note &prev = notes[i - 1];
-            if (prev.start + prev.len > n.start) prev.len = n.start - prev.start;
-        }
-        if (dt < 0 && i > 0) {
-            Note &prev = notes[i - 1];
-            if (prev.start + prev.len > s) prev.len = s - prev.start;
-        }
+        int j = noteStarting(notes, s, n.pitch);
+        if (j >= 0 && j != i) return;   // ahí empieza otra igual
         n.start = s;
         cursorStep_ += dt;
     }
@@ -703,9 +795,12 @@ void ClipView::moveNote(int dt, int dp) {
 void ClipView::changeLength(int d) {
     std::vector<Note> notes;
     readNotes(notes);
-    int i = noteAt(notes, cursorStep_);
+    int i = noteAt(notes, cursorStep_, cursorPitch_);
     if (i < 0) return;
-    int next = (i + 1 < (int)notes.size()) ? notes[i + 1].start : total();
+    int next = total();   // hasta la siguiente nota igual o el final del clip
+    for (size_t k = 0; k < notes.size(); k++)
+        if (notes[k].pitch == notes[i].pitch && notes[k].start > notes[i].start && notes[k].start < next)
+            next = notes[k].start;
     int len = notes[i].len + d;
     if (len < 1) len = 1;
     if (notes[i].start + len > next) len = next - notes[i].start;
@@ -713,12 +808,13 @@ void ClipView::changeLength(int d) {
     lastLen_ = len;
     cursorStep_ = notes[i].start;   // al editarla, el cursor salta al inicio de la nota
     writeNotes(notes);
+    if (stolen_) message("Maximo 4 notas a la vez");
 }
 
 void ClipView::changeVelocity(int d) {
     std::vector<Note> notes;
     readNotes(notes);
-    int i = noteAt(notes, cursorStep_);
+    int i = noteAt(notes, cursorStep_, cursorPitch_);
     if (i < 0) return;
     int v = notes[i].vel + d;
     if (v < 1) v = 1;
@@ -1103,7 +1199,7 @@ void ClipView::handleButton(unsigned short mask, bool pressed) {
     if (dt && cursorStep_ < total()) {   // sobre una nota: brinca al terminar (o a su inicio)
         std::vector<Note> notes;
         readNotes(notes);
-        int i = noteAt(notes, cursorStep_);
+        int i = noteAt(notes, cursorStep_, cursorPitch_);
         if (i >= 0 && notes[i].pitch == cursorPitch_) {
             if (dt > 0) dt = notes[i].start + notes[i].len - cursorStep_;
             else if (cursorStep_ > notes[i].start) dt = notes[i].start - cursorStep_;
@@ -1135,7 +1231,7 @@ void ClipView::DrawView() {
     int npages = pages();
     int page = cursorStep_ / 16;
     int p0 = page * 16;
-    int cur = noteAt(notes, cursorStep_);
+    int cur = noteAt(notes, cursorStep_, cursorPitch_);
     if (cur >= 0 && notes[cur].pitch != cursorPitch_) cur = -1;   // solo si el cursor está sobre ella
     int scale = viewData_->project_->GetScale();
     int root = viewData_->project_->GetScaleRoot();
@@ -1303,14 +1399,22 @@ void ClipView::DrawView() {
     // carril de velocity
     FillRect(GRID_X, VEL_Y, gw, VEL_H, Mix(bg, fg, 5), 4);
     DrawText(12, VEL_Y + VEL_H / 2 - 6, "vel", dim, 0);
-    for (size_t i = 0; i < notes.size(); i++) {
-        const Note &n = notes[i];
-        int s = n.start - p0;
-        if (s < 0 || s >= 16) continue;
-        int h = (VEL_H - 8) * n.vel / 127;
-        if (h < 2) h = 2;
-        GUIColor c = ((int)i == cur) ? hi2 : Mix(bg, hi, 40 + 60 * n.vel / 127);
-        FillRect(GRID_X + s * STEP_W + 10, VEL_Y + VEL_H - 4 - h, STEP_W - 20, h, c, 2);
+    // en un acorde las barras se apilan: la más alta atrás, la del cursor encima
+    for (int pass = 0; pass < 2; pass++) {
+        for (int lvl = 127; lvl >= 0; lvl--) {
+            for (size_t i = 0; i < notes.size(); i++) {
+                const Note &n = notes[i];
+                if (n.vel != lvl && pass == 0) continue;
+                if (pass == 1 && ((int)i != cur || lvl != 0)) continue;
+                if (pass == 0 && (int)i == cur) continue;
+                int s = n.start - p0;
+                if (s < 0 || s >= 16) continue;
+                int h = (VEL_H - 8) * n.vel / 127;
+                if (h < 2) h = 2;
+                GUIColor c = ((int)i == cur) ? hi2 : Mix(bg, hi, 40 + 60 * n.vel / 127);
+                FillRect(GRID_X + s * STEP_W + 10, VEL_Y + VEL_H - 4 - h, STEP_W - 20, h, c, 2);
+            }
+        }
     }
 
     if (marking_)

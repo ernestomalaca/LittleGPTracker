@@ -141,6 +141,10 @@ int Project::OutOfScaleNotes() {
         unsigned char note = ph->note_[i];
         if (note != 0xFF && note < 0x80 && !InScale(scale, root, note)) n++;
     }
+    for (int i = 0; i < VOICE_LAYERS * PHRASE_COUNT * 16; i++) {   // las capas de acordes
+        unsigned char note = ph->voiceNote_[i];
+        if (note != 0xFF && note < 0x80 && !InScale(scale, root, note)) n++;
+    }
     return n;
 }
 
@@ -150,15 +154,18 @@ int Project::FitToScale() {
     int scale = GetScale(), root = GetScaleRoot(), n = 0;
     if (scale == 0) return 0;
     Phrase *ph = song_->phrase_;
-    for (int i = 0; i < PHRASE_COUNT * 16; i++) {
-        int note = ph->note_[i];
-        if (note == 0xFF || note >= 0x80 || InScale(scale, root, note)) continue;
-        for (int d = 1; d < 12; d++) {
-            if (note - d >= 0 && InScale(scale, root, note - d)) { note -= d; break; }
-            if (note + d < 0x78 && InScale(scale, root, note + d)) { note += d; break; }
+    for (int layer = 0; layer < VOICE_COUNT; layer++) {   // la columna de notas y las capas
+        uchar *notes = layer == 0 ? ph->note_ : ph->voiceNote_ + (layer - 1) * PHRASE_COUNT * 16;
+        for (int i = 0; i < PHRASE_COUNT * 16; i++) {
+            int note = notes[i];
+            if (note == 0xFF || note >= 0x80 || InScale(scale, root, note)) continue;
+            for (int d = 1; d < 12; d++) {
+                if (note - d >= 0 && InScale(scale, root, note - d)) { note -= d; break; }
+                if (note + d < 0x78 && InScale(scale, root, note + d)) { note += d; break; }
+            }
+            notes[i] = (unsigned char)note;
+            n++;
         }
-        ph->note_[i] = (unsigned char)note;
-        n++;
     }
     return n;
 }

@@ -443,7 +443,7 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 			 loopMode_->SetInt(SILM_ONESHOT) ;
 		 } ;
 	 } 
-     rp->forceSync_=syncRequest_[channel] ; // trk2als: pista de audio
+     rp->forceSync_=(channel<SONG_CHANNEL_COUNT)?syncRequest_[channel]:false ; // trk2als: pista de audio
      // trk2als: en las pistas MIDI el instrumento es el Sampler estilo Simpler
      // (salvo instrumentos viejos en looper sync)
      rp->audioClip_=false ;
