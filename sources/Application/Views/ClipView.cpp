@@ -293,6 +293,7 @@ void ClipView::changeLength(int d) {
     if (notes[i].start + len > next) len = next - notes[i].start;
     notes[i].len = len;
     lastLen_ = len;
+    cursorStep_ = notes[i].start;   // al editarla, el cursor salta al inicio de la nota
     writeNotes(notes);
 }
 
@@ -306,6 +307,7 @@ void ClipView::changeVelocity(int d) {
     if (v > 127) v = 127;
     notes[i].vel = v;
     lastVel_ = v;
+    cursorStep_ = notes[i].start;
     writeNotes(notes);
 }
 
