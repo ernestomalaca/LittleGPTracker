@@ -2633,6 +2633,15 @@ void SampleInstrument::ProcessCommand(int channel,FourCC cc,ushort value) {
 			}
 			break ;
 
+		case I_CMD_MVEL:   // trk2als: velocity de la nota (0-127 x2; 100 = sin cambio)
+			{
+				float v=float(value&0xFF)/2.0f/100.0f ;
+				float vol=fp2fl(rp->baseVolume_)*v*v ;
+				if (vol>255.0f) vol=255.0f ;
+				rp->volume_=rp->baseVolume_=fl2fp(vol) ;
+			}
+			break ;
+
 		case I_CMD_PAN_:
 			{
 				float targetPan=float(value&0xFF) ;

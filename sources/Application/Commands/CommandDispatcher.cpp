@@ -56,6 +56,8 @@ bool CommandDispatcher::Init() {
 	mapTrigger(TRIG_EVENT_RSHOULDER,URL_EVENT_RSHOULDER,*ed) ;
 	mapTrigger(TRIG_EVENT_START,URL_EVENT_START,*ed) ;
 	mapTrigger(TRIG_EVENT_SELECT,URL_EVENT_SELECT,*ed) ;
+	mapTrigger(TRIG_EVENT_X,URL_EVENT_X,*ed) ;
+	mapTrigger(TRIG_EVENT_Y,URL_EVENT_Y,*ed) ;
 
 	ApplicationCommandDispatcher *acd=ApplicationCommandDispatcher::GetInstance() ;
 	mapTrigger(TRIG_TEMPO_TAP,URL_TEMPO_TAP,*acd) ;

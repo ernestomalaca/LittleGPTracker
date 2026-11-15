@@ -96,6 +96,7 @@ AppWindow::AppWindow(I_GUIWindowImp &imp) : GUIWindow(imp) {
     _tableView = 0;
     _nullView = 0;
     _mixerView = 0;
+    _clipView = 0;
     _grooveView = 0;
     _closeProject = 0;
     _loadAfterSaveAsProject = 0;
@@ -465,6 +466,9 @@ void AppWindow::LoadProject(const Path &p) {
     _mixerView = new MixerView((*this), _viewData);
     _mixerView->AddObserver(*this);
 
+    _clipView = new ClipView((*this), _viewData);
+    _clipView->AddObserver(*this);
+
     _currentView = _songView;
     _currentView->OnFocus();
 
@@ -513,6 +517,7 @@ void AppWindow::CloseProject() {
     SAFE_DELETE(_projectView);
     SAFE_DELETE(_instrumentView);
     SAFE_DELETE(_tableView);
+    SAFE_DELETE(_clipView);
 
     UIController *controller = UIController::GetInstance();
     controller->Reset();
@@ -669,6 +674,13 @@ void AppWindow::joyButton(unsigned short v, bool pressed, bool repeat) {
         _currentView->ProcessButton(phys & ~EPBM_SELECT, pressed);
         return;
     }
+    if (_currentView->WantsRawButtons()) {   // trk2als: el piano roll
+        View::pressedButton_ = pressed ? v : 0;
+        _currentView->ProcessButton(phys, pressed);
+        _bGesture = false;
+        _selectFirst = false;
+        return;
+    }
     const unsigned short arrows = EPBM_UP | EPBM_DOWN | EPBM_LEFT | EPBM_RIGHT;
     if (pressed && !repeat) {
         if (v == EPBM_SELECT && !(phys & EPBM_B)) _selectFirst = true;
@@ -724,6 +736,9 @@ void AppWindow::Update(Observable &o, I_ObservableData *d) {
             break;
         case VT_MIXER:
             _currentView = _mixerView;
+            break;
+        case VT_CLIP:
+            _currentView = _clipView;
             break;
         }
         _shapes.clear(); // trk2als: las figuras son de la pantalla anterior

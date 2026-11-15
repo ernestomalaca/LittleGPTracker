@@ -7,6 +7,7 @@
 #include "Application/Views/GrooveView.h"
 #include "Application/Views/InstrumentView.h"
 #include "Application/Views/MixerView.h"
+#include "Application/Views/ClipView.h"
 #include "Application/Views/NullView.h"
 #include "Application/Views/PhraseView.h"
 #include "Application/Views/ProjectView.h"
@@ -94,6 +95,7 @@ class AppWindow : public GUIWindow, I_Observer, Status {
     GrooveView *_grooveView;
     NullView *_nullView;
     MixerView *_mixerView;
+    ClipView *_clipView;
 
     Path _root;
 

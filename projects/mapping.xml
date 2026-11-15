@@ -15,19 +15,26 @@
 
 	<!-- Start toca, Select navega (como Select + dirección en LSDJ / Joy2Live) -->
 	<MAP src="but:0:3" dst="/event/start" />
-	<MAP src="but:0:4" dst="/event/rshoulder" />
+	<MAP src="but:0:4" dst="/event/select" />
 
 	<!-- L / R como en el Piggy -->
 	<MAP src="but:0:11" dst="/event/lshoulder" />
 	<MAP src="but:0:14" dst="/event/rshoulder" />
 
-	<!-- libres para después: X=5, Y=6, L2=13, R2=16, Home=15 -->
+	<!-- X / Y como en Joy2Live (piano roll: X + flechas = largo y velocity) -->
+	<MAP src="but:0:5" dst="/event/x" />
+	<MAP src="but:0:6" dst="/event/y" />
+
+	<!-- libres para después: L2=13, R2=16, Home=15 -->
 
 	<!-- teclado (igual que antes) -->
 	<MAP src="key:0:a" dst="/event/a" />
 	<MAP src="key:0:s" dst="/event/b" />
 	<MAP src="key:0:x" dst="/event/lshoulder" />
-	<MAP src="key:0:left shift" dst="/event/rshoulder" />
+	<MAP src="key:0:left shift" dst="/event/select" />
+	<MAP src="key:0:c" dst="/event/rshoulder" />
+	<MAP src="key:0:d" dst="/event/x" />
+	<MAP src="key:0:f" dst="/event/y" />
 	<MAP src="key:0:space" dst="/event/start" />
 	<MAP src="key:0:up" dst="/event/up" />
 	<MAP src="key:0:down" dst="/event/down" />

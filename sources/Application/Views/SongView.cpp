@@ -403,12 +403,8 @@ void SongView::openCell() {
         viewData_->currentChain_ = *data;
         viewData_->chainRow_ = 0;
         unsigned char phrase = viewData_->song_->chain_->data_[16 * (*data)];
-        if (phrase != 0xFF) {
-            viewData_->currentPhrase_ = phrase;
-            vt = VT_PHRASE;
-        } else {
-            vt = VT_CHAIN;
-        }
+        if (phrase != 0xFF) viewData_->currentPhrase_ = phrase;
+        vt = VT_CLIP;   // trk2als: el clip MIDI se abre en el piano roll
     }
     ViewEvent ve(VET_SWITCH_VIEW, &vt);
     SetChanged();

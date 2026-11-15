@@ -36,7 +36,9 @@ EPBT_B,
 EPBT_A, 
 EPBT_R, 
 EPBT_START, 
-EPBT_SELECT 
+EPBT_SELECT,
+EPBT_X=12,   // trk2als: X e Y del gamepad (como en Joy2Live)
+EPBT_Y=13
 } ;
 
 class GUIEvent {

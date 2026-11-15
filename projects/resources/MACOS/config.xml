@@ -14,6 +14,9 @@
 
 	<KEY_START value="space" />
 	<KEY_SELECT value="left shift" /> <!-- trk2als: Select (pantallas, marcar, pegar...), como en Joy2Live -->
+	<KEY_RSHOULDER value="c" />
+	<KEY_X value="d" /> <!-- trk2als: X e Y, como en Joy2Live (piano roll) -->
+	<KEY_Y value="f" />
 
     <!-- Default colors below -->
     <BACKGROUND   value = "1D0A1F" />

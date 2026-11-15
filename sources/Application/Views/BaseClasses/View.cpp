@@ -390,6 +390,7 @@ void View::drawVUMeter(uint8_t leftBars, uint8_t rightBars, GUIPoint pos,
  ************************************************************/
 
 std::string View::projectName_ ;
+unsigned short View::pressedButton_=0 ;
 
 void View::refreshTopBar() {
 	if (topTab_<-1) return ;

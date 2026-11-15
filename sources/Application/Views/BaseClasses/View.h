@@ -33,7 +33,9 @@ enum GUIEventPadButtonMasks {
     EPBM_START = 256,
     EPBM_SELECT = 512,
     EPBM_DOUBLE_A = 1024,
-    EPBM_DOUBLE_B = 2048
+    EPBM_DOUBLE_B = 2048,
+    EPBM_X = 4096,   // trk2als
+    EPBM_Y = 8192
 };
 
 enum ViewType {
@@ -45,7 +47,8 @@ enum ViewType {
     VT_TABLE,  // Table screen under phrase
     VT_TABLE2, // Table screen under instrument
     VT_GROOVE,
-    VT_MIXER
+    VT_MIXER,
+    VT_CLIP   // trk2als: piano roll del clip MIDI
 };
 
 enum ViewMode {
@@ -107,6 +110,10 @@ class View : public Observable {
     virtual void OnPlayerUpdate(PlayerEventType, unsigned int currentTick) = 0;
     virtual void OnFocus() = 0;
     virtual void AnimationUpdate() {}
+    // trk2als: la vista recibe los botones tal cual (Select, L, R, X, Y), sin
+    // la traducción a los atajos de LGPT; pressedButton_ = el que se acaba de apretar
+    virtual bool WantsRawButtons() { return false; }
+    static unsigned short pressedButton_;
 
     void SetDirty(bool dirty);
 

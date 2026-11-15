@@ -86,7 +86,8 @@ void MacOSSystem::Boot(int argc,char **argv)
 	eventManager_->MapAppButton("up",APP_BUTTON_UP) ;
 	eventManager_->MapAppButton("down",APP_BUTTON_DOWN) ;
 	eventManager_->MapAppButton("x",APP_BUTTON_L) ;
-	eventManager_->MapAppButton("left shift",APP_BUTTON_R) ;
+	// trk2als: left shift es Select (mapping.xml / config.xml); R pasa a la c
+	eventManager_->MapAppButton("c",APP_BUTTON_R) ;
 	eventManager_->MapAppButton("space",APP_BUTTON_START) ;
 
 
