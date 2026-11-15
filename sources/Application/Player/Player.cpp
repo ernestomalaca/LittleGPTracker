@@ -1155,6 +1155,9 @@ void Player::moveToNextPhrase(int channel, int hop) {
     if (canContinue) {
         updateChainPos(pos, channel, hop);
     } else { // Should move to next chain
+        // trk2als: como en Live, el clip termina sus notas al acabar (antes la
+        // última sonaba hasta la siguiente nota, aunque fuera en otro clip)
+        if (!isAudio(channel)) mixer_->StopInstrument(channel);
         if ((mode_==PM_SONG)||(mode_==PM_LIVE)) {
             moveToNextChain(channel, hop); // HOP. here
         } else {
