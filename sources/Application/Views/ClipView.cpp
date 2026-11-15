@@ -45,7 +45,6 @@ ClipView::ClipView(GUIWindow &w, ViewData *viewData) : View(w, viewData) {
     aPending_ = bPending_ = false;
     msgTime_ = 0;
     chainShown_ = -1;
-    fold_ = false;
 }
 
 ClipView::~ClipView() {}
@@ -170,7 +169,7 @@ int ClipView::noteStarting(std::vector<Note> &notes, int step) {
 bool ClipView::addPage() {
     int n = pages();
     if (n >= 16) {
-        View::SetNotification("El clip ya tiene 16 páginas");
+        View::SetNotification("El clip ya tiene 16 paginas");
         return false;
     }
     unsigned short phrase = viewData_->song_->phrase_->GetNext();
@@ -265,21 +264,28 @@ void ClipView::placeNotes(std::vector<Note> &notes, std::vector<Note> &add) {
 
 void ClipView::pasteNote() {
     if (clipboard_.empty()) { message("Nada que pegar"); return; }
+    if (pages() == 0 && !addPage()) return;
+    // lo copiado empieza justo en el cursor; lo que se sale de la página no se pega
+    int pageEnd = (cursorStep_ / 16 + 1) * 16;
+    if (pageEnd > total()) pageEnd = total();
     std::vector<Note> add;
+    int dropped = 0;
     for (size_t k = 0; k < clipboard_.size(); k++) {
         Note n = clipboard_[k];
         n.start = cursorStep_ + (n.start - copyStep_);
         n.pitch = shiftPitch(n.pitch, copyPitch_, cursorPitch_);
-        if (n.start < 0 || n.pitch < 0 || n.pitch > MAX_PITCH) continue;
+        if (n.start < 0 || n.start >= pageEnd || n.pitch < 0 || n.pitch > MAX_PITCH) {
+            dropped++;
+            continue;
+        }
         add.push_back(n);
     }
-    int last = 0;
-    for (size_t k = 0; k < add.size(); k++) last = std::max(last, add[k].start + 1);
-    while (total() < last && addPage()) {}
+    if (add.empty()) { message("No cabe aqui"); return; }
     std::vector<Note> notes;
     readNotes(notes);
     placeNotes(notes, add);
-    message(add.size() == 1 ? "Nota pegada" : "%d notas pegadas", (int)add.size());
+    if (dropped) message("%d pegadas (lo demas no cabia)", (int)add.size());
+    else message(add.size() == 1 ? "Nota pegada" : "%d notas pegadas", (int)add.size());
 }
 
 /************************************************************
@@ -315,7 +321,9 @@ void ClipView::copySelection(bool cut) {
     if (idx.empty()) { message("Nada marcado"); return; }
     clipboard_.clear();
     for (size_t k = 0; k < idx.size(); k++) clipboard_.push_back(notes[idx[k]]);
-    copyStep_ = cursorStep_;
+    int s0, s1, q0, q1;
+    selRect(s0, s1, q0, q1);
+    copyStep_ = s0;          // al pegar, el bloque empieza en el cursor
     copyPitch_ = cursorPitch_;
     if (cut) {
         for (int k = int(idx.size()) - 1; k >= 0; k--) notes.erase(notes.begin() + idx[k]);
@@ -554,7 +562,7 @@ void ClipView::keepVisible() {
 void ClipView::buildRows() {
     int scale = viewData_->project_->GetScale();
     int root = viewData_->project_->GetScaleRoot();
-    bool folding = fold_ && scale > 0;
+    bool folding = viewData_->project_->GetFold() && scale > 0;
     std::vector<Note> notes;
     if (folding) readNotes(notes);
     for (int p = 0; p <= MAX_PITCH; p++) allowed_[p] = !folding || InScale(scale, root, p);
@@ -688,21 +696,6 @@ void ClipView::ProcessButtonMask(unsigned short mask, bool pressed) {
         isDirty_ = true;
         return;
     }
-    if (v == EPBM_Y) {   // fold: solo las notas de la escala, como en Live
-        if (viewData_->project_->GetScale() == 0) {
-            fold_ = false;
-            message("Fold: primero elige una escala en Project");
-        } else {
-            fold_ = !fold_;
-            int scale = viewData_->project_->GetScale();
-            int root = viewData_->project_->GetScaleRoot();
-            if (fold_ && !InScale(scale, root, cursorPitch_)) cursorPitch_ = stepPitch(cursorPitch_, 1);
-            keepVisible();
-            message(fold_ ? "Fold: solo la escala" : "Fold apagado");
-        }
-        isDirty_ = true;
-        return;
-    }
     if (v == EPBM_START) {
         stopAudition();
         if (player->IsRunning()) {
@@ -826,7 +819,7 @@ void ClipView::DrawView() {
         } else {
             DrawText(10, 34, info, fg, 0);
             if (scale > 0) {   // la escala, como en Live
-                std::string sc = std::string(fold_ ? "FOLD " : "") + scaleNotes[root] + " " + scaleNames[scale];
+                std::string sc = std::string(viewData_->project_->GetFold() ? "FOLD " : "") + scaleNotes[root] + " " + scaleNames[scale];
                 if (sc.size() > 18) sc = sc.substr(0, 18);
                 DrawText(466 - 8 * int(sc.size()), 34, sc.c_str(), hi, 0);
             }
@@ -952,7 +945,7 @@ void ClipView::DrawView() {
     if (marking_)
         drawHelpBar("flechas:marcar;B:copiar;B+A:cortar;A+<>:mover;SEL+A:duplicar;A:salir");
     else
-        drawHelpBar("A:nota;X+<>^v:largo/vel;B+A:cortar;SEL+A:pegar;SEL,B:marcar;Y:fold");
+        drawHelpBar("A:nota;X+<>^v:largo/vel;B+A:cortar;SEL+A:pegar;SEL,B:marcar");
 }
 
 void ClipView::OnPlayerUpdate(PlayerEventType, unsigned int) {

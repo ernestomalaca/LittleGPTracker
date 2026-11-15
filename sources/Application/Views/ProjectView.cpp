@@ -169,6 +169,12 @@ ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
     field = new UIIntVarField(position, *v, "Root: %s", 0, 11, 1, 12);
     T_SimpleList<UIField>::Insert(field);
 
+    // trk2als: el piano roll solo con las notas de la escala (Fold de Live)
+    v = project_->FindVariable(VAR_FOLD);
+    position._y += 1;
+    field = new UIIntVarField(position, *v, "Fold: %s", 0, 1, 1, 1);
+    T_SimpleList<UIField>::Insert(field);
+
     position._y += 2;
     UIActionField *a1 =
         new UIActionField("Compact Sequencer", ACTION_PURGE, position);

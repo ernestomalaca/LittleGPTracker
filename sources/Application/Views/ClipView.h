@@ -65,7 +65,6 @@ class ClipView : public View {
     // fold: solo las filas de la escala (y las que tienen notas)
     void buildRows();
     int rowOf(int pitch);
-    bool fold_;
     std::vector<int> rows_;   // de arriba abajo
     bool allowed_[128];
     std::string noteName(int pitch);
