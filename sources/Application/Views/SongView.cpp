@@ -1263,6 +1263,9 @@ void SongView::LoadTrackPreset(const std::string &name) {
     std::string shortName = name.substr(name.rfind('/') == std::string::npos ? 0 : name.rfind('/') + 1);
     project->SetTrackName(ch, shortName.c_str());
     View::SetNotification((shortName + " cargado").c_str());
+    headerMode_ = false;   // trk2als: de la cabecera al primer clip de la pista
+    viewData_->songX_ = ch;
+    clampTrackCursor();
     isDirty_ = true;
 }
 
@@ -1289,6 +1292,7 @@ void SongView::ApplyTrackType(int channel, int code, bool) {
         if (owner < 0) return;
         viewData_->currentInstrument_ = owner;
         viewData_->instrumentFromSong_ = true;
+        headerMode_ = false;   // al volver, el cursor ya está en los clips
         ViewType vt = VT_INSTRUMENT;
         ViewEvent ve(VET_SWITCH_VIEW, &vt);
         SetChanged();
@@ -1311,6 +1315,7 @@ void SongView::ApplyTrackType(int channel, int code, bool) {
         snprintf(msg, sizeof(msg), "nueva: %s", project->GetTrackName(ch));
         View::SetNotification(msg);
     }
+    headerMode_ = false;   // trk2als: de la cabecera a los clips (si quedan pistas)
     clampTrackCursor();
     isDirty_ = true;
 }
@@ -1348,11 +1353,8 @@ void SongView::processRowButtonMask(unsigned int mask) {
     }
     if (mask & EPBM_START) {
         viewData_->chainRow_ = 0;
-        if (player->GetSequencerMode() == SM_LIVE) {
-            player->OnSongStartButton(0, SONG_CHANNEL_COUNT - 1, false, false);   // la escena
-        } else {
-            player->OnSongStartButton(0, SONG_CHANNEL_COUNT - 1, false, false);   // la canción desde esta fila
-        }
+        // en Live lanza la escena; en Song toca la canción desde esta fila
+        player->OnSongStartButton(0, SONG_CHANNEL_COUNT - 1, false, false);
     }
     if (mask & EPBM_RIGHT) rowMode_ = false;
     if (mask & EPBM_DOWN) updateCursor(0, 1);
