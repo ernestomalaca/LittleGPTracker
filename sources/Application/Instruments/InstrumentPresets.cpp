@@ -118,6 +118,8 @@ std::string InstrumentPresets::SuggestedName(SampleInstrument *instr) {
 	if (index < 0) return "preset" ;
 	std::string n = SamplePool::GetInstance()->GetNameList()[index] ;
 	if (instr->IsZoned()) n = instr->ZoneSetName() ;   // soundfont: "marimba" 
+	if (instr->IsKit() && *instr->FindVariable(SIP_S_KITNAME)->GetString())
+		n = instr->FindVariable(SIP_S_KITNAME)->GetString() ;   // kit: su nombre
 	size_t dot = n.find_last_of('.') ;
 	if (dot != std::string::npos) n = n.substr(0, dot) ;
 	// solo lo que se puede escribir con el teclado de la consola
@@ -171,6 +173,10 @@ bool InstrumentPresets::Save(SampleInstrument *instr, const std::string &name) {
 		}
 	}
 
+	if (instr->IsKit()) {   // el kit se llama como su preset
+		size_t sl = name.find_last_of('/') ;
+		instr->FindVariable(SIP_S_KITNAME)->SetString((sl == std::string::npos ? name : name.substr(sl + 1)).c_str()) ;
+	}
 	Path file = Path(folder).Descend(PRESET_FILE) ;
 	TiXmlDocument doc(file.GetPath()) ;
 	TiXmlElement top("LGPTPRESET") ;
@@ -261,6 +267,10 @@ bool InstrumentPresets::Load(SampleInstrument *instr, const std::string &name) {
 		instr->RefreshSample() ;
 	}
 
+	// lo del kit anterior no se queda si el preset no lo trae
+	instr->FindVariable(SIP_S_PADS)->SetString("") ;
+	instr->FindVariable(SIP_S_KITNAME)->SetString("") ;
+	instr->FindVariable(SIP_S_KIT)->SetInt(0) ;
 	// luego todos los parámetros (los que este instrumento conozca)
 	bool newFilter = false ;
 	for (TiXmlElement *p = data->FirstChildElement("PARAM"); p; p = p->NextSiblingElement("PARAM")) {
@@ -279,6 +289,10 @@ bool InstrumentPresets::Load(SampleInstrument *instr, const std::string &name) {
 	}
 	// las zonas, ya con sus samples en el pool (vacío = un solo sample)
 	instr->SetZones(zones) ;
+	if (instr->GetSimpler(SIP_S_KIT) && !*instr->FindVariable(SIP_S_KITNAME)->GetString()) {
+		size_t sl = name.find_last_of('/') ;   // kit sin nombre: el de su carpeta
+		instr->FindVariable(SIP_S_KITNAME)->SetString((sl == std::string::npos ? name : name.substr(sl + 1)).c_str()) ;
+	}
 	// presets de antes del filtro nuevo: se convierte como al abrir un proyecto
 	if (!newFilter) {
 		instr->FindVariable(SIP_S_FVER)->SetInt(0) ;

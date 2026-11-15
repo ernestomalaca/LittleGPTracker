@@ -667,6 +667,7 @@ unsigned short AppWindow::joyLegacy(unsigned short phys) {
 
 void AppWindow::joyButton(unsigned short v, bool pressed, bool repeat) {
     unsigned short phys = _mask;
+    View::physMask_ = phys;
     if (_currentView->HasModal()) {   // las ventanitas: A, B y flechas tal cual
         _currentView->ProcessButton(phys & ~EPBM_SELECT, pressed);
         return;

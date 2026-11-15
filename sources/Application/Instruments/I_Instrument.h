@@ -36,6 +36,8 @@ public:
       // siempre): cada una con su nota y su velocity (0-127; <0 = la normal)
       virtual bool StartVoice(int channel,int voice,unsigned char note,int velocity,int flags=1) { return false ; } ;
       virtual void StopVoice(int channel,int voice) {} ;
+      // trk2als: la nota recién empezada suena unas muestras después (subdivisiones)
+      virtual void SetStartDelay(int channel,int voice,int samples) {} ;
 
 	  // Engine playback  start callback
 

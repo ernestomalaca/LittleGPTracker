@@ -59,6 +59,7 @@ struct renderParams {
     float padDecay_ ;        // trk2als: kit: largo del golpe en muestras (0 = completo)
     int padClock_ ;          // muestras desde que empezó el golpe
     int padChoke_ ;          // grupo de choke del pad (0 = ninguno)
+    int startDelay_ ;        // trk2als: muestras de silencio antes de empezar (subdivisiones exactas)
     float svfIc1_[2], svfIc2_[2] ; // trk2als: estado del filtro del Sampler
     float svfG_, svfK_ ;     // coeficientes del bloque
     float svfHz_, svfSt_ ;   // corte base (con key tracking) y semitonos de la envolvente

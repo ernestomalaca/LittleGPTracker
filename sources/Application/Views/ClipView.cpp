@@ -8,6 +8,7 @@
 #include "Application/Views/ModalDialogs/MessageBox.h"
 #include "System/System/System.h"
 #include <algorithm>
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -115,6 +116,9 @@ void ClipView::readNotes(std::vector<Note> &out) {
                 n.pitch = note;
                 n.instr = instr;
                 n.vel = vel < 1 ? 1 : vel;
+                n.tick = ph->Tick(v, p, pos);
+                n.rat = ph->Ratchet(v, p, pos);
+                if (n.tick > 5) n.tick = 5;
                 out.push_back(n);
                 open = int(out.size()) - 1;
             }
@@ -198,6 +202,7 @@ void ClipView::writeNotes(std::vector<Note> &notes) {
             ph->voiceVel_[vi] = VVEL_DEFAULT;
             ph->voiceFlags_[vi] = 0;
         }
+        for (int v = 0; v < VOICE_COUNT; v++) ph->timing_[Phrase::TIdx(v, p, pos)] = 0;
     }
     for (size_t k = 0; k < ok.size(); k++) {
         const Note &n = ok[k];
@@ -210,6 +215,9 @@ void ClipView::writeNotes(std::vector<Note> &notes) {
         for (size_t m = k + 1; m < ok.size(); m++)
             if (voiceOf[m] == v) { next = ok[m].start; break; }
         int end = n.start + n.len;
+        if (n.tick > 0 || n.rat > 1)
+            ph->timing_[Phrase::TIdx(v, p, pos)] =
+                (unsigned char)((n.tick & 0x0F) | (((n.rat - 1) & 7) << 4));
         if (v == 0) {
             ph->note_[i] = (unsigned char)n.pitch;
             ph->instr_[i] = (unsigned char)n.instr;
@@ -553,6 +561,10 @@ void ClipView::takeSnap(Snap &s) {
             s.data.insert(s.data.end(), ph->voiceVel_ + vi, ph->voiceVel_ + vi + 16);
             s.data.insert(s.data.end(), ph->voiceFlags_ + vi, ph->voiceFlags_ + vi + 16);
         }
+        for (int v = 0; v < VOICE_COUNT; v++) {   // nudge y subdivisiones
+            int ti = Phrase::TIdx(v, row[r], 0);
+            s.data.insert(s.data.end(), ph->timing_ + ti, ph->timing_ + ti + 16);
+        }
     }
 }
 
@@ -578,6 +590,9 @@ void ClipView::restoreSnap(const Snap &s) {
             memcpy(ph->voiceNote_ + vi, d, 16); d += 16;
             memcpy(ph->voiceVel_ + vi, d, 16); d += 16;
             memcpy(ph->voiceFlags_ + vi, d, 16); d += 16;
+        }
+        for (int v = 0; v < VOICE_COUNT; v++) {
+            memcpy(ph->timing_ + Phrase::TIdx(v, row[r], 0), d, 16); d += 16;
         }
     }
     if (cursorStep_ >= total() && total() > 0) cursorStep_ = total() - 1;
@@ -813,37 +828,106 @@ void ClipView::moveNote(int dt, int dp) {
     if (dp) audition(cursorStep_);
 }
 
+// a qué notas les toca: lo marcado, o la nota del cursor
+bool ClipView::targets(std::vector<Note> &notes, std::vector<int> &idx) {
+    if (marking_) {
+        selectedNotes(notes, idx);
+    } else {
+        readNotes(notes);
+        idx.clear();
+        int i = noteAt(notes, cursorStep_, cursorPitch_);
+        if (i >= 0) idx.push_back(i);
+    }
+    return !idx.empty();
+}
+
 void ClipView::changeLength(int d) {
     std::vector<Note> notes;
-    readNotes(notes);
-    int i = noteAt(notes, cursorStep_, cursorPitch_);
-    if (i < 0) return;
-    int next = total();   // hasta la siguiente nota igual o el final del clip
-    for (size_t k = 0; k < notes.size(); k++)
-        if (notes[k].pitch == notes[i].pitch && notes[k].start > notes[i].start && notes[k].start < next)
-            next = notes[k].start;
-    int len = notes[i].len + d;
-    if (len < 1) len = 1;
-    if (notes[i].start + len > next) len = next - notes[i].start;
-    notes[i].len = len;
-    lastLen_ = len;
-    cursorStep_ = notes[i].start;   // al editarla, el cursor salta al inicio de la nota
+    std::vector<int> idx;
+    if (!targets(notes, idx)) return;
+    for (size_t k = 0; k < idx.size(); k++) {
+        Note &n = notes[idx[k]];
+        int next = total();   // hasta la siguiente nota igual o el final del clip
+        for (size_t m = 0; m < notes.size(); m++)
+            if (notes[m].pitch == n.pitch && notes[m].start > n.start && notes[m].start < next)
+                next = notes[m].start;
+        int len = n.len + d;
+        if (len < 1) len = 1;
+        if (n.start + len > next) len = next - n.start;
+        n.len = len;
+        lastLen_ = len;
+    }
+    if (!marking_) cursorStep_ = notes[idx[0]].start;   // al editarla, el cursor salta al inicio
     writeNotes(notes);
     if (stolen_) message("Maximo 4 notas a la vez");
 }
 
+// velocity: con varias notas, todas a la vez y en proporción (la más fuerte
+// se mueve d, las demás según lo que tengan); en el tope se van juntando
 void ClipView::changeVelocity(int d) {
     std::vector<Note> notes;
-    readNotes(notes);
-    int i = noteAt(notes, cursorStep_, cursorPitch_);
-    if (i < 0) return;
-    int v = notes[i].vel + d;
-    if (v < 1) v = 1;
-    if (v > 127) v = 127;
-    notes[i].vel = v;
-    lastVel_ = v;
-    cursorStep_ = notes[i].start;
+    std::vector<int> idx;
+    if (!targets(notes, idx)) return;
+    int vmax = 1;
+    for (size_t k = 0; k < idx.size(); k++) vmax = std::max(vmax, notes[idx[k]].vel);
+    for (size_t k = 0; k < idx.size(); k++) {
+        Note &n = notes[idx[k]];
+        int step = (idx.size() == 1) ? d : int(floor(d * double(n.vel) / vmax + (d > 0 ? 0.5 : -0.5)));
+        if (step == 0) step = d > 0 ? 1 : -1;
+        n.vel = std::max(1, std::min(127, n.vel + step));
+        lastVel_ = n.vel;
+    }
+    if (!marking_) cursorStep_ = notes[idx[0]].start;
     writeNotes(notes);
+    char m[32];
+    if (idx.size() == 1) snprintf(m, sizeof(m), "Velocity %d", notes[idx[0]].vel);
+    else snprintf(m, sizeof(m), "Velocity %d notas", int(idx.size()));
+    message(m);
+}
+
+// nudge: de sexto en sexto de paso; el final de la nota se queda donde estaba
+void ClipView::nudge(int d) {
+    std::vector<Note> notes;
+    std::vector<int> idx;
+    if (!targets(notes, idx)) return;
+    int t = total();
+    for (size_t k = 0; k < idx.size(); k++) {
+        Note &n = notes[idx[k]];
+        int end = n.start + n.len;
+        int pos = n.start * 6 + n.tick + d;
+        if (pos < 0) pos = 0;
+        if (pos > (t - 1) * 6 + 5) pos = (t - 1) * 6 + 5;
+        n.start = pos / 6;
+        n.tick = pos % 6;
+        n.len = std::max(1, end - n.start);
+    }
+    int tk = notes[idx[0]].tick;
+    if (!marking_) cursorStep_ = notes[idx[0]].start;
+    writeNotes(notes);
+    char m[32];
+    if (tk == 0) snprintf(m, sizeof(m), "Nudge: en la rejilla");
+    else snprintf(m, sizeof(m), "Nudge +%d/6 de paso", tk);
+    message(m);
+    audition(cursorStep_);
+}
+
+// subdividir: la nota se reparte en 2..8 golpes iguales (con 1, la nota entera)
+void ClipView::ratchet(int d) {
+    std::vector<Note> notes;
+    std::vector<int> idx;
+    if (!targets(notes, idx)) return;
+    int r = 1;
+    for (size_t k = 0; k < idx.size(); k++) {
+        Note &n = notes[idx[k]];
+        n.rat = std::max(1, std::min(8, n.rat + d));
+        r = n.rat;
+    }
+    if (!marking_) cursorStep_ = notes[idx[0]].start;
+    writeNotes(notes);
+    char m[32];
+    if (r == 1) snprintf(m, sizeof(m), "Subdivision: nota entera");
+    else snprintf(m, sizeof(m), "Subdivision: %d golpes", r);
+    message(m);
 }
 
 void ClipView::moveCursor(int dt, int dp) {
@@ -920,6 +1004,10 @@ void ClipView::audition(int step) {
     Player *player = Player::GetInstance();
     if (player->IsRunning() && viewData_->playMode_ != PM_AUDITION) return;
     if (step < 0 || step >= total()) return;
+    if (SampleInstrument *k = kit()) {   // kit: solo el pad de la fila, tal como suena
+        player->PreviewNote(viewData_->songX_, k, cursorPitch_);
+        return;
+    }
     int p, pos;
     stepPtr(step, p, pos);
     viewData_->currentPhrase_ = p;
@@ -1188,6 +1276,22 @@ void ClipView::handleButton(unsigned short mask, bool pressed) {
         return;
     }
 
+    if (mask & EPBM_X) {               // propiedades de la nota (o de lo marcado)
+        if (mask & EPBM_A) {           // X + A: ajuste fino (nudge, velocity ±1)
+            if (dt) nudge(dt);
+            if (dp) changeVelocity(dp);
+        } else {
+            if (dt) changeLength(dt);
+            if (dp) changeVelocity(dp * 8);
+        }
+        isDirty_ = true;
+        return;
+    }
+    if (mask & EPBM_Y) {               // Y + ↑ ↓: subdividir
+        if (dp) ratchet(dp);
+        isDirty_ = true;
+        return;
+    }
     if (marking_) {
         if (mask & EPBM_B) {
             if (v == EPBM_B) bPending_ = true;
@@ -1210,12 +1314,6 @@ void ClipView::handleButton(unsigned short mask, bool pressed) {
         return;
     }
 
-    if (mask & EPBM_X) {               // propiedades de la nota
-        if (dt) changeLength(dt);
-        if (dp) changeVelocity(dp * 8);
-        isDirty_ = true;
-        return;
-    }
     if (mask & EPBM_B) {
         if (v == EPBM_L) loopButton(true);
         if (v == EPBM_R) loopButton(false);
@@ -1299,6 +1397,8 @@ void ClipView::DrawView() {
             sprintf(info, "pag %d/%d   paso %d   %s   vel %d   largo %d", page + 1,
                     npages > 0 ? npages : 1, cursorStep_ % 16 + 1, noteName(notes[cur].pitch).c_str(),
                     notes[cur].vel, notes[cur].len);
+            if (notes[cur].tick) sprintf(info + strlen(info), "  +%d/6", notes[cur].tick);
+            if (notes[cur].rat > 1) sprintf(info + strlen(info), "  x%d", notes[cur].rat);
         } else {
             sprintf(info, "pag %d/%d   paso %d   %s", page + 1, npages > 0 ? npages : 1,
                     cursorStep_ % 16 + 1, nn.c_str());
@@ -1413,7 +1513,22 @@ void ClipView::DrawView() {
         }
         int x = GRID_X + s0 * STEP_W + 1, y = GRID_Y + r * RH + 1;
         int w = (s1 - s0) * STEP_W - 2;
-        FillRect(x, y, w, RH - 2, c, 3);
+        if (n.start >= p0 && n.tick > 0) {   // nudge: empieza un poco después
+            int off = n.tick * STEP_W / 6;
+            x += off;
+            w -= off;
+            if (w < 3) w = 3;
+        }
+        if (n.rat > 1) {   // subdividida: n golpecitos en lo que dura
+            int span = w + 2;
+            for (int k = 0; k < n.rat; k++) {
+                int a = x + span * k / n.rat, b = x + span * (k + 1) / n.rat - 2;
+                if (b - a < 2) b = a + 2;
+                FillRect(a, y, b - a, RH - 2, c, 2);
+            }
+        } else {
+            FillRect(x, y, w, RH - 2, c, 3);
+        }
         if (n.start >= p0) FillRect(x, y, 3, RH - 2, Mix(c, fg, 40), 1);   // dónde empieza
         if ((int)i == cur) FrameRect(x - 1, y - 1, w + 2, RH, fg, 3, 2);
     }

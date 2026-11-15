@@ -7,6 +7,7 @@
 #include "Application/Views/BaseClasses/ViewEvent.h"
 #include "PlayerMixer.h"
 #include "SyncMaster.h"
+#include <vector>
 
 enum PlayerEventType {
 	PET_START,
@@ -74,6 +75,7 @@ public:
     bool ProcessChannelCommand(int channel,FourCC cmd,ushort param) ;
 
 	void StartStreaming(const Path &path) ;
+	void PreviewNote(int channel, I_Instrument *instr, int note) ;   // trk2als: tocar una nota con la canción parada
 	void StartStreaming(const Path &path, double speed, double delaySecs, double startFrac, bool loop) ;
 	void StopStreaming() ;
 	int GetStreamPosition() ; // trk2als: cuadro del archivo que suena (-1 = nada)
@@ -168,6 +170,22 @@ protected:
 	bool retrigAllImmediate_ ;
 	unsigned char retrigPos_ ;
 	int metroStep_ ; // trk2als: pasos desde que arrancó (metrónomo)
+
+	// trk2als: notas con nudge o subdivididas: golpes programados a destiempo
+	struct TimedHit {
+		unsigned long at ;     // en qué rebanada (sliceCount_) suena
+		int delay ;            // y cuántas muestras dentro de ella
+		int voice ;            // 0 = la voz principal del canal
+		unsigned char note ;
+		int vel ;              // -1 = sin velocity propia
+		I_Instrument *instr ;
+	} ;
+	std::vector<TimedHit> timed_[SONG_CHANNEL_COUNT] ;
+	unsigned long sliceCount_ ;
+	int noteSpan(int channel, int voice, int phrase, int pos) ;
+	void scheduleHits(int channel, int voice, int phrase, int pos, I_Instrument *instr,
+	                  unsigned char note, int vel, bool skipFirst) ;
+	void fireTimed() ;
 };
 
 #endif

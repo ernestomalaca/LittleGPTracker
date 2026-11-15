@@ -24,6 +24,9 @@ class ClipView : public View {
 
     struct Note {
         int start, len, pitch, vel, instr;
+        int tick;   // nudge: 0..5 sextos de paso después de 'start'
+        int rat;    // subdivisiones (1 = la nota entera)
+        Note() : start(0), len(1), pitch(60), vel(100), instr(0xFF), tick(0), rat(1) {}
     };
 
   private:
@@ -80,6 +83,9 @@ class ClipView : public View {
     void moveNote(int dt, int dp);
     void changeLength(int d);
     void changeVelocity(int d);
+    bool targets(std::vector<Note> &notes, std::vector<int> &idx);
+    void nudge(int d);
+    void ratchet(int d);
     void moveCursor(int dt, int dp);
     void audition(int step);
     void stopAudition();

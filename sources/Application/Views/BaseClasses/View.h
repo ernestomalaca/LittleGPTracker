@@ -117,6 +117,7 @@ class View : public Observable {
     void checkScaleChange();
     void FitScaleAnswer(bool yes);
     static unsigned short pressedButton_;
+    static unsigned short physMask_;   // los botones de verdad (antes de traducirlos a LGPT)
 
     void SetDirty(bool dirty);
 

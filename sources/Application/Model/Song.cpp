@@ -51,6 +51,12 @@ void Song::SaveContent(TiXmlNode *node) {
 			saveHexBuffer(node,"VFLAGS",phrase_->voiceFlags_,VOICE_LAYERS*PHRASE_COUNT*16) ;
 		}
 	}
+	// trk2als: nudge y subdivisiones, solo si hay alguno
+	{
+		bool any=false ;
+		for (int i=0;i<VOICE_COUNT*PHRASE_COUNT*16 && !any;i++) any=phrase_->timing_[i]!=0 ;
+		if (any) saveHexBuffer(node,"NTIMING",phrase_->timing_,VOICE_COUNT*PHRASE_COUNT*16) ;
+	}
 	// trk2als: nombres de los chains
 	TiXmlElement names("CHAINNAMES") ;
 	for (int i=0;i<CHAIN_COUNT;i++) {
@@ -119,6 +125,7 @@ void Song::RestoreContent(TiXmlElement *element) {
 		if (!strcmp("VNOTES",value)) restoreHexBuffer(current,phrase_->voiceNote_) ;   // trk2als
 		if (!strcmp("VVELS",value)) restoreHexBuffer(current,phrase_->voiceVel_) ;
 		if (!strcmp("VFLAGS",value)) restoreHexBuffer(current,phrase_->voiceFlags_) ;
+		if (!strcmp("NTIMING",value)) restoreHexBuffer(current,phrase_->timing_) ;
 		if (!strcmp("CHAINLOOPS",value)) {   // trk2als
 			for (TiXmlElement *l=current->FirstChildElement("LOOP");l;l=l->NextSiblingElement("LOOP")) {
 				const char *id=l->Attribute("ID") ;

@@ -111,6 +111,7 @@ enum SampleInstrumentLoopMode {
 #define SIP_S_SLICEBY MAKE_FOURCC('S', 'S', 'B', 'Y') // slice by: region / manual
 #define SIP_S_MARKS MAKE_FOURCC('S', 'M', 'R', 'K')   // marcas manuales (cuadros, "a,b,c")
 #define SIP_S_KIT MAKE_FOURCC('S', 'K', 'I', 'T')   // trk2als: las zonas son pads de batería (one-shot)
+#define SIP_S_KITNAME MAKE_FOURCC('S', 'K', 'N', 'M')   // trk2als: el nombre del kit (la carpeta del preset)
 #define SIP_S_PADS MAKE_FOURCC('S', 'P', 'D', 'S')  // trk2als: ajustes por pad "nota:dB:semitonos:pan:decay ms:choke:inicio %;..."
 struct PadParams {
 	int gain ;     // dB (-36..+12)
@@ -180,6 +181,7 @@ public:
        virtual void Choke(int channel) ;
        virtual bool StartVoice(int channel,int voice,unsigned char note,int velocity,int flags=1) ;
        virtual void StopVoice(int channel,int voice) ;
+       virtual void SetStartDelay(int channel,int voice,int samples) ;
        static int ChordIdx(int channel,int voice) { return channel+(1+voice)*SONG_CHANNEL_COUNT ; }
        // trk2als: Sampler estilo Simpler
        void InitSimpler() ;       // la primera vez: traducir lo de LGPT
@@ -340,6 +342,7 @@ private:
 	   static fixed lastSample_[SI_VOICE_COUNT][2] ;
 	   static fixed feedback_[SI_VOICE_COUNT][FB_BUFFER_LENGTH*2] ;
 	   bool renderVoice(int voice, fixed *buffer, int size, int flags) ;
+	   bool renderVoiceNow(int voice, fixed *buffer, int size, int flags) ;
 	   void startTail(int channel) ;      // la nota que sonaba pasa a la voz de cola
 	   bool tailActive(int channel) ;
 	   std::vector<fixed> tailBuffer_ ;

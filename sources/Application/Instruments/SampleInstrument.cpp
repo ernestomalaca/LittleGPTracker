@@ -117,7 +117,7 @@ SampleInstrument::SampleInstrument() {
 		 renderParams_[ch].audioClip_=false ;
 		 renderParams_[ch].declickIn_=-1 ;
 		 renderParams_[ch].declickOut_=renderParams_[ch].declickOutLen_=0 ;
-		 renderParams_[ch].chokeMs_=0 ; renderParams_[ch].padDecay_=0 ; renderParams_[ch].padClock_=0 ; renderParams_[ch].padChoke_=0 ;
+		 renderParams_[ch].chokeMs_=0 ; renderParams_[ch].padDecay_=0 ; renderParams_[ch].padClock_=0 ; renderParams_[ch].padChoke_=0 ; renderParams_[ch].startDelay_=0 ;
 	 }
 
 
@@ -226,6 +226,7 @@ SampleInstrument::SampleInstrument() {
 	 Insert(new Variable("s zones",SIP_S_ZONES,"")) ;
 	 Insert(new Variable("s kit",SIP_S_KIT,0)) ;
 	 Insert(new Variable("s pads",SIP_S_PADS,"")) ;
+	 Insert(new Variable("s kitname",SIP_S_KITNAME,"")) ;
 	 Insert(new Variable("s transpose",SIP_S_TRANSP,0)) ;
 	 Insert(new Variable("s detune",SIP_S_DETUNE,0)) ;
 	 Insert(new Variable("s glide",SIP_S_GLIDE,0)) ;
@@ -698,6 +699,7 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 			rp->svfIc1_[0]=rp->svfIc1_[1]=rp->svfIc2_[0]=rp->svfIc2_[1]=0 ;
 		}
 		for (int k=0;k<5;k++) rp->sLive_[k]=-9999 ;
+		rp->startDelay_=0 ;
 		rp->padDecay_=0 ;   // trk2als: los del pad los pone startKit después
 		rp->padClock_=0 ;
 		rp->padChoke_=0 ;
@@ -798,7 +800,7 @@ void SampleInstrument::MakeEmptyKit() {
 	FindVariable(SIP_SAMPLE)->SetInt(-1) ;
 	const char *params[][2]={{"s init","1"},{"s mode","classic"},{"s trigger","trigger"},
 		{"s kit","1"},{"s attack","0"},{"s decay","0"},{"s sustain","0"},{"s release","0"},
-		{"s volume","0"},{"s voices","2"},{"s warp","off"},{"s pads",""}} ;
+		{"s volume","0"},{"s voices","2"},{"s warp","off"},{"s pads",""},{"s kitname","KIT NUEVO"}} ;
 	for (unsigned k=0;k<sizeof(params)/sizeof(params[0]);k++) {
 		IteratorPtr<Variable> it(GetIterator()) ;
 		for (it->Begin();!it->IsDone();it->Next()) {
@@ -1149,7 +1151,31 @@ void SampleInstrument::startTail(int channel) {
     }
 }
 
+// trk2als: una voz que empieza a media vuelta del bloque (subdivisiones):
+// silencio hasta su muestra y lo demás del bloque ya sonando
 bool SampleInstrument::renderVoice(int channel, fixed *buffer, int size, int flags) {
+    renderParams *rp = renderParams_ + channel;
+    int d = rp->startDelay_;
+    if (d <= 0) return renderVoiceNow(channel, buffer, size, flags);
+    if (d >= size) { rp->startDelay_ -= size; return false; }
+    rp->startDelay_ = 0;
+    bool r = renderVoiceNow(channel, buffer + 2 * d, size - d, flags);
+    if (r) memset(buffer, 0, d * 2 * sizeof(fixed));
+    return r;
+}
+
+void SampleInstrument::SetStartDelay(int channel, int voice, int samples) {
+    if (channel < 0 || channel >= SONG_CHANNEL_COUNT || samples <= 0) return;
+    int idx;
+    if (IsKit()) idx = lastKitSlot_[channel];
+    else if (voice <= 0) idx = channel;
+    else if (voice <= SI_CHORD_VOICES) idx = ChordIdx(channel, voice);
+    else return;
+    if (idx < 0 || idx >= SI_VOICE_COUNT) return;
+    renderParams_[idx].startDelay_ = samples;
+}
+
+bool SampleInstrument::renderVoiceNow(int channel, fixed *buffer, int size, int flags) {
 
     voiceClock_[channel] = System::GetInstance()->GetClock(); // trk2als: cursor de reproducción
     bool somethingToMix = false;

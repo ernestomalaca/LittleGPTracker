@@ -31,6 +31,12 @@ public:
 	uchar *voiceVel_ ;
 	uchar *voiceFlags_ ;
 	static int VIdx(int voice,int phrase,int pos) { return ((voice-1)*PHRASE_COUNT+phrase)*16+pos ; }
+	// trk2als: tiempo fino de cada nota (voces 0..3): bits 0-3 = nudge en
+	// ticks (0..5, 1/6 de paso), bits 4-6 = subdivisiones - 1 (1..8)
+	uchar *timing_ ;
+	static int TIdx(int voice,int phrase,int pos) { return (voice*PHRASE_COUNT+phrase)*16+pos ; }
+	int Tick(int voice,int phrase,int pos) { return timing_[TIdx(voice,phrase,pos)]&0x0F ; }
+	int Ratchet(int voice,int phrase,int pos) { return ((timing_[TIdx(voice,phrase,pos)]>>4)&7)+1 ; }
 	void ClearVoices(int phrase) ;
 	void CopyVoices(int from,int to) ;
 	

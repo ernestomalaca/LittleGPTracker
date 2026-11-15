@@ -112,6 +112,17 @@ private:
 	void refreshKit() ;
 	void previewPad() ;
 	bool processKit(unsigned short mask) ;
+	bool padShortcut(unsigned short mask) ;
+	void openPadBrowser() ;
+	bool padClipCut_ ;
+	bool padAPending_ ;      // A en un pad vacío: el navegador se abre al soltarla       // lo de la mano salió de un corte
+	// deshacer en el kit: fotos de todas sus variables
+	std::vector<std::vector<std::string> > kitUndo_, kitRedo_ ;
+	std::vector<std::string> kitState_ ;
+	I_Instrument *kitOwner_ ;
+	void kitTake(std::vector<std::string> &snap) ;
+	void kitRestore(const std::vector<std::string> &snap) ;
+	void kitTrack() ;
 	void drawPadGrid(SampleInstrument *si,int X,int Y,int W,int H) ;
 } ;
 #endif

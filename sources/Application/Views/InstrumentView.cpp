@@ -52,7 +52,7 @@ public:
 		} else {
 			((AppWindow&)w).SetColor(CD_NORMAL) ;
 		}
-		std::string t="sample: "+label_ ;
+		std::string t=(label_.compare(0,5,"kit: ")==0?"":"sample: ")+label_ ;
 		w.DrawString(t.c_str(),position,props) ;
 	}
 	virtual void ProcessArrow(unsigned short) {}
@@ -63,6 +63,7 @@ private:
 #include <stdio.h>
 #include <string.h>
 #include <algorithm>
+#include <vector>
 #include "Application/Instruments/MidiInstrument.h"
 #include "Application/Instruments/SampleInstrument.h"
 #include "Application/Instruments/SamplePool.h"
@@ -294,6 +295,9 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data),
 	padImport_=false ;
 	padImportPrev_=-1 ;
 	padClip_=false ;
+	padClipCut_=false ;
+	padAPending_=false ;
+	kitOwner_=0 ;
 	markTap_=false ;
 	waveEdit_=false ;
 	waveZoom_=1 ;
@@ -424,6 +428,7 @@ void InstrumentView::fillSampleParameters() {
 	// el Sampler deja dos renglones más (presets y pestañas de envolvente):
 	// la onda es un poco más baja
 	int row=(!audioMode_ && !sync)?8:10 ;
+	if (!audioMode_ && !sync && instrument->IsKit()) row=12 ;   // kit: la rejilla de pads es más alta
 	labelCount_=0 ;
 	Variable *v ;
 	UIIntVarField *f1 ;
@@ -444,7 +449,13 @@ void InstrumentView::fillSampleParameters() {
 	if (sfMode_) {   // trk2als: soundfont
 		char label[48] ;
 		bool kit=instrument->IsKit() ;   // trk2als: kit de batería
-		snprintf(label,sizeof(label),"%s (%d %s%s)",instrument->ZoneCount()?instrument->ZoneSetName().c_str():"kit nuevo",
+		const char *kn=instrument->FindVariable(SIP_S_KITNAME)->GetString() ;
+		std::string shown=(kit && kn && *kn)?std::string(kn):
+		                  (instrument->ZoneCount()?instrument->ZoneSetName():std::string("kit nuevo")) ;
+		if (kit && !(kn && *kn) && ownedByTrack())   // kits de antes: el nombre de la pista
+			shown=viewData_->project_->GetTrackName(viewData_->songX_) ;
+		if (kit) shown="kit: "+shown ;
+		snprintf(label,sizeof(label),"%s (%d %s%s)",shown.c_str(),
 		         instrument->ZoneCount(),kit?"pad":"zona",instrument->ZoneCount()==1?"":"s") ;
 		f1=new UISoundfontField(AT(L),*v,label,v->GetInt()) ;
 	} else {
@@ -886,9 +897,17 @@ void InstrumentView::warpToNext(int offset) {
 } ;
 
 void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
-	if (pressed && kitMode_ && processKit(mask)) return ;
+	if (kitMode_ && padAPending_) {   // A tocada sola en un pad vacío (sin flechas)
+		if (pressed && mask!=EPBM_A) padAPending_=false ;
+		else if (!pressed && !(mask&EPBM_A)) {
+			padAPending_=false ;
+			openPadBrowser() ;
+			return ;
+		}
+	}
+	if (pressed && kitMode_ && processKit(mask)) { kitTrack() ; return ; }
 	processButtonMask(mask,pressed) ;
-	if (pressed) kitSync() ;
+	if (pressed) { kitSync() ; kitTrack() ; }
 }
 
 void InstrumentView::processButtonMask(unsigned short mask,bool pressed) {
@@ -1264,7 +1283,11 @@ void InstrumentView::drawWaveform() {
 	}
 	if (!topInfo_.empty()) ctx+="  "+topInfo_ ;
 	drawTopBar(TAB_INST,ctx.c_str()) ;
-	drawHelpBar(helpText_?helpText_:"A+<>:valor;A+^v:valor x16;SEL+<>:pantalla") ;
+	const char *help=helpText_?helpText_:"A+<>:valor;A+^v:valor x16;SEL+<>:pantalla" ;
+	if (kitMode_ && GetFocus() && !GetFocus()->IsStatic() &&
+	    isPadField(((UIIntVarField *)GetFocus())->GetVariableID()))
+		help="X+^v vol;X+<> decay;Y+^v tono;Y+<> pan;L+<> inicio;L+^v choke" ;
+	drawHelpBar(help) ;
 }
 
 void InstrumentView::drawWaveformBody() {
@@ -1283,7 +1306,7 @@ void InstrumentView::drawWaveformBody() {
 		DrawText(16,labelRow_[i]*16+4,labelText_[i],dim2,0) ;
 	}
 
-	const int X=16, Y=34, W=WF_BARS*8, H=simplerView_?80:112 ;
+	const int X=16, Y=34, W=WF_BARS*8, H=kitMode_?144:(simplerView_?80:112) ;
 	FillRect(X-8,Y-4,W+16,H+8,Mix(bg,fg,9),8) ;
 
 	if (kitMode_) {   // trk2als: kit: la rejilla de pads
@@ -2232,34 +2255,159 @@ void InstrumentView::refreshKit() {
 	isDirty_=true ;
 }
 
-// el golpe del pad con su afinación e inicio (el volumen y el decay suenan al tocarlo en un clip)
+// el golpe del pad tal como queda: se toca el kit de verdad en el canal de
+// su pista (con el volumen, la afinación, el paneo, el inicio y el decay)
 void InstrumentView::previewPad() {
 	if (!current_ || current_->GetType()!=IT_SAMPLE) return ;
 	if (Player::GetInstance()->IsRunning()) return ;
 	SampleInstrument *si=(SampleInstrument *)current_ ;
 	int note=padNote() ;
-	std::string wav=si->PadSample(note) ;
-	if (wav.empty()) return ;
-	PadParams p=si->GetPad(note) ;
-	double speed=pow(2.0,(p.tune+si->GetSimpler(SIP_S_TRANSP))/12.0) ;
-	Player::GetInstance()->StartStreaming(Path(std::string("samples:")+wav),speed,0,p.start/100.0,false) ;
-	previewing_=true ;
+	if (si->PadSample(note).empty()) return ;
+	if (previewing_) stopPreview() ;
+	int ch=viewData_->songX_ ;
+	if (ch<0 || ch>=SONG_CHANNEL_COUNT) ch=0 ;
+	Player::GetInstance()->PreviewNote(ch,si,note) ;
 }
 
-// A suena el pad (A,A en el sample abre el navegador); B+A corta el pad;
-// Select+A pega el pad copiado (B lo copia)
+// el kit entero (todas sus variables), para deshacer
+void InstrumentView::kitTake(std::vector<std::string> &snap) {
+	snap.clear() ;
+	IteratorPtr<Variable> it(current_->GetIterator()) ;
+	for (it->Begin();!it->IsDone();it->Next()) {
+		Variable &v=it->CurrentItem() ;
+		if (v.GetID()==SIP_SAMPLE) {
+			char b[16] ; snprintf(b,sizeof(b),"%d",v.GetInt()) ; snap.push_back(b) ;
+		} else snap.push_back(v.GetString()) ;
+	}
+}
+
+void InstrumentView::kitRestore(const std::vector<std::string> &snap) {
+	SampleInstrument *si=(SampleInstrument *)current_ ;
+	padBusy_=true ;
+	IteratorPtr<Variable> it(current_->GetIterator()) ;
+	size_t k=0 ;
+	for (it->Begin();!it->IsDone() && k<snap.size();it->Next(),k++) {
+		Variable &v=it->CurrentItem() ;
+		if (v.GetID()==SIP_SAMPLE) v.SetInt(atoi(snap[k].c_str())) ;
+		else if (strcmp(v.GetString(),snap[k].c_str())) v.SetString(snap[k].c_str()) ;
+	}
+	si->SetZones(si->FindVariable(SIP_S_ZONES)->GetString()) ;
+	padBusy_=false ;
+	refreshKit() ;
+	kitTake(kitState_) ;
+}
+
+// después de cada botón: si el kit cambió, lo de antes va a deshacer
+void InstrumentView::kitTrack() {
+	if (!kitMode_ || !current_) { kitUndo_.clear() ; kitRedo_.clear() ; kitOwner_=0 ; return ; }
+	std::vector<std::string> now ;
+	kitTake(now) ;
+	if (kitOwner_!=current_) {   // otro instrumento: historia nueva
+		kitOwner_=current_ ;
+		kitUndo_.clear() ; kitRedo_.clear() ;
+		kitState_=now ;
+		return ;
+	}
+	if (now!=kitState_) {
+		kitUndo_.push_back(kitState_) ;
+		if (kitUndo_.size()>64) kitUndo_.erase(kitUndo_.begin()) ;
+		kitRedo_.clear() ;
+		kitState_=now ;
+	}
+}
+
+static const int decaySteps[]={0,10,20,30,40,50,75,100,150,200,250,300,400,500,750,1000,1500,2000,3000,5000} ;
+
+// sobre un pad: X, Y y L con flechas cambian el pad sin bajar a los campos
+bool InstrumentView::padShortcut(unsigned short mask) {
+	const unsigned short arrows=EPBM_UP|EPBM_DOWN|EPBM_LEFT|EPBM_RIGHT ;
+	unsigned short mod=mask&~arrows ;
+	unsigned short dir=mask&arrows ;
+	if (!dir || (mod!=EPBM_X && mod!=EPBM_Y && mod!=EPBM_L)) return false ;
+	SampleInstrument *si=(SampleInstrument *)current_ ;
+	int note=padNote() ;
+	if (si->PadSample(note).empty()) { View::SetNotification("pad vacio") ; return true ; }
+	PadParams p=si->GetPad(note) ;
+	bool vert=(dir==EPBM_UP || dir==EPBM_DOWN) ;
+	int d=(dir==EPBM_UP || dir==EPBM_RIGHT)?1:-1 ;
+	char msg[48] ;
+	if (mod==EPBM_X && vert) {
+		p.gain=std::max(-36,std::min(12,p.gain+d)) ;
+		snprintf(msg,sizeof(msg),"volumen %+ddB",p.gain) ;
+	} else if (mod==EPBM_X) {
+		int n=sizeof(decaySteps)/sizeof(int), k=0 ;
+		while (k<n-1 && decaySteps[k]<p.decay) k++ ;
+		if (decaySteps[k]!=p.decay && d<0) k-- ;
+		k=std::max(0,std::min(n-1,k+(decaySteps[k]==p.decay?d:(d>0?1:0)))) ;
+		p.decay=decaySteps[k] ;
+		if (p.decay) snprintf(msg,sizeof(msg),"decay %dms",p.decay) ;
+		else strcpy(msg,"decay: todo") ;
+	} else if (mod==EPBM_Y && vert) {
+		p.tune=std::max(-24,std::min(24,p.tune+d)) ;
+		snprintf(msg,sizeof(msg),"afinacion %+dst",p.tune) ;
+	} else if (mod==EPBM_Y) {
+		p.pan=std::max(-50,std::min(50,p.pan+d*5)) ;
+		snprintf(msg,sizeof(msg),"paneo %+d",p.pan) ;
+	} else if (vert) {
+		p.choke=std::max(0,std::min(16,p.choke+d)) ;
+		if (p.choke) snprintf(msg,sizeof(msg),"choke %d",p.choke) ;
+		else strcpy(msg,"choke: no") ;
+	} else {
+		p.start=std::max(0,std::min(99,p.start+d)) ;
+		snprintf(msg,sizeof(msg),"inicio %d%%",p.start) ;
+	}
+	si->SetPad(note,p) ;
+	loadPadVars() ;
+	View::SetNotification(msg) ;
+	previewPad() ;
+	isDirty_=true ;
+	return true ;
+}
+
+void InstrumentView::openPadBrowser() {
+	SampleInstrument *si=(SampleInstrument *)current_ ;
+	viewMode_=VM_NORMAL ;
+	Path sampleLib(SamplePool::GetInstance()->GetSampleLib()) ;
+	if (FileSystem::GetInstance()->GetFileType(sampleLib.GetPath().c_str())!=FT_DIR) {
+		DoModal(new MessageBox(*this,"Can't access the samplelib",MBBF_OK)) ;
+		return ;
+	}
+	padImport_=true ;
+	padImportPrev_=si->FindVariable(SIP_SAMPLE)->GetInt() ;
+	padBusy_=true ;   // el navegador cambia 'sample' del instrumento
+	DoModal(new ImportSampleDialog(*this,false,false),PadImportCallback) ;
+}
+
+// A suena el pad (en uno vacío abre el navegador; A,A en el sample también);
+// B+A corta el pad; Select+A pega el pad copiado (B lo copia).
+// Select+L deshace y Select+R rehace (en cualquier campo del kit)
 bool InstrumentView::processKit(unsigned short mask) {
+	if (View::physMask_==(EPBM_SELECT|EPBM_L) || View::physMask_==(EPBM_SELECT|EPBM_R)) {
+		kitTrack() ;   // lo que haya cambiado sin botón (el navegador)
+		bool undo=(View::physMask_&EPBM_L)!=0 ;
+		std::vector<std::vector<std::string> > &from=undo?kitUndo_:kitRedo_ ;
+		std::vector<std::vector<std::string> > &to=undo?kitRedo_:kitUndo_ ;
+		if (from.empty()) { View::SetNotification(undo?"nada que deshacer":"nada que rehacer") ; return true ; }
+		to.push_back(kitState_) ;
+		std::vector<std::string> snap=from.back() ;
+		from.pop_back() ;
+		kitRestore(snap) ;
+		View::SetNotification(undo?"deshecho":"rehecho") ;
+		return true ;
+	}
 	UIField *f=GetFocus() ;
 	if (!f || f->IsStatic()) return false ;
 	FourCC id=((UIIntVarField *)f)->GetVariableID() ;
 	if (!isPadField(id)) return false ;
 	SampleInstrument *si=(SampleInstrument *)current_ ;
 	int note=padNote() ;
+	if (padShortcut(mask)) return true ;
 	bool whole=(id==IV_PADSEL || id==IV_PADSMP) ;
 	if (mask==EPBM_B && whole) {   // copiar
 		padClipWav_=si->PadSample(note) ;
 		padClipP_=si->GetPad(note) ;
 		padClip_=!padClipWav_.empty() ;
+		padClipCut_=false ;
 		if (padClip_) View::SetNotification("pad copiado") ;
 		return false ;
 	}
@@ -2268,34 +2416,41 @@ bool InstrumentView::processKit(unsigned short mask) {
 		si->SetPadSample(note,"") ;
 		si->SetPad(note,PadParams()) ;
 		padBusy_=false ;
+		padClipCut_=padClip_ ;
 		refreshKit() ;
 		View::SetNotification(padClip_?"pad cortado":"pad vacio") ;
 		return true ;
 	}
-	if (mask==(EPBM_L|EPBM_A) && whole) {   // pegar
+	if (mask==(EPBM_L|EPBM_A) && whole) {   // pegar (encima de otro: lo reemplaza)
 		if (!padClip_) { View::SetNotification("nada que pegar") ; return true ; }
+		std::string oldWav=si->PadSample(note) ;
+		PadParams oldP=si->GetPad(note) ;
 		padBusy_=true ;
 		si->SetPadSample(note,padClipWav_) ;
 		si->SetPad(note,padClipP_) ;
 		padBusy_=false ;
 		refreshKit() ;
 		previewPad() ;
-		View::SetNotification("pad pegado") ;
+		// lo cortado cae encima de otro pad: el de antes queda en la mano,
+		// para ponerlo en el hueco (así se reacomodan los sonidos)
+		if (padClipCut_ && !oldWav.empty() && oldWav!=padClipWav_) {
+			padClipWav_=oldWav ;
+			padClipP_=oldP ;
+			View::SetNotification("pegado; el de antes quedo cortado") ;
+		} else {
+			padClipCut_=false ;
+			View::SetNotification("pad pegado") ;
+		}
 		return true ;
 	}
 	if (mask==EPBM_A) {
 		if (id==IV_PADSMP && viewMode_==VM_NEW) {   // A,A: traer un sample de la samplelib
-			viewMode_=VM_NORMAL ;
-			Path sampleLib(SamplePool::GetInstance()->GetSampleLib()) ;
-			if (FileSystem::GetInstance()->GetFileType(sampleLib.GetPath().c_str())!=FT_DIR) {
-				DoModal(new MessageBox(*this,"Can't access the samplelib",MBBF_OK)) ;
-				return true ;
-			}
-			padImport_=true ;
-			padImportPrev_=si->FindVariable(SIP_SAMPLE)->GetInt() ;
-			padBusy_=true ;   // el navegador cambia 'sample' del instrumento
-			DoModal(new ImportSampleDialog(*this,false,false),PadImportCallback) ;
+			openPadBrowser() ;
 			return true ;
+		}
+		if (id==IV_PADSEL && si->PadSample(note).empty()) {   // pad vacío: al soltar A, el navegador
+			padAPending_=true ;
+			return false ;
 		}
 		viewMode_=(id==IV_PADSMP)?VM_NEW:VM_NORMAL ;
 		previewPad() ;
