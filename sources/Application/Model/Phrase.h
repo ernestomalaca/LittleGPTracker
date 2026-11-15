@@ -37,6 +37,9 @@ public:
 	static int TIdx(int voice,int phrase,int pos) { return (voice*PHRASE_COUNT+phrase)*16+pos ; }
 	int Tick(int voice,int phrase,int pos) { return timing_[TIdx(voice,phrase,pos)]&0x0F ; }
 	int Ratchet(int voice,int phrase,int pos) { return ((timing_[TIdx(voice,phrase,pos)]>>4)&7)+1 ; }
+	// rampa de velocity de las subdivisiones: -4..4 (+ crece, - se apaga)
+	uchar *ramp_ ;
+	int Ramp(int voice,int phrase,int pos) { return (signed char)ramp_[TIdx(voice,phrase,pos)] ; }
 	void ClearVoices(int phrase) ;
 	void CopyVoices(int from,int to) ;
 	

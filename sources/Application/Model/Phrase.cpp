@@ -30,6 +30,8 @@ Phrase::Phrase() {
 	memset(voiceFlags_,0,vsize) ;
 	timing_=(uchar *)SYS_MALLOC(VOICE_COUNT*PHRASE_COUNT*16) ;
 	memset(timing_,0,VOICE_COUNT*PHRASE_COUNT*16) ;
+	ramp_=(uchar *)SYS_MALLOC(VOICE_COUNT*PHRASE_COUNT*16) ;
+	memset(ramp_,0,VOICE_COUNT*PHRASE_COUNT*16) ;
 
 	for (int i=0;i<PHRASE_COUNT;i++) {
 		isUsed_[i]=false ;
@@ -44,6 +46,7 @@ void Phrase::ClearVoices(int phrase) {
 		memset(voiceFlags_+i,0,16) ;
 	}
 	for (int v=0;v<VOICE_COUNT;v++) memset(timing_+TIdx(v,phrase,0),0,16) ;
+	for (int v=0;v<VOICE_COUNT;v++) memset(ramp_+TIdx(v,phrase,0),0,16) ;
 }
 
 void Phrase::CopyVoices(int from,int to) {
@@ -53,6 +56,7 @@ void Phrase::CopyVoices(int from,int to) {
 		memcpy(voiceFlags_+VIdx(v,to,0),voiceFlags_+VIdx(v,from,0),16) ;
 	}
 	for (int v=0;v<VOICE_COUNT;v++) memcpy(timing_+TIdx(v,to,0),timing_+TIdx(v,from,0),16) ;
+	for (int v=0;v<VOICE_COUNT;v++) memcpy(ramp_+TIdx(v,to,0),ramp_+TIdx(v,from,0),16) ;
 }
 
 Phrase::~Phrase() {

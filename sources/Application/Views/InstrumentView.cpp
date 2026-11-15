@@ -2375,7 +2375,7 @@ void InstrumentView::openPadBrowser() {
 	padImport_=true ;
 	padImportPrev_=si->FindVariable(SIP_SAMPLE)->GetInt() ;
 	padBusy_=true ;   // el navegador cambia 'sample' del instrumento
-	DoModal(new ImportSampleDialog(*this,false,false),PadImportCallback) ;
+	DoModal(new ImportSampleDialog(*this,false,false,true),PadImportCallback) ;
 }
 
 // A suena el pad (en uno vacío abre el navegador; A,A en el sample también);

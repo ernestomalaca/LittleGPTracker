@@ -26,7 +26,8 @@ class ClipView : public View {
         int start, len, pitch, vel, instr;
         int tick;   // nudge: 0..5 sextos de paso después de 'start'
         int rat;    // subdivisiones (1 = la nota entera)
-        Note() : start(0), len(1), pitch(60), vel(100), instr(0xFF), tick(0), rat(1) {}
+        int ramp;   // rampa de velocity de las subdivisiones (-4..4)
+        Note() : start(0), len(1), pitch(60), vel(100), instr(0xFF), tick(0), rat(1), ramp(0) {}
     };
 
   private:
@@ -86,6 +87,7 @@ class ClipView : public View {
     bool targets(std::vector<Note> &notes, std::vector<int> &idx);
     void nudge(int d);
     void ratchet(int d);
+    void rampVel(int d);
     void moveCursor(int dt, int dp);
     void audition(int step);
     void stopAudition();

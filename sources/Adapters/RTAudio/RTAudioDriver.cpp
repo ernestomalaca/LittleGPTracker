@@ -169,6 +169,17 @@ void RTAudioDriver::fillBuffer(short *stream, int frameCount) {
         if (pool_[poolPlayPosition_].buffer_ == 0) {
             // underrun, let's fill the buffer with blank and bail out
             SYS_MEMSET(stream, 0, len);
+            // trk2als: el hilo de audio solo trabaja cuando se consume un
+            // bloque, así que cada underrun dejaba un bloque menos de colchón
+            // para siempre (y de ahí en adelante, underruns sin fin). Se le
+            // pide uno extra para recuperar el colchón (con tope).
+            {
+                static int extra = 0;
+                if (extra < 4) {
+                    extra++;
+                    thread_->Notify();
+                }
+            }
             // trk2als: que se vea en la Terminal (una línea por segundo como mucho)
             {
                 static int count = 0;

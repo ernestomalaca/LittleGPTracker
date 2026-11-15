@@ -11,7 +11,8 @@ public:
 	// audioOnly (trk2als): para un loop de una pista de audio: sin SoundFonts y
 	// el preview a tempo. GetReturnCode(): 1 = importó, 0 = salió
 	// sf2Only (trk2als): instrumento soundfont: solo .sf2
-	ImportSampleDialog(View &view, bool audioOnly = false, bool sf2Only = false) ;
+	// wavOnly (trk2als): un pad de kit: solo .wav
+	ImportSampleDialog(View &view, bool audioOnly = false, bool sf2Only = false, bool wavOnly = false) ;
 	virtual ~ImportSampleDialog() ;
 
 	virtual void DrawView() ;
@@ -36,6 +37,7 @@ private:
 	int selected_ ;
 	bool audioOnly_ ;
 	bool sf2Only_ ;
+	bool wavOnly_ ;
 	static bool initStatic_ ;
 	static Path sampleLib_ ;
 	static Path currentPath_ ;

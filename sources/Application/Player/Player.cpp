@@ -108,6 +108,7 @@ void Player::Start(PlayMode mode, bool forceSongMode) {
         timeToLive_[i] = 0;
         timeToStart_[i]=0;
         timed_[i].clear();
+        for (int v = 0; v < 4; v++) lastTick_[i][v] = 0;
         audioStarted_[i] = false;
         SampleInstrument::SetChannelSync(i, isAudio(i));
 		TablePlayback &tpb=TablePlayback::GetTablePlayback(i);
@@ -672,7 +673,7 @@ void Player::ProcessCommands() {
                         i)) { // If groove says it is time to play
                     int pos=viewData_->phrasePlayPos_[i];
                     // trk2als: con nudge el velocity va con el golpe (no a la nota de antes)
-                    bool lateVel = (viewData_->song_->phrase_->Tick(0, phrase, pos) != 0);
+                    bool lateVel = firstLate(0, phrase, pos);
                     FourCC cc =
                         viewData_->song_->phrase_->cmd1_[phrase * 16 + pos];
                     if (lateVel && cc == I_CMD_MVEL) cc = I_CMD_NONE;
@@ -927,7 +928,7 @@ void Player::playCursorPosition(int channel) {
         TablePlayback &tpb = TablePlayback::GetTablePlayback(channel);
 
         int t0 = phrase->timing_[Phrase::TIdx(0, currentPhrase, pos)];
-        bool late0 = (t0 & 0x0F) != 0;   // trk2als: nudge: la nota suena después
+        bool late0 = firstLate(0, currentPhrase, pos);   // trk2als: nudge o rampa: la nota suena después
         if (note != 0xFF) {
 
             // Stop instrument if playing
@@ -1016,7 +1017,14 @@ void Player::playCursorPosition(int channel) {
         for (int v = 1; v < VOICE_COUNT; v++) {
             int vi = Phrase::VIdx(v, currentPhrase, pos);
             unsigned char vn = phrase->voiceNote_[vi];
-            if (phrase->voiceFlags_[vi] & VF_KILL) mixer_->StopVoice(channel, v);
+            if ((phrase->voiceFlags_[vi] & VF_KILL) && phrase->voiceNote_[vi] == 0xFF &&
+                lastTick_[channel][v] > 0) {
+                // trk2als: la nota tenía nudge: su final también va recorrido
+                TimedHit h;
+                h.at = sliceCount_ + lastTick_[channel][v];
+                h.delay = 0; h.voice = v; h.note = 0xFF; h.vel = -1; h.instr = 0;
+                timed_[channel].push_back(h);
+            } else if (phrase->voiceFlags_[vi] & VF_KILL) mixer_->StopVoice(channel, v);
             if (vn == 0xFF) continue;
             InstrumentBank *bank = viewData_->project_->GetInstrumentBank();
             int owner = project_->GetTrackInstrument(channel);
@@ -1031,12 +1039,14 @@ void Player::playCursorPosition(int channel) {
             if (vnote < 0 || vnote > 127) continue;
             unsigned char vel = phrase->voiceVel_[vi];
             int tv = phrase->timing_[Phrase::TIdx(v, currentPhrase, pos)];
-            if (!(tv & 0x0F))
+            bool late = firstLate(v, currentPhrase, pos);
+            if (!late)
                 mixer_->StartVoice(channel, vinstr, v, (unsigned char)vnote,
                                    vel == VVEL_DEFAULT ? -1 : vel);
             if (tv)
                 scheduleHits(channel, v, currentPhrase, pos, vinstr, (unsigned char)vnote,
-                             vel == VVEL_DEFAULT ? -1 : vel, !(tv & 0x0F));
+                             vel == VVEL_DEFAULT ? -1 : vel, !late);
+            lastTick_[channel][v] = tv & 0x0F;
         }
         if ((note != 0xFF) || (instr != 0xFF)) {
             I_Instrument *instrument = mixer_->GetInstrument(channel);
@@ -1439,9 +1449,9 @@ void Player::scheduleHits(int channel, int voice, int phrase, int pos, I_Instrum
         if (q[k].voice == voice) q.erase(q.begin() + k);
         else k++;
     }
-    double span = noteSpan(channel, voice, phrase, pos) * 6.0 - tick;   // en sextos de paso
-    if (span < 1) span = 1;
+    double span = noteSpan(channel, voice, phrase, pos) * 6.0;   // en sextos de paso (la nota entera recorrida)
     float sps = SyncMaster::GetInstance()->GetPlaySampleCount();
+    int ramp = (n > 1) ? ph->Ramp(voice, phrase, pos) : 0;
     for (int k = skipFirst ? 1 : 0; k < n; k++) {
         double at = tick + span * k / n;
         TimedHit h;
@@ -1451,6 +1461,12 @@ void Player::scheduleHits(int channel, int voice, int phrase, int pos, I_Instrum
         h.voice = voice;
         h.note = note;
         h.vel = vel;
+        if (ramp) {   // rampa: los golpes crecen o se apagan
+            float amt = 0.2f * (ramp > 0 ? ramp : -ramp);
+            float f = ramp > 0 ? 1 - amt * (n - 1 - k) / (n - 1) : 1 - amt * k / (n - 1);
+            int v = int((vel >= 0 ? vel : 100) * f + 0.5f);
+            h.vel = v < 1 ? 1 : v;
+        }
         h.instr = instr;
         q.push_back(h);
     }
@@ -1463,6 +1479,11 @@ void Player::fireTimed() {
             if (q[k].at > sliceCount_) { k++; continue; }
             TimedHit h = q[k];
             q.erase(q.begin() + k);
+            if (h.note == 0xFF) {   // el final recorrido de una nota con nudge
+                if (h.voice == 0) mixer_->StopInstrument(ch);
+                else mixer_->StopVoice(ch, h.voice);
+                continue;
+            }
             if (!h.instr) continue;
             if (h.voice == 0) {
                 mixer_->StopInstrument(ch);
@@ -1475,4 +1496,10 @@ void Player::fireTimed() {
             if (h.delay > 0) h.instr->SetStartDelay(ch, h.voice, h.delay);
         }
     }
+}
+
+bool Player::firstLate(int voice, int phrase, int pos) {
+    Phrase *ph = viewData_->song_->phrase_;
+    if (ph->Tick(voice, phrase, pos) != 0) return true;
+    return ph->Ratchet(voice, phrase, pos) > 1 && ph->Ramp(voice, phrase, pos) != 0;
 }

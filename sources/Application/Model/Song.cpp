@@ -56,6 +56,9 @@ void Song::SaveContent(TiXmlNode *node) {
 		bool any=false ;
 		for (int i=0;i<VOICE_COUNT*PHRASE_COUNT*16 && !any;i++) any=phrase_->timing_[i]!=0 ;
 		if (any) saveHexBuffer(node,"NTIMING",phrase_->timing_,VOICE_COUNT*PHRASE_COUNT*16) ;
+		any=false ;
+		for (int i=0;i<VOICE_COUNT*PHRASE_COUNT*16 && !any;i++) any=phrase_->ramp_[i]!=0 ;
+		if (any) saveHexBuffer(node,"NRAMP",phrase_->ramp_,VOICE_COUNT*PHRASE_COUNT*16) ;
 	}
 	// trk2als: nombres de los chains
 	TiXmlElement names("CHAINNAMES") ;
@@ -126,6 +129,7 @@ void Song::RestoreContent(TiXmlElement *element) {
 		if (!strcmp("VVELS",value)) restoreHexBuffer(current,phrase_->voiceVel_) ;
 		if (!strcmp("VFLAGS",value)) restoreHexBuffer(current,phrase_->voiceFlags_) ;
 		if (!strcmp("NTIMING",value)) restoreHexBuffer(current,phrase_->timing_) ;
+		if (!strcmp("NRAMP",value)) restoreHexBuffer(current,phrase_->ramp_) ;
 		if (!strcmp("CHAINLOOPS",value)) {   // trk2als
 			for (TiXmlElement *l=current->FirstChildElement("LOOP");l;l=l->NextSiblingElement("LOOP")) {
 				const char *id=l->Attribute("ID") ;

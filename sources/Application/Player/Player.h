@@ -186,6 +186,8 @@ protected:
 	void scheduleHits(int channel, int voice, int phrase, int pos, I_Instrument *instr,
 	                  unsigned char note, int vel, bool skipFirst) ;
 	void fireTimed() ;
+	bool firstLate(int voice, int phrase, int pos) ;   // el primer golpe no va en el paso
+	int lastTick_[SONG_CHANNEL_COUNT][4] ;             // nudge de la nota que suena en cada voz
 };
 
 #endif
