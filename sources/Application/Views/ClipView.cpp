@@ -664,10 +664,78 @@ void ClipView::switchView(ViewType vt) {
     NotifyObservers(&ve);
 }
 
+// nombre de la nota escrito como en la escala (Do menor: C D Eb F G Ab Bb):
+// en las escalas de 7 notas cada grado usa su propia letra; en las demás,
+// bemoles o sostenidos según la tonalidad
+static const int natPc[7] = {0, 2, 4, 5, 7, 9, 11};   // C D E F G A B
+static const char letters[8] = "CDEFGAB";
+
+static int spell7(int scale, int root, int rootLetter, int *letterOf, int *accOf) {
+    int deg = 0, cost = 0;
+    for (int i = 0; i < 12; i++) {
+        if (!scaleSteps[scale][i]) continue;
+        int pc = (root + i) % 12;
+        int l = (rootLetter + deg) % 7;
+        int acc = ((pc - natPc[l]) % 12 + 12) % 12;
+        if (acc > 6) acc -= 12;
+        if (acc < -2 || acc > 2) return 1000;
+        letterOf[pc] = l;
+        accOf[pc] = acc;
+        cost += acc < 0 ? -acc : acc;
+        deg++;
+    }
+    return cost;
+}
+
 std::string ClipView::noteName(int pitch) {
-    static const char *names[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
-    char buf[8];
-    sprintf(buf, "%s%d", names[pitch % 12], pitch / 12 - 2);
+    static const char *sharps[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+    static const char *flats[12] = {"C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"};
+    int scale = viewData_->project_->GetScale();
+    int root = viewData_->project_->GetScaleRoot();
+    int pc = pitch % 12, oct = pitch / 12 - 2;
+    char buf[12];
+    if (scale <= 0) {
+        sprintf(buf, "%s%d", sharps[pc], oct);
+        return buf;
+    }
+    int count = 0;
+    for (int i = 0; i < 12; i++) count += scaleSteps[scale][i] ? 1 : 0;
+    // la letra de la raíz: natural, o la de sostenido / bemol que dé menos alteraciones
+    int sharpL = -1, flatL = -1;
+    for (int l = 0; l < 7; l++) {
+        if (natPc[l] == root) sharpL = flatL = l;
+        if ((natPc[l] + 1) % 12 == root && sharpL < 0) sharpL = l;
+        if ((natPc[l] + 11) % 12 == root && flatL < 0) flatL = l;
+    }
+    bool useFlats = false;
+    if (count == 7) {
+        int lA[12], aA[12], lB[12], aB[12];
+        int cA = spell7(scale, root, sharpL, lA, aA);
+        int cB = spell7(scale, root, flatL, lB, aB);
+        int *letterOf = (cB <= cA) ? lB : lA, *accOf = (cB <= cA) ? aB : aA;
+        int best = (cB <= cA) ? cB : cA;
+        if (best < 1000) {
+            int negative = 0;
+            for (int i = 0; i < 12; i++)
+                if (scaleSteps[scale][i] && accOf[(root + i) % 12] < 0) negative++;
+            useFlats = negative > 0;
+            if (scaleSteps[scale][(pc - root + 12) % 12]) {
+                int l = letterOf[pc], acc = accOf[pc];
+                if (l == 6 && pc == 0) oct--;    // B# es del Do de arriba
+                if (l == 0 && pc == 11) oct++;   // Cb es del Si de abajo
+                std::string n(1, letters[l]);
+                if (acc > 0) n += std::string(acc, '#');
+                if (acc < 0) n += std::string(-acc, 'b');
+                sprintf(buf, "%s%d", n.c_str(), oct);
+                return buf;
+            }
+        }
+    } else {
+        // tonalidades menores (tercera menor) y raíces en tecla negra: bemoles
+        useFlats = (scaleSteps[scale][3] && !scaleSteps[scale][4]) ||
+                   (sharpL != flatL && root != 6);
+    }
+    sprintf(buf, "%s%d", useFlats ? flats[pc] : sharps[pc], oct);
     return buf;
 }
 
@@ -906,6 +974,7 @@ void ClipView::DrawView() {
     int page = cursorStep_ / 16;
     int p0 = page * 16;
     int cur = noteAt(notes, cursorStep_);
+    if (cur >= 0 && notes[cur].pitch != cursorPitch_) cur = -1;   // solo si el cursor está sobre ella
     int scale = viewData_->project_->GetScale();
     int root = viewData_->project_->GetScaleRoot();
 
@@ -976,9 +1045,11 @@ void ClipView::DrawView() {
         GUIColor key = black ? Mix(bg, fg, 22) : Mix(bg, fg, 70);
         if (scale > 0 && !in) key = Mix(bg, fg, black ? 10 : 25);
         if (isRoot) key = Mix(bg, hi, 75);
-        if (pitch == cursorPitch_) key = hi2;
+        if (pitch == cursorPitch_) key = fg;   // la del cursor, en blanco
         FillRect(8, y + 1, 44, ROW_H - 2, key, 2);
         if (scale > 0 ? isRoot : pitch % 12 == 0)
+            DrawText(12, y + 1, noteName(pitch).c_str(), bg, 0);
+        else if (pitch == cursorPitch_)   // la tecla del cursor dice qué nota es
             DrawText(12, y + 1, noteName(pitch).c_str(), bg, 0);
     }
     for (int s = 0; s <= 16; s++) {

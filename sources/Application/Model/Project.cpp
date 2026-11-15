@@ -52,11 +52,11 @@ tempoNudge_(0)
     Variable *scale =
         new Variable("scale", VAR_SCALE, scaleNames, scaleCount, 0);
     this->Insert(scale);
-    scale->SetInt(0);
+    scale->SetInt(1);   // trk2als: proyecto nuevo en C Major con fold (como pidió el usuario)
     Variable *scaleRoot =
         new Variable("scaleroot", VAR_SCALEROOT, scaleNotes, scaleNoteCount, 0);
     this->Insert(scaleRoot);
-    Variable *fold = new Variable("fold", VAR_FOLD, false);
+    Variable *fold = new Variable("fold", VAR_FOLD, true);
     this->Insert(fold);
     // trk2als: tipo de cada pista (MIDI o audio, como en Live); se cambia en
     // la cabecera de la Song. Proyectos nuevos: todas MIDI
