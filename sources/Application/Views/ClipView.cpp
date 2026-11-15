@@ -46,6 +46,9 @@ ClipView::ClipView(GUIWindow &w, ViewData *viewData) : View(w, viewData) {
     msgTime_ = 0;
     chainShown_ = -1;
     pasting_ = false;
+    lastLoopL_ = 0;
+    prevHas_ = false;
+    prevS_ = prevE_ = 0;
 }
 
 ClipView::~ClipView() {}
@@ -294,6 +297,50 @@ void ClipView::pasteNote() {
     placeNotes(notes, add);
     if (dropped) message("%d pegadas (lo demas no cabia)", (int)add.size());
     else message(add.size() == 1 ? "Nota pegada" : "%d notas pegadas", (int)add.size());
+}
+
+/************************************************************
+ loop del clip (como el Move): B + L inicio, B + R final,
+ B + L, L rápido: solo este compás / sin loop
+ ************************************************************/
+
+void ClipView::loopButton(bool left) {
+    Song *song = viewData_->song_;
+    int chain = viewData_->currentChain_;
+    int n = pages();
+    if (n == 0) return;
+    int page = cursorStep_ / 16;
+    int s, e;
+    bool has = song->GetChainLoop(chain, s, e);
+    if (!has) { s = 0; e = n - 1; }
+    unsigned long now = System::GetInstance()->GetClock();
+    if (left && now - lastLoopL_ < 400) {   // L dos veces: este compás solo, o sin loop
+        lastLoopL_ = 0;
+        if (prevHas_ && prevS_ == page && prevE_ == page) {
+            song->ClearChainLoop(chain);
+            message("Loop apagado: suena todo el clip");
+        } else {
+            song->SetChainLoop(chain, page, page);
+            message("Loop: solo el compas %d", page + 1);
+        }
+        return;
+    }
+    if (left) {
+        lastLoopL_ = now;
+        song->GetChainLoop(chain, prevS_, prevE_);
+        prevHas_ = song->GetChainLoop(chain, s, e);
+        if (!prevHas_) { s = 0; e = n - 1; }
+        s = page;
+        if (e < s) e = s;
+    } else {
+        e = page;
+        if (s > e) s = e;
+    }
+    song->SetChainLoop(chain, s, e);
+    char buf[48];
+    if (s == e) sprintf(buf, "Loop: compas %d", s + 1);
+    else sprintf(buf, "Loop: compases %d a %d", s + 1, e + 1);
+    message(buf);
 }
 
 /************************************************************
@@ -886,8 +933,10 @@ void ClipView::handleButton(unsigned short mask, bool pressed) {
         if (player->IsRunning()) {
             player->Stop();
         } else if (pages() > 0) {
-            viewData_->chainRow_ = 0;
-            player->OnStartButton(PM_CHAIN, viewData_->songX_, false, 0);
+            int ls, le;
+            int from = viewData_->song_->GetChainLoop(viewData_->currentChain_, ls, le) ? ls : 0;
+            viewData_->chainRow_ = from;
+            player->OnStartButton(PM_CHAIN, viewData_->songX_, false, from);
         }
         isDirty_ = true;
         return;
@@ -922,6 +971,8 @@ void ClipView::handleButton(unsigned short mask, bool pressed) {
         return;
     }
     if (mask & EPBM_B) {
+        if (v == EPBM_L) loopButton(true);
+        if (v == EPBM_R) loopButton(false);
         if (v == EPBM_A) cutNote();
         if (dt) {                      // de página en página
             if (dt > 0 && cursorStep_ / 16 + 1 >= pages()) addPage();
@@ -1010,13 +1061,17 @@ void ClipView::DrawView() {
                 DrawText(466 - 8 * int(sc.size()), 34, sc.c_str(), hi, 0);
             }
         }
-        // las páginas, a la derecha
+        // las páginas, a la derecha (y el loop debajo)
+        int loopS = 0, loopE = 0;
+        bool hasLoop = viewData_->song_->GetChainLoop(viewData_->currentChain_, loopS, loopE);
         int bx = 632 - 16 * 10;
         for (int i = 0; i < 16; i++) {
             int x = bx + i * 10;
             if (i < npages) {
                 bool playing = playStep_ >= 0 && playStep_ / 16 == i;
-                GUIColor c = (i == page) ? hi2 : Mix(bg, fg, 35);
+                bool inLoop = !hasLoop || (i >= loopS && i <= loopE);
+                GUIColor c = (i == page) ? hi2 : Mix(bg, fg, inLoop ? 45 : 12);
+                if (hasLoop && inLoop) FillRect(x - 1, 50, 9, 2, hi);   // la llave del loop
                 FillRect(x, 36, 7, 8, c, 2);
                 if (playing) FillRect(x, 46, 7, 2, play);
             } else {

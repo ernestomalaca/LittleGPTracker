@@ -51,7 +51,11 @@ class ClipView : public View {
     void takeSnap(Snap &s);
     void restoreSnap(const Snap &s);
     std::vector<Snap> undo_, redo_;
-    bool pasting_;   // Select + A sostenido: se ve dónde va a caer lo copiado
+    bool pasting_;
+    void loopButton(bool left);   // B + L / B + R
+    unsigned long lastLoopL_;
+    bool prevHas_;            // cómo estaba el loop antes del primer toque
+    int prevS_, prevE_;   // Select + A sostenido: se ve dónde va a caer lo copiado
     // marcar bloques, como en Joy2Live
     void selRect(int &s0, int &s1, int &p0, int &p1);
     void selectedNotes(std::vector<Note> &notes, std::vector<int> &idx);

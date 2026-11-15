@@ -127,6 +127,8 @@ protected:
     // instrumento (el loop) y se comporta como una chain virtual de 'loop bars'
     // compases, sin phrases ni notas.
     bool isAudio(int channel) ;
+    int loopStart(int channel, int chain) ;   // trk2als
+    int loopEnd(int channel, int chain) ;
     int audioBars(uchar clip) ;
     uchar chainStep(int channel, uchar chain, int pos) ;
     void playAudioCell(int channel) ;

@@ -32,7 +32,19 @@ public:
 	// trk2als: nombre de cada chain ("woodblock 1"); vacío = sin nombre
 	const std::string &GetChainName(int chain) { return chainName_[chain] ; }
 	void SetChainName(int chain,const std::string &name) { chainName_[chain]=name ; }
+	// trk2als: loop del clip (filas de la chain, como las páginas del Move);
+	// sin loop suena entero
+	bool GetChainLoop(int chain,int &start,int &end) {
+		start=loopStart_[chain] ; end=loopEnd_[chain] ;
+		return start!=0xFF ;
+	}
+	void SetChainLoop(int chain,int start,int end) {
+		loopStart_[chain]=(unsigned char)start ; loopEnd_[chain]=(unsigned char)end ;
+	}
+	void ClearChainLoop(int chain) { loopStart_[chain]=loopEnd_[chain]=0xFF ; }
 private:
+	unsigned char loopStart_[CHAIN_COUNT] ;
+	unsigned char loopEnd_[CHAIN_COUNT] ;
 	std::string chainName_[CHAIN_COUNT] ;
 } ;
 

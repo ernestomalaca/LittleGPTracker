@@ -16,6 +16,8 @@ Song::Song():Persistent("SONG") {
 	
 	chain_=new Chain() ;   // Allocate chain datas
 	phrase_=new Phrase() ; // Allocate phrase datas
+	memset(loopStart_,0xFF,sizeof(loopStart_)) ;
+	memset(loopEnd_,0xFF,sizeof(loopEnd_)) ;
 } ;
 
 Song::~Song() {
@@ -51,6 +53,19 @@ void Song::SaveContent(TiXmlNode *node) {
 		names.InsertEndChild(n) ;
 	}
 	node->InsertEndChild(names) ;
+	// trk2als: loops de los clips
+	TiXmlElement loops("CHAINLOOPS") ;
+	for (int i=0;i<CHAIN_COUNT;i++) {
+		if (loopStart_[i]==0xFF) continue ;
+		TiXmlElement l("LOOP") ;
+		char id[4] ;
+		sprintf(id,"%02X",i) ;
+		l.SetAttribute("ID",id) ;
+		l.SetAttribute("START",loopStart_[i]) ;
+		l.SetAttribute("END",loopEnd_[i]) ;
+		loops.InsertEndChild(l) ;
+	}
+	node->InsertEndChild(loops) ;
 
 } ;
 
@@ -89,6 +104,19 @@ void Song::RestoreContent(TiXmlElement *element) {
 				const char *v=n->Attribute("VALUE") ;
 				int c=id?int(strtol(id,0,16)):-1 ;
 				if (c>=0 && c<CHAIN_COUNT && v) chainName_[c]=v ;
+			}
+		} ;
+		if (!strcmp("CHAINLOOPS",value)) {   // trk2als
+			for (TiXmlElement *l=current->FirstChildElement("LOOP");l;l=l->NextSiblingElement("LOOP")) {
+				const char *id=l->Attribute("ID") ;
+				int c=id?int(strtol(id,0,16)):-1 ;
+				int s=-1,e=-1 ;
+				l->Attribute("START",&s) ;
+				l->Attribute("END",&e) ;
+				if (c>=0 && c<CHAIN_COUNT && s>=0 && s<16 && e>=s && e<16) {
+					loopStart_[c]=(unsigned char)s ;
+					loopEnd_[c]=(unsigned char)e ;
+				}
 			}
 		} ;
 		if (!strcmp("PARAM2",value)) {

@@ -24,7 +24,7 @@ Player::Player() {
 
     lastSongPos_ = 0;
     mode_=PM_SONG;
-	sequencerMode_=SM_SONG;
+	sequencerMode_=SM_LIVE;   // trk2als: como el Move, las escenas se quedan dando vueltas
 	lastPercentage_=0;
 	retrigAllImmediate_=false;
 	startTime_=0;
@@ -370,22 +370,13 @@ void Player::OnSongStartButton(unsigned int from,unsigned int to,bool requestSto
                     if (!requestStop) {
                         if (findPlayable(&row, i, 0)) {
                             if (!forceImmediate) {
-                                if ((liveQueueingMode_[i] != QM_CHAINSTART) ||
-                                    (liveQueuePosition_[i] != row)) {
-                                    mode = QM_CHAINSTART;
-                                } else {
-                                    mode = QM_PHRASESTART;
-                                }
+                                mode = QM_PHRASESTART;   // trk2als: al compás, como el Move
                             } else {
                                 mode = QM_TICKSTART;
                             }
                         }
                     } else { // modifier = onStop from song screen
-                        if (GetQueueingMode(i) != QM_CHAINSTOP) {
-                            mode = QM_CHAINSTOP;
-                        } else {
-                            mode = QM_PHRASESTOP;
-                        }
+                        mode = QM_PHRASESTOP;   // trk2als: se detiene al compás
                     }
                     if (mode != QM_NONE) {
                         QueueChannel(i, mode, row, 0);
@@ -829,10 +820,24 @@ void Player::triggerLiveChains() {
     give chain position directly (for PM_CHAIN/PM_PHRASE)
  ********************************************************/
 
+// trk2als: el loop del clip (filas de la chain); sin loop, entero
+int Player::loopStart(int channel, int chain) {
+    int s, e;
+    if (chain == 0xFF || isAudio(channel) || !viewData_->song_->GetChainLoop(chain, s, e)) return 0;
+    return s;
+}
+
+int Player::loopEnd(int channel, int chain) {
+    int s, e;
+    if (chain == 0xFF || isAudio(channel) || !viewData_->song_->GetChainLoop(chain, s, e)) return 15;
+    return e;
+}
+
 void Player::updateSongPos(int pos, int channel, int chainPos, int hop) {
     unsigned char *data = viewData_->song_->data_ + channel + 8 * pos;
     viewData_->songPlayPos_[channel]=pos;
 	viewData_->currentPlayChain_[channel]=*data;
+    if (chainPos == 0) chainPos = loopStart(channel, *data);   // entra al clip por su loop
     audioStarted_[channel] = false;
     updateChainPos(chainPos, channel, hop);
 }
@@ -1108,6 +1113,8 @@ void Player::moveToNextStep() {
 
 void Player::moveToNextPhrase(int channel, int hop) {
 
+    triggerLiveChains_ = true;   // trk2als: lo lanzado entra al compás (como el Move)
+
     // First check if we're in live mode and the channel
     // has been trigged in immediate mode. In which case we
     // do the action straight away (START/STOP)
@@ -1145,7 +1152,7 @@ void Player::moveToNextPhrase(int channel, int hop) {
     // Look if there' any data at current position
     // which means we continue in the current chain
 
-    bool canContinue = (pos < 16);
+    bool canContinue = (pos < 16) && (pos <= loopEnd(channel, chain));
     if (canContinue) {
         canContinue = (chainStep(channel, chain, pos) != 0xFF);
     }
@@ -1161,7 +1168,7 @@ void Player::moveToNextPhrase(int channel, int hop) {
         if ((mode_==PM_SONG)||(mode_==PM_LIVE)) {
             moveToNextChain(channel, hop); // HOP. here
         } else {
-            updateChainPos(0, channel, hop);
+            updateChainPos(loopStart(channel, chain), channel, hop);
         }
     }
 }
@@ -1219,6 +1226,12 @@ void Player::moveToNextChain(int channel, int hop) {
 
     // if live mode didn't queue anything, we find the next to play
 
+    if (searchNext && mode_ == PM_LIVE) {
+        // trk2als: como en el Move / la Session de Live, el clip se repite
+        // hasta que lances otra cosa
+        nextPos = viewData_->songPlayPos_[channel];
+        searchNext = false;
+    }
     if (searchNext) {
         int pos = (viewData_->songPlayPos_[channel]) + 1;
         unsigned char *data=viewData_->song_->data_+channel+8*pos;
