@@ -517,7 +517,7 @@ void MixerView::DrawView() {
     // Draw VU bars at the end so they appear on top of everything
     // They will always show the empty dashes and smoothly decay when paused
     DrawVuBars();
-    drawHelpBar("A+flechas:ajustar;R+<>:pantalla");
+    drawHelpBar("A+flechas:ajustar;SEL+<>:pantalla");
 };
 
 void MixerView::OnPlayerUpdate(PlayerEventType, unsigned int tick) {

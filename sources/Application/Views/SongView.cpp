@@ -1719,7 +1719,7 @@ void SongView::DrawView() {
     // They will always show the empty dashes and smoothly decay when paused
     DrawVuBars();
     drawHelpBar(headerMode_ ? "A:menu de pista;<>:pista;v:a los clips"
-                            : "A:poner/abrir;A+<>:elegir;B+A:borrar;R+<>:pantalla");
+                            : "A:poner/abrir;A+<>:elegir;B+A:borrar;SEL+<>:pantalla");
 };
 
 /******************************************************

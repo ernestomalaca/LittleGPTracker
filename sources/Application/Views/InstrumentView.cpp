@@ -1123,7 +1123,7 @@ void InstrumentView::drawWaveform() {
 	}
 	if (!topInfo_.empty()) ctx+="  "+topInfo_ ;
 	drawTopBar(TAB_INST,ctx.c_str()) ;
-	drawHelpBar(helpText_?helpText_:"A+<>:valor;A+^v:valor x16;R+<>:pantalla") ;
+	drawHelpBar(helpText_?helpText_:"A+<>:valor;A+^v:valor x16;SEL+<>:pantalla") ;
 }
 
 void InstrumentView::drawWaveformBody() {

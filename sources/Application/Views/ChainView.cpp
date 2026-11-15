@@ -779,7 +779,7 @@ void ChainView::DrawView() {
     if (player->IsRunning()) {
         OnPlayerUpdate(PET_UPDATE);
     };
-    drawHelpBar("A:poner/abrir;A+<>:elegir;B+A:borrar;R+<>:pantalla");
+    drawHelpBar("A:poner/abrir;A+<>:elegir;B+A:borrar;SEL+<>:pantalla");
 };
 
 void ChainView::OnPlayerUpdate(PlayerEventType eventType, unsigned int tick) {

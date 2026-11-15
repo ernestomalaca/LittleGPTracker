@@ -1500,7 +1500,7 @@ void PhraseView::DrawView() {
         cmdEditField_->SetFocus();
         cmdEditField_->Draw(w_);
     };
-    drawHelpBar("A:nota;A+<>:cambiar;B+A:borrar;R+<>:pantalla");
+    drawHelpBar("A:nota;A+<>:cambiar;B+A:borrar;SEL+<>:pantalla");
 };
 
 void PhraseView::OnPlayerUpdate(PlayerEventType eventType, unsigned int tick) {
