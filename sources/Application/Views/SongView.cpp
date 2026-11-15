@@ -57,6 +57,7 @@ SongView::SongView(GUIWindow &w, ViewData *viewData, const char *song)
     lastChain_ = 0;
     lastClip_ = 0xFF; // trk2als: sin loop todavía
     headerMode_ = false;
+    rowMode_ = false;
     pendingTypeCh_ = -1;
     presetCh_ = -1;
     pickClip_ = pickCell_ = -1;
@@ -991,6 +992,10 @@ void SongView::ProcessButtonMask(unsigned short mask, bool pressed) {
         processHeaderButtonMask(mask);
         return;
     }
+    if (rowMode_) {   // trk2als: en la columna de filas se lanza / detiene la escena
+        processRowButtonMask(mask);
+        return;
+    }
 
     if (viewMode_ == VM_NEW && isAudioColumn(viewData_->songX_)) {
         // trk2als: A otra vez = loop nuevo (un instrumento libre), como la chain nueva en MIDI
@@ -1205,8 +1210,12 @@ void SongView::processNormalButtonMask(unsigned int mask) {
                             updateCursor(0, -1);
                         }
                     }
-                    if (mask & EPBM_LEFT)
-                        updateCursor(-1, 0);
+                    if (mask & EPBM_LEFT) {
+                        // trk2als: desde la primera pista, ← va a la columna de filas (LSDJ)
+                        if (viewData_->songX_ == 0) rowMode_ = true;
+                        else updateCursor(-1, 0);
+                        isDirty_ = true;
+                    }
                     if (mask & EPBM_RIGHT)
                         updateCursor(1, 0);
 
@@ -1313,6 +1322,38 @@ void SongView::clampTrackCursor() {
     int maxX = headerMode_ ? (count < SONG_CHANNEL_COUNT ? count : count - 1) : count - 1;
     if (viewData_->songX_ > maxX) viewData_->songX_ = maxX;
     if (viewData_->songX_ < 0) viewData_->songX_ = 0;
+}
+
+// trk2als: la columna de los números de fila, como en LSDJ: Start lanza la
+// fila entera (la escena), Select + Start detiene todo; → vuelve a las pistas
+void SongView::processRowButtonMask(unsigned int mask) {
+    Player *player = Player::GetInstance();
+    if ((mask & EPBM_R) && (mask & EPBM_START)) {   // Select + Start
+        if (player->IsRunning()) player->Stop();
+        isDirty_ = true;
+        return;
+    }
+    if (mask & EPBM_R) {   // Select + ↑ ↓: Project / Mixer, como siempre
+        if (mask & (EPBM_UP | EPBM_DOWN)) {
+            rowMode_ = false;
+            processNormalButtonMask(mask);
+        }
+        return;
+    }
+    if (mask & EPBM_B) {
+        if (mask & EPBM_DOWN) updateSongOffset(SongView::jumpLength_);
+        if (mask & EPBM_UP) updateSongOffset(-SongView::jumpLength_);
+        isDirty_ = true;
+        return;
+    }
+    if (mask & EPBM_START) {
+        viewData_->chainRow_ = 0;
+        startCurrentRow();
+    }
+    if (mask & EPBM_RIGHT) rowMode_ = false;
+    if (mask & EPBM_DOWN) updateCursor(0, 1);
+    if (mask & EPBM_UP) updateCursor(0, -1);
+    isDirty_ = true;
 }
 
 void SongView::processHeaderButtonMask(unsigned int mask) {
@@ -1571,6 +1612,11 @@ void SongView::DrawView() {
         Project *project = viewData_->project_;
         std::string tname = project->TrackExists(viewData_->songX_)
                                 ? cellName() : std::string("agregar pista");
+        if (rowMode_) {   // trk2als: en la columna de filas
+            char fb[16];
+            snprintf(fb, sizeof(fb), "FILA %02X", viewData_->songY_ + viewData_->songOffset_);
+            tname = fb;
+        }
         std::string ctx = (player->GetSequencerMode() == SM_SONG)
                               ? tname : "LIVE  " + tname;
         if (!drawTopBar(TAB_SES, ctx.c_str())) {
@@ -1595,7 +1641,11 @@ void SongView::DrawView() {
         char p = j + viewData_->songOffset_;
         ((p / altRowNumber_) % 2) ? SetColor(CD_ROW) : SetColor(CD_ROW2);
         hex2char(p, row);
+        bool here = rowMode_ && j == viewData_->songY_;   // trk2als: cursor en la fila
+        if (here) SetColor(CD_CURSOR);
+        props.invert_ = here;
         DrawString(pos._x, pos._y, row, props);
+        props.invert_ = false;
         pos._y += 1;
     }
 
@@ -1649,7 +1699,7 @@ void SongView::DrawView() {
                     invert = true;
                 }
             } else {
-                if (i == viewData_->songX_ && j == viewData_->songY_) {
+                if (!rowMode_ && i == viewData_->songX_ && j == viewData_->songY_) {
                     invert = true;
                 }
             }
@@ -1717,6 +1767,9 @@ void SongView::DrawView() {
     // Draw VU bars at the end so they appear on top of everything
     // They will always show the empty dashes and smoothly decay when paused
     DrawVuBars();
+    if (rowMode_)
+        drawHelpBar("START:lanzar la fila;SEL+START:detener todo;>:a las pistas");
+    else
     drawHelpBar(headerMode_ ? "A:menu de pista;<>:pista;v:a los clips"
                             : "A:poner/abrir;A+<>:elegir;B+A:borrar;SEL+<>:pantalla");
 };

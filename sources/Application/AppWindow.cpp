@@ -662,10 +662,6 @@ unsigned short AppWindow::joyLegacy(unsigned short phys) {
     }
     unsigned short m = phys & ~EPBM_SELECT;
     if (phys & EPBM_SELECT) m |= (phys & EPBM_START) ? EPBM_R : EPBM_L;
-    if ((phys & EPBM_START) && (phys & EPBM_LEFT) && !(phys & EPBM_SELECT)) {
-        m &= ~EPBM_LEFT;   // ← + Start = la fila (L + Start)
-        m |= EPBM_L;
-    }
     return m;
 }
 
@@ -687,13 +683,6 @@ void AppWindow::joyButton(unsigned short v, bool pressed, bool repeat) {
         if (v == EPBM_SELECT && !(phys & EPBM_B)) _selectFirst = true;
         if ((v == EPBM_SELECT || v == EPBM_START) && (phys & EPBM_B) && !_selectFirst)
             _bGesture = true;
-    }
-    // trk2als: ← + Select + Start = detener todo (como Select + Start en la
-    // columna de filas de LSDJ); ← es "la fila entera", igual que ← + Start
-    if (pressed && !repeat && v == EPBM_START && (phys & EPBM_SELECT) && (phys & EPBM_LEFT)) {
-        Player *player = Player::GetInstance();
-        if (player->IsRunning()) player->Stop();
-        return;
     }
     // pantallas: Select + flechas = el R + flechas de LGPT (Song ⇄ Chain ⇄
     // Phrase ⇄ Instrument ⇄ Table; en la Song, ↑ Project y ↓ Mixer)

@@ -87,6 +87,8 @@ class SongView : public View {
     int pendingTypeCh_, pendingType_; // .cambio que espera confirmación
   private:
     bool headerMode_; // .el cursor está en la cabecera de las columnas
+    bool rowMode_;   // trk2als: el cursor en la columna de filas (como LSDJ)
+    void processRowButtonMask(unsigned int mask);
     void processHeaderButtonMask(unsigned int mask);
     void prepareClip(unsigned char clip); // .pone el instrumento en looper sync
     unsigned char freeClip(); // .primer instrumento que no usa ninguna phrase ni pista de audio
