@@ -24,6 +24,8 @@ public:
 protected:
 	void warpToNext(int offset) ;
 	bool ownedByTrack() ;
+	bool sf2Pending_ ;   // trk2als: se eligió un .sf2: convertirlo al soltar A
+	void convertSf2(bool refresh) ;
 	void onInstrumentChange() ;
 	void fillSampleParameters() ;
 	void fillMidiParameters() ;

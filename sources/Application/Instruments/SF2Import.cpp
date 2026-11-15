@@ -206,6 +206,16 @@ bool SF2Import(const char *sf2Path,int presetIndex,SampleInstrument *si,std::str
 	return si->IsZoned() ;
 }
 
+bool SF2ImportRaw(const char *sf2Path,int phdrIndex,SampleInstrument *si,std::string &message) {
+	SF2File sf ;
+	if (!sf.Open(sf2Path)) { message="no pude leer el .sf2" ; return false ; }
+	for (size_t i=0;i<sf.Presets().size();i++) {
+		if (sf.Presets()[i].index==phdrIndex) return SF2Import(sf2Path,int(i),si,message) ;
+	}
+	message="no existe ese instrumento" ;
+	return false ;
+}
+
 bool SF2PreviewNote(const char *sf2Path,int presetIndex,int note,const char *wavPath) {
 	SF2File sf ;
 	if (!sf.Open(sf2Path)) return false ;

@@ -12,6 +12,10 @@ class SampleInstrument ;
 // 'message' queda qué pasó (o el nombre del instrumento)
 bool SF2Import(const char *sf2Path,int presetIndex,SampleInstrument *si,std::string &message) ;
 
+// Lo mismo, con el índice del instrumento en el archivo (el de phdr, como
+// lo numera SoundFontPreset)
+bool SF2ImportRaw(const char *sf2Path,int phdrIndex,SampleInstrument *si,std::string &message) ;
+
 // Para escuchar antes de convertir: escribe en 'wavPath' el sample de la
 // tecla 'note' del instrumento (o el más cercano)
 bool SF2PreviewNote(const char *sf2Path,int presetIndex,int note,const char *wavPath) ;

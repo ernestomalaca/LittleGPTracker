@@ -2,6 +2,7 @@
 #define _SOUNDFONT_PRESET_H_
 
 #include "SoundSource.h"
+#include <string>
 #include "Externals/Soundfont/SFNAV.H"
 #include "Externals/Soundfont/ENAB.H"
 
@@ -19,6 +20,10 @@ public:
 	virtual int GetLoopEnd(int note) ;
 
 	bool IsLooped(int loop) ;
+	// trk2als: de qué archivo y qué instrumento (para convertirlo a zonas)
+	void SetPath(const char *path) { path_=path?path:"" ; }
+	const char *GetPath() { return path_.c_str() ; }
+	int GetPresetID() { return presetID_ ; }
 
 protected:
 	
@@ -29,5 +34,6 @@ private:
 	int  sfID_ ;
 	int	presetID_ ;
 	int lastNote_ ;
+	std::string path_ ;
 } ;
 #endif

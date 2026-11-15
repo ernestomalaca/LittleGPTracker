@@ -1,4 +1,6 @@
 #include "InstrumentView.h"
+#include "Application/Instruments/SF2Import.h"
+#include "Application/Instruments/SoundFontPreset.h"
 #include "Application/AppWindow.h"
 #include <math.h>
 #include <stdio.h>
@@ -154,6 +156,7 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data),
 	lastFocusID_=0 ;
 	current_=0 ;
 	lastSampleIdx_=-2 ;
+	sf2Pending_=false ;
 	wfSample_=-1 ;
 	wfSize_=0 ;
 	wfFrom_=wfTo_=0 ;
@@ -205,8 +208,15 @@ void InstrumentView::onInstrumentChange() {
 			if (waveEdit_) exitWaveEdit() ;
 		}
 		lastSampleIdx_=idx ;
+		// trk2als: un instrumento de .sf2 elegido de la lista (o de antes) se
+		// convierte a zonas, para que tenga ADSR y todo el Sampler. Al elegirlo
+		// se espera a soltar A (si no, recorrer la lista convertiría todo)
+		SoundSource *src=(idx>=0)?SamplePool::GetInstance()->GetSource(idx):0 ;
+		sf2Pending_=(src && src->IsMulti()) ;
+		if (sf2Pending_ && current_!=old) convertSf2(false) ;   // abrir uno de antes
 	} else {
 		lastSampleIdx_=-2 ;
+		sf2Pending_=false ;
 	}
 
 	if (current_!=old) {
@@ -632,6 +642,10 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 	            current_ && current_->GetType()==IT_SAMPLE &&
 	            ((SampleInstrument *)current_)->GetSimpler(SIP_S_SLICEBY)==SSB_MANUAL ;
 	if (!pressed) {
+		if (sf2Pending_ && !(mask&EPBM_A)) {   // trk2als: soltó A sobre un .sf2
+			convertSf2(true) ;
+			return ;
+		}
 		if (markTap_ && !(mask&EPBM_A)) {
 			markTap_=false ;
 			enterWaveEdit() ;
@@ -1411,6 +1425,26 @@ void InstrumentView::AnimationUpdate() {
 }
 
 void InstrumentView::OnFocus() { onInstrumentChange(); }
+
+// trk2als: el instrumento de .sf2 del sample actual pasa a zonas
+void InstrumentView::convertSf2(bool refresh) {
+	sf2Pending_=false ;
+	if (!current_ || current_->GetType()!=IT_SAMPLE) return ;
+	SampleInstrument *si=(SampleInstrument *)current_ ;
+	int idx=si->GetSampleIndex() ;
+	SoundSource *src=(idx>=0)?SamplePool::GetInstance()->GetSource(idx):0 ;
+	if (!src || !src->IsMulti()) return ;
+	SoundFontPreset *sp=(SoundFontPreset *)src ;
+	std::string msg ;
+	bool ok=SF2ImportRaw(sp->GetPath(),sp->GetPresetID(),si,msg) ;
+	char buf[64] ;
+	if (ok) snprintf(buf,sizeof(buf),"%s: %d zonas",msg.c_str(),si->ZoneCount()) ;
+	else snprintf(buf,sizeof(buf),"%s",msg.c_str()) ;
+	View::SetNotification(buf) ;
+	lastSampleIdx_=si->GetSampleIndex() ;
+	if (refresh) onInstrumentChange() ;
+	isDirty_=true ;
+}
 
 void InstrumentView::Update(Observable &o,I_ObservableData *d) {
 	onInstrumentChange() ;
