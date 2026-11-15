@@ -3,6 +3,7 @@
 #define _SONG_VIEW_H_
 
 #include <string>
+#include <vector>
 #include "BaseClasses/View.h"
 
 class SongView;
@@ -74,7 +75,12 @@ class SongView : public View {
     void nameNewChain(unsigned char chain);
     void LoadTrackPreset(const std::string &name);
     int presetCh_;
-    void pickAudio();
+    void pickAudio(int cell = -1);
+    void placeAudio();
+    void stepAudio(int dir);
+    bool isLoadedClip(int i);
+    std::vector<unsigned char> audioClips();
+    int newSlotCell_;   // celda que muestra '+' mientras se tiene A
     void OnAudioPicked(bool imported);
     int pickClip_, pickCell_;
     int pendingTypeCh_, pendingType_; // .cambio que espera confirmación

@@ -60,6 +60,7 @@ SongView::SongView(GUIWindow &w, ViewData *viewData, const char *song)
     pendingTypeCh_ = -1;
     presetCh_ = -1;
     pickClip_ = pickCell_ = -1;
+    newSlotCell_ = -1;
     pendingType_ = 0;
     songname_ = song;
 
@@ -176,9 +177,89 @@ unsigned char SongView::freeClip() {
         if (o >= 0 && o < MAX_SAMPLEINSTRUMENT_COUNT) used[o] = true;
     }
     for (int i = 0; i < MAX_SAMPLEINSTRUMENT_COUNT; i++) {
-        if (!used[i]) return (unsigned char)i;
+        if (!used[i] && !isLoadedClip(i)) return (unsigned char)i;
     }
     return 0xFF;
+}
+
+// trk2als: ¿el instrumento es un loop cargado desde la Song (aunque ya no
+// esté en ninguna celda)?
+bool SongView::isLoadedClip(int i) {
+    I_Instrument *instr = viewData_->project_->GetInstrumentBank()->GetInstrument(i);
+    if (!instr || instr->GetType() != IT_SAMPLE) return false;
+    Variable *v = ((SampleInstrument *)instr)->FindVariable(SIP_CLIP);
+    return v && v->GetInt() == 1;
+}
+
+// los loops que ya hay: los marcados y los que están en alguna pista de audio
+// (proyectos de antes), en orden
+std::vector<unsigned char> SongView::audioClips() {
+    std::vector<unsigned char> out;
+    bool inCell[MAX_SAMPLEINSTRUMENT_COUNT] = {false};
+    unsigned char *data = viewData_->song_->data_;
+    for (int i = 0; i < 256 * SONG_CHANNEL_COUNT; i++) {
+        unsigned char c = data[i];
+        if (c < MAX_SAMPLEINSTRUMENT_COUNT && isAudioColumn(i % SONG_CHANNEL_COUNT)) inCell[c] = true;
+    }
+    for (int i = 0; i < MAX_SAMPLEINSTRUMENT_COUNT; i++) {
+        if (inCell[i] || isLoadedClip(i)) out.push_back((unsigned char)i);
+    }
+    return out;
+}
+
+// A sobre una celda vacía de audio: el último loop (o el primero), para
+// cambiarlo con A+flechas; si todavía no hay ninguno, a cargar uno
+void SongView::placeAudio() {
+    std::vector<unsigned char> clips = audioClips();
+    if (clips.empty()) {
+        pickAudio();
+        return;
+    }
+    unsigned char clip = clips[0];
+    for (size_t i = 0; i < clips.size(); i++) {
+        if (clips[i] == lastClip_) clip = lastClip_;
+    }
+    *viewData_->GetCurrentSongPointer() = clip;
+    lastClip_ = clip;
+    isDirty_ = true;
+}
+
+// A+flechas en una celda de audio: recorre los loops cargados; después del
+// último viene '+' (un loop nuevo: se carga al soltar A)
+void SongView::stepAudio(int dir) {
+    unsigned char *c = viewData_->GetCurrentSongPointer();
+    int cell = int(c - viewData_->song_->data_);
+    std::vector<unsigned char> clips = audioClips();
+    int n = int(clips.size());
+    int idx;   // 0..n-1 un loop, n = '+'
+    if (newSlotCell_ == cell) {
+        idx = n;
+    } else {
+        idx = -1;
+        for (int i = 0; i < n; i++) {
+            if (clips[i] == *c) idx = i;
+        }
+        if (idx < 0) idx = n;   // no estaba en la lista: como '+'
+    }
+    idx += dir;
+    if (idx < 0) idx = 0;
+    if (idx > n) idx = n;
+    if (idx == n) {
+        if (freeClip() == 0xFF) {
+            View::SetNotification("no quedan instrumentos libres");
+            idx = n - 1;
+            if (idx < 0) return;
+        } else {
+            *c = 0xFF;                // hasta que se cargue no suena nada
+            newSlotCell_ = cell;
+            isDirty_ = true;
+            return;
+        }
+    }
+    newSlotCell_ = -1;
+    *c = clips[idx];
+    lastClip_ = *c;
+    isDirty_ = true;
 }
 
 // trk2als: A en una celda vacía de una pista de audio: elegir el archivo; el
@@ -187,7 +268,7 @@ static void AudioPickCallback(View &v, ModalView &dialog) {
     ((SongView &)v).OnAudioPicked(dialog.GetReturnCode() == 1);
 }
 
-void SongView::pickAudio() {
+void SongView::pickAudio(int cell) {
     unsigned char clip = freeClip();
     if (clip == 0xFF) {
         View::SetNotification("no quedan instrumentos libres");
@@ -200,7 +281,7 @@ void SongView::pickAudio() {
     }
     viewData_->project_->GetInstrumentBank()->GetInstrument(clip)->Purge();
     pickClip_ = clip;
-    pickCell_ = int(viewData_->GetCurrentSongPointer() - viewData_->song_->data_);
+    pickCell_ = (cell >= 0) ? cell : int(viewData_->GetCurrentSongPointer() - viewData_->song_->data_);
     viewData_->currentInstrument_ = clip;
     DoModal(new ImportSampleDialog(*this, true), AudioPickCallback);
 }
@@ -211,6 +292,7 @@ void SongView::OnAudioPicked(bool imported) {
     if (instr->GetType() == IT_SAMPLE) {
         SampleInstrument *si = (SampleInstrument *)instr;
         si->FindVariable(SIP_LOOPBPM)->SetInt(si->DetectLoopBpm());   // y con él los compases
+        si->FindVariable(SIP_CLIP)->SetInt(1);                         // un loop cargado
     }
     viewData_->song_->data_[pickCell_] = (unsigned char)pickClip_;
     lastClip_ = (unsigned char)pickClip_;
@@ -220,16 +302,8 @@ void SongView::OnAudioPicked(bool imported) {
 
 void SongView::updateChain(int offset) {
 
-    if (isAudioColumn(viewData_->songX_)) {
-        unsigned char *c = viewData_->GetCurrentSongPointer();
-        int v = (*c == 0xFF) ? ((lastClip_ == 0xFF) ? freeClip() : lastClip_) : *c + offset;
-        if (v == 0xFF) return; // no hay instrumentos libres
-        if (v < 0) v = 0;
-        if (v > MAX_SAMPLEINSTRUMENT_COUNT - 1) v = MAX_SAMPLEINSTRUMENT_COUNT - 1;
-        *c = (unsigned char)v;
-        prepareClip(*c);
-        lastClip_ = *c;
-        isDirty_ = true;
+    if (isAudioColumn(viewData_->songX_)) {   // trk2als: por los loops cargados
+        stepAudio(offset > 0 ? 1 : -1);
         return;
     }
 
@@ -860,6 +934,17 @@ void SongView::ProcessButtonMask(unsigned short mask, bool pressed) {
         bTap_ = (mask == EPBM_B && !clipboard_.active_ && viewMode_ != VM_MUTEON &&
                  viewMode_ != VM_SOLOON);
     } else {
+        if (newSlotCell_ >= 0 && !(mask & EPBM_A)) {   // trk2als: soltó A en '+'
+            int cell = newSlotCell_;
+            newSlotCell_ = -1;
+            aOpenPending_ = false;
+            isDirty_ = true;
+            if (*viewData_->GetCurrentSongPointer() == 0xFF &&
+                int(viewData_->GetCurrentSongPointer() - viewData_->song_->data_) == cell) {
+                pickAudio(cell);
+            }
+            return;
+        }
         if (aOpenPending_ && !(mask & EPBM_A)) {
             aOpenPending_ = false;
             if (!headerMode_) openCell();
@@ -1026,7 +1111,7 @@ void SongView::processNormalButtonMask(unsigned int mask) {
                 if (*cell != 0xFF) {
                     aOpenPending_ = true;      // trk2als: se abre al soltar A
                 } else if (isAudioColumn(viewData_->songX_)) {
-                    pickAudio();               // trk2als: el archivo del loop
+                    placeAudio();              // trk2als: el último loop, o cargar uno
                 } else {
                     createClip();              // trk2als: como en Live: un clip nuevo
                 }
@@ -1583,7 +1668,9 @@ void SongView::DrawView() {
 
             if (isAudioColumn(i)) {   // trk2als: los clips de audio son A00, A01...
                 char clip[4];
-                if (d == 0xFF) strcpy(clip, "---");
+                int cellIdx = int(data - 1 - viewData_->song_->data_);
+                if (cellIdx == newSlotCell_) strcpy(clip, "A+ ");   // loop nuevo, al soltar A
+                else if (d == 0xFF) strcpy(clip, "---");
                 else snprintf(clip, sizeof(clip), "A%02X", d);
                 DrawString(pos._x, pos._y, clip, props);
             } else if (d == 0xFF) {

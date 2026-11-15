@@ -107,6 +107,7 @@ enum SampleInstrumentLoopMode {
 #define SIP_S_ETAB  MAKE_FOURCC('S', 'E', 'T', 'B')   // pantalla: amp / filter
 #define SIP_S_SLICEBY MAKE_FOURCC('S', 'S', 'B', 'Y') // slice by: region / manual
 #define SIP_S_MARKS MAKE_FOURCC('S', 'M', 'R', 'K')   // marcas manuales (cuadros, "a,b,c")
+#define SIP_CLIP MAKE_FOURCC('C', 'L', 'I', 'P')      // trk2als: 1 = es un loop de pista de audio (cargado desde la Song)
 
 enum SimplerSliceBy { SSB_REGION=0, SSB_MANUAL=1 } ;
 // trk2als: clip de audio estilo Live

@@ -213,6 +213,7 @@ SampleInstrument::SampleInstrument() {
 	 static const char *sliceBy[2]={"region","manual"} ;
 	 Insert(new Variable("s slice by",SIP_S_SLICEBY,sliceBy,2,SSB_REGION)) ;
 	 Insert(new Variable("s marks",SIP_S_MARKS,"")) ;
+	 Insert(new Variable("audio clip",SIP_CLIP,0)) ;
 	 Insert(new Variable("s transpose",SIP_S_TRANSP,0)) ;
 	 Insert(new Variable("s detune",SIP_S_DETUNE,0)) ;
 	 Insert(new Variable("s glide",SIP_S_GLIDE,0)) ;
