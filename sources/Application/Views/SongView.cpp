@@ -63,6 +63,7 @@ SongView::SongView(GUIWindow &w, ViewData *viewData, const char *song)
     newSlotCell_ = -1;
     pendingType_ = 0;
     songname_ = song;
+    View::projectName_ = (songname_.substr(0, 5) == "lgpt_") ? songname_.substr(5) : songname_;
 
     for (int i = 0; i < 8; i++) {
         this->lastPlayedPosition_[i] = 0;
@@ -1565,18 +1566,21 @@ void SongView::DrawView() {
 
     std::string buffer(os.str());
 
-    DrawString(pos._x, pos._y, buffer.c_str(), props);
-
     // trk2als: el nombre de la pista donde está el cursor
     clampTrackCursor();
     {
         Project *project = viewData_->project_;
         std::string tname = project->TrackExists(viewData_->songX_)
                                 ? cellName() : std::string("agregar pista");
-        if (tname.size() > 17) tname = tname.substr(0, 17);
-        SetColor(CD_HILITE2);
-        DrawString(pos._x + 23, pos._y, tname.c_str(), props);
-        SetColor(CD_NORMAL);
+        std::string ctx = (player->GetSequencerMode() == SM_SONG)
+                              ? tname : "LIVE  " + tname;
+        if (!drawTopBar(TAB_SES, ctx.c_str())) {
+            DrawString(pos._x, pos._y, buffer.c_str(), props);
+            if (tname.size() > 17) tname = tname.substr(0, 17);
+            SetColor(CD_HILITE2);
+            DrawString(pos._x + 23, pos._y, tname.c_str(), props);
+            SetColor(CD_NORMAL);
+        }
     }
 
     // Compute song grid location
@@ -1714,6 +1718,8 @@ void SongView::DrawView() {
     // Draw VU bars at the end so they appear on top of everything
     // They will always show the empty dashes and smoothly decay when paused
     DrawVuBars();
+    drawHelpBar(headerMode_ ? "A:menu de pista;<>:pista;v:a los clips"
+                            : "A:poner/abrir;A+<>:elegir;B+A:borrar;R+<>:pantalla");
 };
 
 /******************************************************

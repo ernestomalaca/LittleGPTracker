@@ -392,13 +392,7 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
          }
      }
 
-  // trk2als: zonas al día si cambiaron (al cargar el proyecto llegan después
-  // del sample) o si cambió el pool (se cargaron samples después)
-  {
-      const char *zs=FindVariable(SIP_S_ZONES)->GetString() ;
-      if ((*zs || !zonesStr_.empty()) &&
-          (zonesStr_!=zs || zonesPoolSize_!=SamplePool::GetInstance()->GetNameListSize())) rebuildZones() ;
-  }
+  ensureZones() ;   // trk2als
  rp->midiNote_=midinote ;
   lastNote_=midinote ;   // trk2als: para el mapa de zonas
   
@@ -3024,4 +3018,13 @@ std::string SampleInstrument::ZoneSetName() {
 	size_t us=n.rfind('_') ;
 	if (us!=std::string::npos && us+1<n.size() && isdigit((unsigned char)n[us+1])) n=n.substr(0,us) ;
 	return n ;
+}
+
+// trk2als: zonas al día si cambiaron (al abrir un proyecto llegan después del
+// sample) o si cambió el pool (se cargaron samples después)
+void SampleInstrument::ensureZones() {
+	const char *zs=FindVariable(SIP_S_ZONES)->GetString() ;
+	if (!zs) zs="" ;
+	if ((*zs || !zonesStr_.empty()) &&
+	    (zonesStr_!=zs || zonesPoolSize_!=SamplePool::GetInstance()->GetNameListSize())) rebuildZones() ;
 }

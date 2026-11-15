@@ -1,5 +1,6 @@
 
 #ifndef _VIEW_H_
+#include <string>
 #define _VIEW_H_
 
 #include "Application/Model/Config.h"
@@ -162,6 +163,21 @@ class View : public Observable {
 
     void drawMap();
     void drawNotes(int x0 = -1, int dx = 3) ; // trk2als: x0/dx de la grilla de la Song
+    // trk2als: pinceles compartidos (como los mockups). Barra superior: el set,
+    // las pestañas SES CLIP INST MIX (tab = la activa; -1 ninguna), el
+    // contexto de la vista y a la derecha tempo y reproducción. Devuelve false
+    // si la pantalla no dibuja formas (entonces la vista pone su título de antes)
+    enum { TAB_SES = 0, TAB_CLIP, TAB_INST, TAB_MIX };
+    bool drawTopBar(int tab, const char *context);
+    // Barra de ayuda abajo: "A:poner nota;B+<>:página" (tecla:acción, separados por ';')
+    bool drawHelpBar(const char *items);
+    static std::string projectName_;   // lo pone la Song al abrir el proyecto
+    // al cambiar play/stop o el tempo se repinta sola (desde drawNotes)
+    void refreshTopBar();
+    int topTab_;
+    std::string topCtx_;
+    bool topRunning_;
+    int topTempo_;
     void drawVUMeter(uint8_t leftBars, uint8_t rightBars, GUIPoint pos,
                      GUITextProperties props, int vuIndex,
                      bool forceRedraw = false);

@@ -694,13 +694,17 @@ void ChainView::DrawView() {
     char title[20];
     SetColor(CD_NORMAL);
     sprintf(title, "Chain %2.2x", viewData_->currentChain_);
-    DrawString(pos._x, pos._y, title, props);
     {   // trk2als: el nombre del chain ("woodblock 1")
         const std::string &cn = viewData_->song_->GetChainName(viewData_->currentChain_);
-        if (!cn.empty()) {
-            SetColor(CD_HILITE2);
-            DrawString(pos._x + 12, pos._y, cn.substr(0, 26).c_str(), props);
-            SetColor(CD_NORMAL);
+        std::string ctx = std::string(viewData_->project_->GetTrackName(viewData_->songX_)) + " > " +
+                          (cn.empty() ? std::string(title) : cn);
+        if (!drawTopBar(TAB_CLIP, ctx.c_str())) {
+            DrawString(pos._x, pos._y, title, props);
+            if (!cn.empty()) {
+                SetColor(CD_HILITE2);
+                DrawString(pos._x + 12, pos._y, cn.substr(0, 26).c_str(), props);
+                SetColor(CD_NORMAL);
+            }
         }
     }
 
@@ -775,6 +779,7 @@ void ChainView::DrawView() {
     if (player->IsRunning()) {
         OnPlayerUpdate(PET_UPDATE);
     };
+    drawHelpBar("A:poner/abrir;A+<>:elegir;B+A:borrar;R+<>:pantalla");
 };
 
 void ChainView::OnPlayerUpdate(PlayerEventType eventType, unsigned int tick) {

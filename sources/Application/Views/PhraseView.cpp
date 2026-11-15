@@ -1288,13 +1288,20 @@ void PhraseView::DrawView() {
 
     SetColor(CD_NORMAL);
     sprintf(title, "Phrase %2.2x", viewData_->currentPhrase_);
-    DrawString(pos._x, pos._y, title, props);
     if (col_ == 1 && hideInstrument()) col_ = 0;
-    if (hideInstrument()) {   // trk2als: de qué pista (y con qué instrumento) es
-        SetColor(CD_HILITE2);
-        DrawString(pos._x + 12, pos._y,
-                   viewData_->project_->GetTrackName(viewData_->songX_), props);
-        SetColor(CD_NORMAL);
+    {
+        std::string ctx = viewData_->project_->GetTrackName(viewData_->songX_);
+        ctx += " > ";
+        ctx += title;
+        if (!drawTopBar(TAB_CLIP, ctx.c_str())) {
+            DrawString(pos._x, pos._y, title, props);
+            if (hideInstrument()) {   // trk2als: de qué pista (y con qué instrumento) es
+                SetColor(CD_HILITE2);
+                DrawString(pos._x + 12, pos._y,
+                           viewData_->project_->GetTrackName(viewData_->songX_), props);
+                SetColor(CD_NORMAL);
+            }
+        }
     }
 
     // Compute song grid location
@@ -1493,6 +1500,7 @@ void PhraseView::DrawView() {
         cmdEditField_->SetFocus();
         cmdEditField_->Draw(w_);
     };
+    drawHelpBar("A:nota;A+<>:cambiar;B+A:borrar;R+<>:pantalla");
 };
 
 void PhraseView::OnPlayerUpdate(PlayerEventType eventType, unsigned int tick) {

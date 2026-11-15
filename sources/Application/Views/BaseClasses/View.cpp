@@ -18,7 +18,10 @@ View::View(GUIWindow &w,ViewData *viewData):
 	w_(w),
 	modalView_(0),
 	modalViewCallback_(0),
-	hasFocus_(false)
+	hasFocus_(false),
+	topTab_(-2),
+	topRunning_(false),
+	topTempo_(0)
 {
   if (!initPrivate_) 
   {
@@ -160,6 +163,7 @@ void View::drawNotes(int x0, int dx) {
 
     if (!miniLayout_) {
 
+		refreshTopBar() ;
 		GUIPoint anchor=GetAnchor() ;
 		int initialX = (x0 >= 0) ? x0 : View::margin_+10 ;
 		int initialY = anchor._y+23 ;
@@ -180,14 +184,11 @@ void View::drawNotes(int x0, int dx) {
 				DrawString(pos._x,pos._y,player->GetPlayedNote(i),props) ; //row for the note values
 				pos._y++ ;
 				DrawString(pos._x,pos._y,player->GetPlayedOctive(i),props) ; //row for the octive values
-				pos._y++ ;
-				DrawString(pos._x,pos._y,player->GetPlayedInstrument(i),props) ; //draw instrument number
+				// trk2als: el número de instrumento ya no (la pista lo dice)
 			} else {
 				DrawString(pos._x,pos._y,"  ",props) ; //row for the note values
 				pos._y++ ;
 				DrawString(pos._x,pos._y,"  ",props) ; //row for the octive values
-				pos._y++ ;
-				DrawString(pos._x,pos._y,"  ",props) ; //draw instrument number
 			}
 			pos._y = initialY ;
 			pos._x+= dx;
@@ -205,10 +206,12 @@ void View::DoModal(ModalView *view,ModalViewCallback cb) {
 void View::Redraw() {
 	if (modalView_) {
 		if (isDirty_) {
+			ClearShapes() ;
 			DrawView() ;
 		}
 		modalView_->Redraw() ;
 	} else {
+		ClearShapes() ;   // trk2als: cada vista vuelve a poner sus figuras
 		DrawView() ;
 	}
 	isDirty_=false ;
@@ -379,4 +382,106 @@ void View::drawVUMeter(uint8_t leftBars, uint8_t rightBars, GUIPoint pos,
         }
     }
     DrawString(pos._x, pos._y, bar.c_str(), props);
+}
+
+
+/************************************************************
+ trk2als: pinceles compartidos: barra superior y barra de ayuda
+ ************************************************************/
+
+std::string View::projectName_ ;
+
+void View::refreshTopBar() {
+	if (topTab_<-1) return ;
+	Player *player=Player::GetInstance() ;
+	bool running=player && player->IsRunning() ;
+	if (running!=topRunning_ || viewData_->project_->GetTempo()!=topTempo_) {
+		std::string ctx=topCtx_ ;
+		drawTopBar(topTab_,ctx.c_str()) ;
+	}
+}
+
+bool View::drawTopBar(int tab, const char *context) {
+	if (miniLayout_ || !SupportsShapes()) { topTab_=-2 ; return false ; }
+	topTab_=tab ;
+	topCtx_=context?context:"" ;
+	GUIColor bg=ColorOf(CD_BACKGROUND) ;
+	GUIColor fg=ColorOf(CD_NORMAL) ;
+	GUIColor hi=ColorOf(CD_HILITE1) ;
+	GUIColor hi2=ColorOf(CD_HILITE2) ;
+	GUIColor dim=Mix(bg,fg,55) ;
+	const int H=26 ;
+	FillRect(0,0,640,H,Mix(bg,fg,10)) ;
+	FillRect(0,H,640,1,Mix(bg,fg,20)) ;
+	int x=10 ;
+	// el set
+	std::string set=projectName_.empty()?"CHANCHO 6":projectName_ ;
+	for (size_t i=0;i<set.size();i++) if (set[i]>='a' && set[i]<='z') set[i]=set[i]-'a'+'A' ;
+	if (set.size()>12) set=set.substr(0,12) ;
+	DrawText(x,7,set.c_str(),hi2,0) ;
+	x+=8*int(set.size())+14 ;
+	// pestañas
+	static const char *tabs[4]={"SES","CLIP","INST","MIX"} ;
+	for (int t=0;t<4;t++) {
+		int w=8*int(strlen(tabs[t]))+10 ;
+		if (t==tab) {
+			FillRect(x,4,w,H-8,hi2,3) ;
+			DrawText(x+5,7,tabs[t],bg,0) ;
+		} else {
+			DrawText(x+5,7,tabs[t],dim,0) ;
+		}
+		x+=w+4 ;
+	}
+	x+=10 ;
+	// a la derecha: tempo y reproducción
+	Player *player=Player::GetInstance() ;
+	char right[32] ;
+	snprintf(right,sizeof(right),"%d BPM",viewData_->project_->GetTempo()) ;
+	int rx=640-10-8*int(strlen(right)) ;
+	bool running=player && player->IsRunning() ;
+	topRunning_=running ;
+	topTempo_=viewData_->project_->GetTempo() ;
+	int px=rx-22 ;
+	if (running) {   // triángulo de play
+		for (int k=0;k<10;k++) FillRect(px+k,8+k/2,1,10-k,ColorOf(CD_PLAY)) ;
+	} else {         // cuadrado de stop
+		FillRect(px,8,9,9,dim) ;
+	}
+	DrawText(rx,7,right,dim,0) ;
+	// el contexto, en lo que queda
+	if (context && *context) {
+		int room=(px-10-x)/8 ;
+		std::string c=context ;
+		if (room>0 && (int)c.size()>room) c=c.substr(0,room) ;
+		if (room>0) DrawText(x,7,c.c_str(),fg,0) ;
+	}
+	return true ;
+}
+
+bool View::drawHelpBar(const char *items) {
+	if (miniLayout_ || !SupportsShapes() || !items) return false ;
+	GUIColor bg=ColorOf(CD_BACKGROUND) ;
+	GUIColor fg=ColorOf(CD_NORMAL) ;
+	GUIColor dim=Mix(bg,fg,55) ;
+	const int Y=480-16 ;
+	FillRect(0,Y,640,16,Mix(bg,fg,10)) ;
+	FillRect(0,Y-1,640,1,Mix(bg,fg,20)) ;
+	int x=10 ;
+	std::string all=items ;
+	size_t pos=0 ;
+	while (pos<all.size()) {
+		size_t end=all.find(';',pos) ;
+		if (end==std::string::npos) end=all.size() ;
+		std::string item=all.substr(pos,end-pos) ;
+		pos=end+1 ;
+		size_t colon=item.find(':') ;
+		std::string key=(colon==std::string::npos)?item:item.substr(0,colon) ;
+		std::string what=(colon==std::string::npos)?"":item.substr(colon+1) ;
+		int w=8*int(key.size()+1+what.size()) ;
+		if (x+w>630) break ;
+		DrawText(x,Y+2,key.c_str(),fg,0) ;
+		DrawText(x+8*int(key.size()+1),Y+2,what.c_str(),dim,0) ;
+		x+=w+16 ;
+	}
+	return true ;
 }

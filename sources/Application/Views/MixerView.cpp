@@ -371,7 +371,8 @@ void MixerView::DrawView() {
 
     std::string buffer(os.str());
 
-    DrawString(pos._x, pos._y, buffer.c_str(), props);
+    if (!drawTopBar(TAB_MIX, (player->GetSequencerMode() == SM_SONG) ? "" : "LIVE"))
+        DrawString(pos._x, pos._y, buffer.c_str(), props);
 
     // Draw mixer grid with row labels
     pos = anchor;
@@ -516,6 +517,7 @@ void MixerView::DrawView() {
     // Draw VU bars at the end so they appear on top of everything
     // They will always show the empty dashes and smoothly decay when paused
     DrawVuBars();
+    drawHelpBar("A+flechas:ajustar;R+<>:pantalla");
 };
 
 void MixerView::OnPlayerUpdate(PlayerEventType, unsigned int tick) {

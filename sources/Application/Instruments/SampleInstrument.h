@@ -278,8 +278,9 @@ private:
 	   // trk2als: warp complex; deja size cuadros estirados en warpOut_
 	   void renderComplex(int channel,renderParams *rp,int size) ;
 	   void readLoop(renderParams *rp,int n) ;
-	   public: void SetZones(const std::string &zones) ; bool IsZoned() { return zoned_ ; } int ZoneCount() { return (int)zones_.zones_.size() ; }
-	   const std::vector<ZoneSource::Zone> &Zones() { return zones_.zones_ ; }
+	   public: void SetZones(const std::string &zones) ; bool IsZoned() { ensureZones() ; return zoned_ ; } int ZoneCount() { ensureZones() ; return (int)zones_.zones_.size() ; }
+	   void ensureZones() ;   // al día con 's zones' y el pool (al abrir un proyecto llegan después del sample)
+	   const std::vector<ZoneSource::Zone> &Zones() { ensureZones() ; return zones_.zones_ ; }
 	   std::string ZoneSetName() ;   // "marimba" (de marimba_01.wav)
 	   int LastNote() { return lastNote_ ; }   // la última nota que empezó
 	   private:

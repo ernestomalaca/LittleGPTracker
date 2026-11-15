@@ -1068,7 +1068,7 @@ void InstrumentView::DrawView() {
     SetColor(CD_NORMAL);
     sprintf(title, simplerView_ ? "Sampler %2.2X" : (audioMode_ ? "Clip %2.2X" : "Instrument %2.2X"),
             viewData_->currentInstrument_);
-    DrawString(pos._x, pos._y, title, props);
+    if (!SupportsShapes()) DrawString(pos._x, pos._y, title, props);
 
     // Draw fields
 
@@ -1108,6 +1108,25 @@ void InstrumentView::DrawView() {
  ************************************************************/
 
 void InstrumentView::drawWaveform() {
+	topInfo_.clear() ;
+	helpText_=0 ;
+	drawWaveformBody() ;
+	// trk2als: las barras de los pinceles, encima de todo
+	std::string ctx ;
+	if (ownedByTrack()) {
+		ctx=viewData_->project_->GetTrackName(viewData_->songX_) ;
+	} else {
+		char t[20] ;
+		sprintf(t,simplerView_ ? "Sampler %2.2X" : (audioMode_ ? "Clip %2.2X" : "Instrument %2.2X"),
+		        viewData_->currentInstrument_) ;
+		ctx=t ;
+	}
+	if (!topInfo_.empty()) ctx+="  "+topInfo_ ;
+	drawTopBar(TAB_INST,ctx.c_str()) ;
+	drawHelpBar(helpText_?helpText_:"A+<>:valor;A+^v:valor x16;R+<>:pantalla") ;
+}
+
+void InstrumentView::drawWaveformBody() {
 	if (!SupportsShapes() || !current_ || current_->GetType()!=IT_SAMPLE) return ;
 	SampleInstrument *si=(SampleInstrument *)current_ ;
 
@@ -1123,7 +1142,7 @@ void InstrumentView::drawWaveform() {
 		DrawText(16,labelRow_[i]*16+4,labelText_[i],dim2,0) ;
 	}
 
-	const int X=16, Y=22, W=WF_BARS*8, H=simplerView_?92:124 ;
+	const int X=16, Y=34, W=WF_BARS*8, H=simplerView_?80:112 ;
 	FillRect(X-8,Y-4,W+16,H+8,Mix(bg,fg,9),8) ;
 
 	if (sfMode_ && si->IsZoned()) {   // trk2als: soundfont: el mapa de zonas
@@ -1217,7 +1236,7 @@ void InstrumentView::drawWaveform() {
 		} else {
 			sprintf(info,"%d.%02ds",cs/100,cs%100) ;
 		}
-		DrawText(632-8*int(strlen(info)),3,info,dim2,0) ;
+		topInfo_=info ;
 	}
 
 	// región del loop (fondo)
@@ -1315,7 +1334,7 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 			sprintf(info+strlen(info)," %d.%d bar%s",b10/10,b10%10,b10==10?"":"s") ;
 		}
 		strcat(info," a C3") ;   // la envolvente dibujada es la de la nota original
-		if (!waveEdit_) DrawText(632-8*int(strlen(info)),3,info,dim2,0) ;
+		if (!waveEdit_) topInfo_=info ;
 	}
 
 	bool loop=(mode==SM_CLASSIC && si->GetSimpler(SIP_S_LOOP)) ;
@@ -1489,7 +1508,7 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 			{
 				const char *help=tapPlay_?"sonando: A marca  START para  L+START de nuevo" :
 				                         "START toca  A escucha  AA marca  B+<> mueve  A+^v zoom" ;
-				DrawText(632-8*int(strlen(help)),3,help,dim2,0) ;
+				helpText_=help ;
 			}
 			// lo que suena al escuchar (A)
 			if (previewing_) {
@@ -1990,7 +2009,7 @@ void InstrumentView::drawZoneMap(SampleInstrument *si,int X,int Y,int W,int H) {
 		char info[96] ;
 		snprintf(info,sizeof(info),"%s%d-%s%d  raiz %s%d  %s",names[z.lo%12],z.lo/12-2,names[z.hi%12],z.hi/12-2,
 		         names[z.root%12],z.root/12-2,z.name.c_str()) ;
-		DrawText(632-8*int(strlen(info)),3,info,dim2,0) ;
+		topInfo_=info ;
 	}
 	#undef KX
 }

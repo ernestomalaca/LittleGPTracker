@@ -42,6 +42,9 @@ private:
 	GUIPoint bpmInfoPos_ ;   // trk2als: dónde dibujar '85>100 +2.8st'
 	// trk2als: forma de onda del sample (picos precalculados por barra)
 	void drawWaveform() ;
+	void drawWaveformBody() ;
+	std::string topInfo_ ;   // trk2als: va a la barra de arriba
+	const char *helpText_ ; // y esto a la de abajo
 	void resetFocusedField() ;
 	int wfSample_ ;
 	int wfSize_ ;
