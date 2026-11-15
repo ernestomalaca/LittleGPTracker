@@ -45,6 +45,7 @@ ClipView::ClipView(GUIWindow &w, ViewData *viewData) : View(w, viewData) {
     aPending_ = bPending_ = false;
     msgTime_ = 0;
     chainShown_ = -1;
+    pasting_ = false;
 }
 
 ClipView::~ClipView() {}
@@ -262,14 +263,13 @@ void ClipView::placeNotes(std::vector<Note> &notes, std::vector<Note> &add) {
     writeNotes(notes);
 }
 
-void ClipView::pasteNote() {
-    if (clipboard_.empty()) { message("Nada que pegar"); return; }
-    if (pages() == 0 && !addPage()) return;
-    // lo copiado empieza justo en el cursor; lo que se sale de la página no se pega
+// dónde caería lo copiado: empieza justo en el cursor; lo que se sale de la
+// página no se pega
+void ClipView::pastePreview(std::vector<Note> &add, int &dropped) {
+    add.clear();
+    dropped = 0;
     int pageEnd = (cursorStep_ / 16 + 1) * 16;
     if (pageEnd > total()) pageEnd = total();
-    std::vector<Note> add;
-    int dropped = 0;
     for (size_t k = 0; k < clipboard_.size(); k++) {
         Note n = clipboard_[k];
         n.start = cursorStep_ + (n.start - copyStep_);
@@ -280,12 +280,69 @@ void ClipView::pasteNote() {
         }
         add.push_back(n);
     }
+}
+
+void ClipView::pasteNote() {
+    if (clipboard_.empty()) { message("Nada que pegar"); return; }
+    if (pages() == 0 && !addPage()) return;
+    std::vector<Note> add;
+    int dropped;
+    pastePreview(add, dropped);
     if (add.empty()) { message("No cabe aqui"); return; }
     std::vector<Note> notes;
     readNotes(notes);
     placeNotes(notes, add);
     if (dropped) message("%d pegadas (lo demas no cabia)", (int)add.size());
     else message(add.size() == 1 ? "Nota pegada" : "%d notas pegadas", (int)add.size());
+}
+
+/************************************************************
+ deshacer
+ ************************************************************/
+
+void ClipView::takeSnap(Snap &s) {
+    s.chain = viewData_->currentChain_;
+    s.data.clear();
+    Chain *ch = viewData_->song_->chain_;
+    Phrase *ph = viewData_->song_->phrase_;
+    unsigned char *row = ch->data_ + 16 * s.chain;
+    unsigned char *tr = ch->transpose_ + 16 * s.chain;
+    s.data.insert(s.data.end(), row, row + 16);
+    s.data.insert(s.data.end(), tr, tr + 16);
+    for (int r = 0; r < 16 && row[r] != 0xFF; r++) {
+        int i = 16 * row[r];
+        s.data.insert(s.data.end(), ph->note_ + i, ph->note_ + i + 16);
+        s.data.insert(s.data.end(), ph->instr_ + i, ph->instr_ + i + 16);
+        const unsigned char *c1 = (const unsigned char *)(ph->cmd1_ + i);
+        const unsigned char *c2 = (const unsigned char *)(ph->cmd2_ + i);
+        const unsigned char *p1 = (const unsigned char *)(ph->param1_ + i);
+        const unsigned char *p2 = (const unsigned char *)(ph->param2_ + i);
+        s.data.insert(s.data.end(), c1, c1 + 16 * sizeof(FourCC));
+        s.data.insert(s.data.end(), c2, c2 + 16 * sizeof(FourCC));
+        s.data.insert(s.data.end(), p1, p1 + 16 * sizeof(ushort));
+        s.data.insert(s.data.end(), p2, p2 + 16 * sizeof(ushort));
+    }
+}
+
+void ClipView::restoreSnap(const Snap &s) {
+    Chain *ch = viewData_->song_->chain_;
+    Phrase *ph = viewData_->song_->phrase_;
+    unsigned char *row = ch->data_ + 16 * s.chain;
+    unsigned char *tr = ch->transpose_ + 16 * s.chain;
+    const unsigned char *d = &s.data[0];
+    memcpy(row, d, 16);
+    memcpy(tr, d + 16, 16);
+    d += 32;
+    for (int r = 0; r < 16 && row[r] != 0xFF; r++) {
+        int i = 16 * row[r];
+        memcpy(ph->note_ + i, d, 16); d += 16;
+        memcpy(ph->instr_ + i, d, 16); d += 16;
+        memcpy(ph->cmd1_ + i, d, 16 * sizeof(FourCC)); d += 16 * sizeof(FourCC);
+        memcpy(ph->cmd2_ + i, d, 16 * sizeof(FourCC)); d += 16 * sizeof(FourCC);
+        memcpy(ph->param1_ + i, d, 16 * sizeof(ushort)); d += 16 * sizeof(ushort);
+        memcpy(ph->param2_ + i, d, 16 * sizeof(ushort)); d += 16 * sizeof(ushort);
+    }
+    if (cursorStep_ >= total() && total() > 0) cursorStep_ = total() - 1;
 }
 
 /************************************************************
@@ -617,6 +674,10 @@ std::string ClipView::noteName(int pitch) {
 void ClipView::OnFocus() {
     if (chainShown_ != viewData_->currentChain_) {
         chainShown_ = viewData_->currentChain_;
+        undo_.clear();   // el historial es de cada clip
+        redo_.clear();
+        marking_ = false;
+        pasting_ = false;
         cursorStep_ = 0;
         cursorPitch_ = 60;
         std::vector<Note> notes;
@@ -635,7 +696,44 @@ void ClipView::OnFocus() {
 
 void ClipView::ProcessButtonMask(unsigned short mask, bool pressed) {
     unsigned short v = View::pressedButton_;
+    // Select + L deshace, Select + R rehace
+    if (pressed && (mask & EPBM_SELECT) && (v == EPBM_L || v == EPBM_R)) {
+        std::vector<Snap> &from = (v == EPBM_L) ? undo_ : redo_;
+        std::vector<Snap> &to = (v == EPBM_L) ? redo_ : undo_;
+        if (from.empty()) {
+            message(v == EPBM_L ? "Nada que deshacer" : "Nada que rehacer");
+        } else {
+            Snap now;
+            takeSnap(now);
+            to.push_back(now);
+            restoreSnap(from.back());
+            from.pop_back();
+            message(v == EPBM_L ? "Deshecho" : "Rehecho");
+        }
+        marking_ = false;
+        pasting_ = false;
+        isDirty_ = true;
+        return;
+    }
+    Snap before;
+    takeSnap(before);
+    handleButton(mask, pressed);
+    Snap after;
+    takeSnap(after);
+    if (before.chain == after.chain && before.data != after.data) {
+        undo_.push_back(before);
+        if (undo_.size() > 64) undo_.erase(undo_.begin());
+        redo_.clear();
+    }
+}
+
+void ClipView::handleButton(unsigned short mask, bool pressed) {
+    unsigned short v = View::pressedButton_;
     if (!pressed) {
+        if (pasting_ && !(mask & EPBM_A)) {   // al soltar A queda pegado ahí
+            pasting_ = false;
+            pasteNote();
+        }
         if (!(mask & EPBM_A)) {
             stopAudition();
             if (aPending_ && marking_) {   // A sola con algo marcado: cancela
@@ -657,6 +755,21 @@ void ClipView::ProcessButtonMask(unsigned short mask, bool pressed) {
     if (v != EPBM_A) aPending_ = false;
     if (v != EPBM_B) bPending_ = false;
 
+    if (pasting_) {
+        if (v == EPBM_B) {
+            pasting_ = false;
+            message("Pegado cancelado");
+        } else if (dt || dp) {
+            moveCursor(dt, dp);
+        } else if (v == EPBM_L) {
+            moveCursor(0, -12);
+        } else if (v == EPBM_R) {
+            moveCursor(0, 12);
+        }
+        isDirty_ = true;
+        return;
+    }
+
     if (mask & EPBM_SELECT) {
         if (v == EPBM_B) {   // Select, B: marcar; otra B: pasos completos; otra: todo el clip
             if (!marking_) {
@@ -671,7 +784,11 @@ void ClipView::ProcessButtonMask(unsigned short mask, bool pressed) {
             }
         } else if (v == EPBM_A) {
             if (marking_) duplicateSelection();   // Select, B, A
-            else pasteNote();
+            else if (clipboard_.empty()) message("Nada que pegar");
+            else {                                // mantén A: se ve y se acomoda; al soltar, se pega
+                pasting_ = true;
+                message("Suelta A para pegar (flechas: acomodar, B: cancelar)");
+            }
         } else if (v == EPBM_START) {   // todo: la Song desde la fila de este clip
             stopAudition();
             if (player->IsRunning()) player->Stop();
@@ -916,8 +1033,25 @@ void ClipView::DrawView() {
         if ((int)i == cur) FrameRect(x - 1, y - 1, w + 2, ROW_H, fg, 3, 2);
     }
 
+    // lo que se va a pegar (Select + A sostenido)
+    if (pasting_) {
+        std::vector<Note> add;
+        int dropped;
+        pastePreview(add, dropped);
+        for (size_t k = 0; k < add.size(); k++) {
+            const Note &n = add[k];
+            int r = rowOf(n.pitch);
+            int s0 = n.start - p0, s1 = std::min(16, n.start + n.len - p0);
+            if (r < 0 || s0 < 0 || s0 >= 16) continue;
+            int x = GRID_X + s0 * STEP_W + 1, y = GRID_Y + r * ROW_H + 1;
+            int w = (s1 - s0) * STEP_W - 2;
+            FillRect(x, y, w, ROW_H - 2, Mix(bg, hi, 35), 3);
+            FrameRect(x - 1, y - 1, w + 2, ROW_H, hi, 3, 1);
+        }
+    }
+
     // el cursor: una nota fantasma
-    if ((cur < 0 || notes[cur].pitch != cursorPitch_) && rowOf(cursorPitch_) >= 0) {
+    if (!pasting_ && (cur < 0 || notes[cur].pitch != cursorPitch_) && rowOf(cursorPitch_) >= 0) {
         int r = rowOf(cursorPitch_);
         int x = GRID_X + (cursorStep_ - p0) * STEP_W + 1, y = GRID_Y + r * ROW_H + 1;
         FillRect(x, y, STEP_W - 2, ROW_H - 2, Mix(bg, fg, 30), 3);
@@ -945,7 +1079,8 @@ void ClipView::DrawView() {
     if (marking_)
         drawHelpBar("flechas:marcar;B:copiar;B+A:cortar;A+<>:mover;SEL+A:duplicar;A:salir");
     else
-        drawHelpBar("A:nota;X+<>^v:largo/vel;B+A:cortar;SEL+A:pegar;SEL,B:marcar");
+        drawHelpBar(pasting_ ? "suelta A:pegar;flechas:acomodar;B:cancelar"
+                             : "A:nota;X:largo/vel;B+A:cortar;SEL+A:pegar;SEL,B:marcar;SEL+L:deshacer");
 }
 
 void ClipView::OnPlayerUpdate(PlayerEventType, unsigned int) {

@@ -41,6 +41,17 @@ class ClipView : public View {
     void putNote();
     void cutNote();
     void pasteNote();
+    void pastePreview(std::vector<Note> &add, int &dropped);
+    void handleButton(unsigned short mask, bool pressed);
+    // deshacer: una foto del clip antes de cada cambio
+    struct Snap {
+        int chain;
+        std::vector<unsigned char> data;
+    };
+    void takeSnap(Snap &s);
+    void restoreSnap(const Snap &s);
+    std::vector<Snap> undo_, redo_;
+    bool pasting_;   // Select + A sostenido: se ve dónde va a caer lo copiado
     // marcar bloques, como en Joy2Live
     void selRect(int &s0, int &s1, int &p0, int &p1);
     void selectedNotes(std::vector<Note> &notes, std::vector<int> &idx);
