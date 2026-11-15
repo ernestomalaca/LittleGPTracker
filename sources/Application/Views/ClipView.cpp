@@ -411,8 +411,10 @@ void ClipView::ProcessButtonMask(unsigned short mask, bool pressed) {
             switchView(VT_PHRASE);
         } else if (v == EPBM_A) {
             pasteNote();
-        } else if (v == EPBM_START) {
+        } else if (v == EPBM_START) {   // todo: la Song desde la fila de este clip
+            stopAudition();
             if (player->IsRunning()) player->Stop();
+            else player->OnSongStartButton(0, SONG_CHANNEL_COUNT - 1, false, false);
         }
         isDirty_ = true;
         return;
@@ -450,6 +452,15 @@ void ClipView::ProcessButtonMask(unsigned short mask, bool pressed) {
         else if (v == EPBM_R) moveNote(0, 12);
         isDirty_ = true;
         return;
+    }
+    if (dt && cursorStep_ < total()) {   // sobre una nota: brinca al terminar (o a su inicio)
+        std::vector<Note> notes;
+        readNotes(notes);
+        int i = noteAt(notes, cursorStep_);
+        if (i >= 0 && notes[i].pitch == cursorPitch_) {
+            if (dt > 0) dt = notes[i].start + notes[i].len - cursorStep_;
+            else if (cursorStep_ > notes[i].start) dt = notes[i].start - cursorStep_;
+        }
     }
     if (dt || dp) moveCursor(dt, dp);
     if (v == EPBM_L) moveCursor(0, -12);
@@ -588,7 +599,7 @@ void ClipView::DrawView() {
         FillRect(GRID_X + s * STEP_W + 10, VEL_Y + VEL_H - 4 - h, STEP_W - 20, h, c, 2);
     }
 
-    drawHelpBar("A:nota;A+flechas:mover;X+flechas:largo/vel;B+A:borrar;L/R:octava");
+    drawHelpBar("A:nota;A+flechas:mover;X+flechas:largo/vel;B+A:borrar;SEL+START:todo");
 }
 
 void ClipView::OnPlayerUpdate(PlayerEventType, unsigned int) {
