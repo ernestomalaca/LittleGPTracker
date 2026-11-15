@@ -210,6 +210,7 @@ public:
 	UIPadField(GUIPoint &p,Variable &v,Kind k,SampleInstrument *si,int min,int max,int xo,int yo)
 		:UIIntVarField(p,v,"",min,max,xo,yo),kind_(k),si_(si) {}
 	virtual void Draw(GUIWindow &w,int offset=0) {
+		if (kind_==PAD) return ;   // es la rejilla: la dibuja InstrumentView
 		GUITextProperties props ;
 		GUIPoint position=GetPosition() ;
 		position._y+=offset ;
@@ -433,7 +434,7 @@ void InstrumentView::fillSampleParameters() {
 	// el Sampler deja dos renglones más (presets y pestañas de envolvente):
 	// la onda es un poco más baja
 	int row=(!audioMode_ && !sync)?8:10 ;
-	if (!audioMode_ && !sync && instrument->IsKit()) row=12 ;   // kit: la rejilla de pads es más alta
+	if (!audioMode_ && !sync && instrument->IsKit()) row=2 ;   // kit: el nombre arriba y abajo la rejilla
 	labelCount_=0 ;
 	Variable *v ;
 	UIIntVarField *f1 ;
@@ -502,22 +503,18 @@ void InstrumentView::fillSampleParameters() {
 		int mode=instrument->GetSimpler(SIP_S_MODE) ;
 		gaps=4 ;
 		if (kitMode_) {
-			// trk2als: kit: arriba la rejilla de pads; aquí el pad elegido
+			// trk2als: kit: la rejilla de arriba es el editor (un solo campo:
+			// las flechas van de pad en pad); abajo, lo de todo el kit
 			loadPadVars() ;
-			LABEL("PAD") ;
-			ADD(new UIPadField(AT(L),padSelVar_,UIPadField::PAD,instrument,0,15,1,4)) ;
-			row++ ;
-			ADD(new UIPadField(AT(L),padSmpVar_,UIPadField::SAMPLE,instrument,-1,sp->GetNameListSize()-1,1,16)) ;
-			row++ ;
-			ADD(new UIIntVarField(AT(L),padGainVar_,"volume: %+ddB",-36,12,1,6)) ;
-			ADD(new UIIntVarField(AT(R),padPanVar_,"pan: %+d",-50,50,1,10)) ;
-			row++ ;
-			ADD(new UIIntVarField(AT(L),padTuneVar_,"tune: %+dst",-24,24,1,12)) ;
-			ADD(new UIIntVarField(AT(R),padStartVar_,"start: %d%%",0,99,1,10)) ;
-			row++ ;
-			ADD(new UIPadField(AT(L),padDecayVar_,UIPadField::DECAY,instrument,0,5000,10,100)) ;
-			ADD(new UIPadField(AT(R),padChokeVar_,UIPadField::CHOKE,instrument,0,16,1,4)) ;
-			row++ ;
+			if (lastFocusID_==0 || (isPadField(lastFocusID_) && lastFocusID_!=IV_PADSEL)) lastFocusID_=IV_PADSEL ;
+			{
+				int keep=row ;
+				row=7 ;
+				ADD(new UIPadField(AT(L),padSelVar_,UIPadField::PAD,instrument,0,15,1,4)) ;
+				row=keep ;
+			}
+			row=15 ;
+			gaps=1 ;
 			LABEL("KIT") ;
 			v=instrument->FindVariable(SIP_S_VOL) ;
 			ADD(new UIIntVarField(AT(L),*v,"volume: %+ddB",-36,6,1,6)) ;
@@ -1291,7 +1288,7 @@ void InstrumentView::drawWaveform() {
 	const char *help=helpText_?helpText_:"A+<>:valor;A+^v:valor x16;SEL+<>:pantalla" ;
 	if (kitMode_ && GetFocus() && !GetFocus()->IsStatic() &&
 	    isPadField(((UIIntVarField *)GetFocus())->GetVariableID()))
-		help="X+^v vol;X+<> decay;Y+^v tono;Y+<> pan;L+<> inicio;L+^v choke" ;
+		help="A:oir;AA:sample;X:vol/decay;Y:tono/pan;L:inicio/choke" ;
 	if (kitMode_ && GetFocus() && !GetFocus()->IsStatic() &&
 	    ((UIIntVarField *)GetFocus())->GetVariableID()==SIP_SAMPLE)
 		help="A:cambiar de kit;B+A:vaciar el instrumento" ;
@@ -1314,7 +1311,7 @@ void InstrumentView::drawWaveformBody() {
 		DrawText(16,labelRow_[i]*16+4,labelText_[i],dim2,0) ;
 	}
 
-	const int X=16, Y=34, W=WF_BARS*8, H=kitMode_?144:(simplerView_?80:112) ;
+	const int X=16, Y=kitMode_?56:34, W=WF_BARS*8, H=kitMode_?144:(simplerView_?80:112) ;
 	FillRect(X-8,Y-4,W+16,H+8,Mix(bg,fg,9),8) ;
 
 	if (kitMode_) {   // trk2als: kit: la rejilla de pads
@@ -2432,6 +2429,24 @@ bool InstrumentView::processKit(unsigned short mask) {
 	SampleInstrument *si=(SampleInstrument *)current_ ;
 	int note=padNote() ;
 	if (padShortcut(mask)) return true ;
+	if (id==IV_PADSEL) {   // en la rejilla: las flechas (con o sin A) van de pad en pad
+		const unsigned short arrows=EPBM_UP|EPBM_DOWN|EPBM_LEFT|EPBM_RIGHT ;
+		unsigned short dir=mask&arrows ;
+		if (mask!=EPBM_A) viewMode_=VM_NORMAL ;
+		if (dir && (mask&~(arrows|EPBM_A))==0) {
+			int sel=padSelVar_.GetInt(), r=sel/4, c=sel%4 ;
+			if (dir==EPBM_LEFT && c>0) c-- ;
+			else if (dir==EPBM_RIGHT && c<3) c++ ;
+			else if (dir==EPBM_UP && r<3) r++ ;        // el pad 1 está abajo
+			else if (dir==EPBM_DOWN && r>0) r-- ;
+			else if (mask==EPBM_UP || mask==EPBM_DOWN) return false ;   // la orilla: al campo de arriba / abajo
+			else return true ;
+			padSelVar_.SetInt(r*4+c) ;
+			kitSync() ;   // el pad nuevo suena
+			isDirty_=true ;
+			return true ;
+		}
+	}
 	bool whole=(id==IV_PADSEL || id==IV_PADSMP) ;
 	if (mask==EPBM_B && whole) {   // copiar
 		padClipWav_=si->PadSample(note) ;
@@ -2474,7 +2489,7 @@ bool InstrumentView::processKit(unsigned short mask) {
 		return true ;
 	}
 	if (mask==EPBM_A) {
-		if (id==IV_PADSMP && viewMode_==VM_NEW) {   // A,A: traer un sample de la samplelib
+		if ((id==IV_PADSMP || id==IV_PADSEL) && viewMode_==VM_NEW) {   // A,A: otro sample de la samplelib
 			openPadBrowser() ;
 			return true ;
 		}
@@ -2482,7 +2497,7 @@ bool InstrumentView::processKit(unsigned short mask) {
 			padAPending_=true ;
 			return false ;
 		}
-		viewMode_=(id==IV_PADSMP)?VM_NEW:VM_NORMAL ;
+		viewMode_=(id==IV_PADSMP || id==IV_PADSEL)?VM_NEW:VM_NORMAL ;
 		previewPad() ;
 		return true ;
 	}
@@ -2506,7 +2521,7 @@ void InstrumentView::OnPadImport(bool ok) {
 		si->SetZones(si->FindVariable(SIP_S_ZONES)->GetString()) ;
 	}
 	padBusy_=false ;
-	lastFocusID_=IV_PADSMP ;
+	lastFocusID_=IV_PADSEL ;
 	onInstrumentChange() ;
 	previewPad() ;
 	isDirty_=true ;
@@ -2521,6 +2536,8 @@ void InstrumentView::drawPadGrid(SampleInstrument *si,int X,int Y,int W,int H) {
 	GUIColor hi2=ColorOf(CD_HILITE2) ;
 	int base=si->KitBase() ;
 	int sel=padSelVar_.GetInt() ;
+	bool onGrid=GetFocus() && !GetFocus()->IsStatic() &&
+	            ((UIIntVarField *)GetFocus())->GetVariableID()==IV_PADSEL ;
 	const int gap=4 ;
 	int cw=(W-3*gap)/4, ch=(H-3*gap)/4 ;
 	for (int r=0;r<4;r++) {
@@ -2531,17 +2548,30 @@ void InstrumentView::drawPadGrid(SampleInstrument *si,int X,int Y,int W,int H) {
 			std::string name=si->PadName(note) ;
 			bool on=(idx==sel) ;
 			PadParams p=si->GetPad(note) ;
-			GUIColor box=on?hi2:(name.empty()?Mix(bg,fg,12):Mix(bg,hi,(p.choke?45:30))) ;
+			GUIColor box=name.empty()?Mix(bg,fg,12):Mix(bg,hi,(p.choke?45:30)) ;
+			if (on && onGrid) box=hi2 ;
 			FillRect(x,y,cw,ch,box,4) ;
-			GUIColor tc=on?bg:(name.empty()?Mix(bg,fg,40):fg) ;
+			if (on && !onGrid) FrameRect(x,y,cw,ch,hi2,4,2) ;   // elegido, pero el cursor está abajo
+			GUIColor tc=(on && onGrid)?bg:(name.empty()?Mix(bg,fg,40):fg) ;
 			std::string t=name.empty()?padNoteName(note):name ;
 			if (t.size()>16) t=t.substr(0,16) ;
 			DrawText(x+6,y+(ch-12)/2,t.c_str(),tc,0) ;
 		}
 	}
+	// debajo de la rejilla: el pad elegido (su sample y sus ajustes)
 	int note=base+sel ;
 	std::string wav=si->PadSample(note) ;
+	PadParams p=si->GetPad(note) ;
+	char l1[96], l2[96], dec[16], chk[12] ;
+	snprintf(l1,sizeof(l1),"pad %d  %s  %s",sel+1,padNoteName(note).c_str(),wav.empty()?"(vacio: A abre el navegador)":wav.c_str()) ;
+	if (p.decay) snprintf(dec,sizeof(dec),"%dms",p.decay) ; else strcpy(dec,"todo") ;
+	if (p.choke) snprintf(chk,sizeof(chk),"%d",p.choke) ; else strcpy(chk,"no") ;
+	snprintf(l2,sizeof(l2),"vol %+ddB  tono %+d  pan %+d  decay %s  choke %s  inicio %d%%",
+	         p.gain,p.tune,p.pan,dec,chk,p.start) ;
+	int ty=Y+H+10 ;
+	DrawText(X,ty,l1,fg,0) ;
+	if (!wav.empty()) DrawText(X,ty+16,l2,Mix(bg,fg,70),0) ;
 	char info[96] ;
-	snprintf(info,sizeof(info),"pad %d %s  %s",sel+1,padNoteName(note).c_str(),wav.empty()?"vacio":wav.c_str()) ;
+	snprintf(info,sizeof(info),"pad %d %s",sel+1,padNoteName(note).c_str()) ;
 	topInfo_=info ;
 }

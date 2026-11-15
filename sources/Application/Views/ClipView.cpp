@@ -938,6 +938,23 @@ void ClipView::rampVel(int d) {
     std::vector<Note> notes;
     std::vector<int> idx;
     if (!targets(notes, idx)) return;
+    if (marking_) {   // con algo marcado: la rampa va sobre las notas marcadas, en el tiempo
+        int t0 = 1 << 30, t1 = -1;
+        for (size_t k = 0; k < idx.size(); k++) {
+            t0 = std::min(t0, notes[idx[k]].start);
+            t1 = std::max(t1, notes[idx[k]].start);
+        }
+        if (t1 <= t0) { message("Rampa: marca notas en distintos pasos"); return; }
+        for (size_t k = 0; k < idx.size(); k++) {
+            Note &n = notes[idx[k]];
+            double pos = double(n.start - t0) / (t1 - t0);        // 0 al inicio, 1 al final
+            double f = d > 0 ? 1 - 0.15 * (1 - pos) : 1 - 0.15 * pos;   // → crece, ← se apaga
+            n.vel = std::max(1, std::min(127, int(n.vel * f + 0.5)));
+        }
+        writeNotes(notes);
+        message(d > 0 ? "Rampa: crece" : "Rampa: se apaga");
+        return;
+    }
     int r = 0, sub = 0;
     for (size_t k = 0; k < idx.size(); k++) {
         Note &n = notes[idx[k]];
