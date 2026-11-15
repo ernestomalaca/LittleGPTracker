@@ -18,10 +18,11 @@ SDL_LIBS := $(shell pkg-config sdl2 --libs)
 define adjustdepends
 endef
 
-# optimization
-OPT_FLAGS := -O3
+# optimization (trk2als: antes '-g' pisaba al -O3 y todo corría sin optimizar;
+# -g se queda para que crash.log tenga nombres)
+OPT_FLAGS := -O2 -g
 #For debugging
-OPT_FLAGS := -g
+#OPT_FLAGS := -g
 INCLUDES := $(SDL_CFLAGS) -I$(PWD)/../sources
 CFLAGS := $(OPT_FLAGS) $(DEFINES) $(INCLUDES) -Wall
 CXXFLAGS := $(CFLAGS) -std=gnu++03

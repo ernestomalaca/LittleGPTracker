@@ -233,6 +233,7 @@ void ImportSampleDialog::ProcessButtonMask(unsigned short mask,bool pressed) {
 	if (mask&EPBM_B) {  
 		if (mask&EPBM_UP) warpToNextSample(-LIST_SIZE) ;
 		if (mask&EPBM_DOWN) warpToNextSample(LIST_SIZE) ;
+		if (mask==EPBM_B) endPreview() ;   // trk2als: B solo: ya oí suficiente
 	} else if (mask&EPBM_A) {
 		// Allow browse preview
 		if (mask&EPBM_UP) warpToNextSample(-1) ;

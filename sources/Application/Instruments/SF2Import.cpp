@@ -72,6 +72,43 @@ static void mergeZones(std::vector<SF2Zone> &zones) {
 	zones.swap(out) ;
 }
 
+// ¿el loop calza con la nota? Un loop corto (pocos ciclos) fija el tono del
+// sonido sostenido: si no dura un número entero de ciclos de la raíz, la cola
+// sale en otro tono. Pasa en .sf2 muy comprimidos, como el sample agudo de la
+// marimba: 13 muestras de loop para un ciclo de 13.5 (70 cents arriba)
+static bool badLoop(const SF2Zone &z) {
+	if (!z.loop) return false ;
+	float hz=440.0f*powf(2.0f,(z.root+z.cents/100.0f-69)/12.0f) ;
+	float period=z.rate/hz ;
+	float cycles=(z.loopEnd-z.loopStart)/period ;
+	if (cycles>4) return false ;   // loop largo: no fija el tono
+	float n=floorf(cycles+0.5f) ;
+	if (n<1) n=1 ;
+	float cents=1200.0f*log2f(n/cycles) ;
+	return fabsf(cents)>30.0f ;
+}
+
+// las teclas de una zona con el loop desafinado las toca la zona vecina que
+// suena bien (la más cercana; si hay dos, la de abajo)
+static void fixBadLoops(std::vector<SF2Zone> &zones) {
+	std::vector<bool> bad(zones.size()) ;
+	for (size_t i=0;i<zones.size();i++) bad[i]=badLoop(zones[i]) ;
+	for (size_t i=0;i<zones.size();i++) {
+		if (!bad[i]) continue ;
+		int best=-1, bestD=1000 ;
+		for (size_t j=0;j<zones.size();j++) {
+			if (bad[j]) continue ;
+			int d=(zones[j].hi<zones[i].lo)?zones[i].lo-zones[j].hi:(zones[j].lo>zones[i].hi)?zones[j].lo-zones[i].hi:0 ;
+			if (d<bestD) { bestD=d ; best=int(j) ; }
+		}
+		if (best<0) continue ;
+		int lo=zones[i].lo, hi=zones[i].hi ;
+		zones[i]=zones[best] ;
+		zones[i].lo=lo ;
+		zones[i].hi=hi ;
+	}
+}
+
 static const SF2Zone *zoneFor(const std::vector<SF2Zone> &zones,int note) {
 	const SF2Zone *best=0 ;
 	int bestD=1000 ;
@@ -89,6 +126,7 @@ bool SF2Import(const char *sf2Path,int presetIndex,SampleInstrument *si,std::str
 	const SF2Preset &preset=sf.Presets()[presetIndex] ;
 	std::vector<SF2Zone> zones ;
 	if (!sf.Zones(preset.index,zones)) { message="el instrumento no trae samples" ; return false ; }
+	fixBadLoops(zones) ;
 	mergeZones(zones) ;
 	SamplePool *pool=SamplePool::GetInstance() ;
 	std::string base=safeName(preset.name) ;
@@ -144,6 +182,20 @@ bool SF2Import(const char *sf2Path,int presetIndex,SampleInstrument *si,std::str
 		si->FindVariable(SIP_S_REL)->SetInt(clampi(c3->releaseMs,0,10000)) ;
 		// la atenuación del .sf2, como la aplican los reproductores comunes (x0.4)
 		si->FindVariable(SIP_S_VOL)->SetInt(clampi(-0.4f*c3->attenDb,-36,6)) ;
+		// filtro pasa-bajos y su envolvente (muchos .sf2 dependen de él: tapa
+		// el zumbido de loops muy cortos, como en la marimba)
+		si->FindVariable(SIP_S_FVER)->SetInt(1) ;
+		si->FindVariable(SIP_S_FEVER)->SetInt(1) ;
+		si->FindVariable(SIP_S_FTYPE)->SetInt(0) ;   // LP
+		si->FindVariable(SIP_S_FHZ)->SetInt(clampi(c3->filterHz,30,22000)) ;
+		si->FindVariable(SIP_S_FQ)->SetInt(clampi(c3->filterQDb*4.0f,0,100)) ;   // 25 dB -> 100 %
+		si->FindVariable(SIP_S_FST)->SetInt(clampi(c3->filterEnvSt,-72,72)) ;
+		si->FindVariable(SIP_S_FATK)->SetInt(clampi(c3->fAttackMs,0,5000)) ;
+		si->FindVariable(SIP_S_FDEC)->SetInt(clampi(c3->fDecayMs,0,10000)) ;
+		si->FindVariable(SIP_S_FSUS)->SetInt(clampi(c3->fSustainDb,-60,0)) ;
+		si->FindVariable(SIP_S_FREL)->SetInt(clampi(c3->fReleaseMs,0,10000)) ;
+		si->FindVariable(SIP_S_FKEY)->SetInt(0) ;
+		si->FindVariable(SIP_S_FVEL)->SetInt(0) ;
 	}
 	int idx=pool->IndexOf(firstName.c_str()) ;
 	si->SetZones(list) ;

@@ -229,7 +229,7 @@ int Project::AddTrack(TrackType type) {
             unsigned char c = data[i];
             if (c < MAX_SAMPLEINSTRUMENT_COUNT && IsAudioChannel(i % SONG_CHANNEL_COUNT)) used[c] = true;
         }
-        for (int i = 0; i < MAX_SAMPLEINSTRUMENT_COUNT && owner < 0; i++) {
+        for (int i = 0; i < AUDIO_CLIP_BASE && owner < 0; i++) {   // los de arriba son loops
             if (!used[i]) owner = i;
         }
         if (owner >= 0) GetInstrumentBank()->GetInstrument(owner)->Purge();   // limpio

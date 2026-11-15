@@ -79,6 +79,7 @@ class SongView : public View {
     void placeAudio();
     void stepAudio(int dir);
     bool isLoadedClip(int i);
+    std::string clipLabel(unsigned char id);
     std::vector<unsigned char> audioClips();
     int newSlotCell_;   // celda que muestra '+' mientras se tiene A
     void OnAudioPicked(bool imported);

@@ -29,6 +29,11 @@ struct SF2Zone {
 	int rate ;
 	float attenDb ;
 	float attackMs,holdMs,decayMs,sustainDb,releaseMs ;
+	// filtro pasa-bajos y su envolvente (la de modulación)
+	float filterHz ;     // corte
+	float filterQDb ;    // resonancia
+	float filterEnvSt ;  // cuánto lo abre la envolvente, en semitonos
+	float fAttackMs,fDecayMs,fSustainDb,fReleaseMs ;
 } ;
 
 class SF2File {

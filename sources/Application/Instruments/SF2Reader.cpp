@@ -12,6 +12,8 @@
 // generadores que usamos (numeración de la especificación SoundFont 2.01)
 enum {
 	G_START=0, G_END=1, G_STARTLOOP=2, G_ENDLOOP=3, G_STARTCOARSE=4,
+	G_FILTERFC=8, G_FILTERQ=9, G_MODENVTOFC=11,
+	G_MODATTACK=26, G_MODHOLD=27, G_MODDECAY=28, G_MODSUSTAIN=29, G_MODRELEASE=30,
 	G_ENDCOARSE=12, G_PAN=17, G_ATTACK=34, G_HOLD=35, G_DECAY=36,
 	G_SUSTAIN=37, G_RELEASE=38, G_INSTRUMENT=41, G_KEYRANGE=43,
 	G_VELRANGE=44, G_STARTLOOPCOARSE=45, G_ATTEN=48, G_ENDLOOPCOARSE=50,
@@ -228,6 +230,27 @@ bool SF2File::Zones(int presetIndex,std::vector<SF2Zone> &out) {
 			z.attackMs=ms[0] ; z.holdMs=ms[1] ; z.decayMs=ms[2] ; z.releaseMs=ms[3] ;
 			int sus=iz.v[G_SUSTAIN]+(padd.has[G_SUSTAIN]?padd.v[G_SUSTAIN]:0) ;
 			z.sustainDb=-sus/10.0f ;
+			// filtro: corte en cents absolutos (13500 = abierto), Q en cB
+			int fc=(iz.has[G_FILTERFC]?iz.v[G_FILTERFC]:13500)+(padd.has[G_FILTERFC]?padd.v[G_FILTERFC]:0) ;
+			z.filterHz=8.176f*powf(2.0f,fc/1200.0f) ;
+			int q=(iz.has[G_FILTERQ]?iz.v[G_FILTERQ]:0)+(padd.has[G_FILTERQ]?padd.v[G_FILTERQ]:0) ;
+			z.filterQDb=q/10.0f ;
+			int fenv=(iz.has[G_MODENVTOFC]?iz.v[G_MODENVTOFC]:0)+(padd.has[G_MODENVTOFC]?padd.v[G_MODENVTOFC]:0) ;
+			z.filterEnvSt=fenv/100.0f ;
+			int mtc[4]={G_MODATTACK,G_MODHOLD,G_MODDECAY,G_MODRELEASE} ;
+			float mms[4] ;
+			for (int k=0;k<4;k++) {
+				int t=iz.has[mtc[k]]?iz.v[mtc[k]]:-12000 ;
+				if (padd.has[mtc[k]]) t+=padd.v[mtc[k]] ;
+				mms[k]=tcToMs(t) ;
+			}
+			z.fAttackMs=mms[0] ;
+			z.fDecayMs=mms[1]+mms[2] ;
+			z.fReleaseMs=mms[3] ;
+			// sostenido de la envolvente de modulación: décimas de % que baja
+			int msus=iz.v[G_MODSUSTAIN]+(padd.has[G_MODSUSTAIN]?padd.v[G_MODSUSTAIN]:0) ;
+			float level=1.0f-msus/1000.0f ;
+			z.fSustainDb=(level<=0.001f)?-60.0f:20.0f*log10f(level) ;
 			Cand c ;
 			c.z=z ;
 			c.velLo=velLo ;

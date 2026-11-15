@@ -118,7 +118,7 @@ std::string SongView::cellName() {
         std::string n = instr ? instr->GetName() : "";
         size_t dot = n.rfind('.');
         if (dot != std::string::npos) n = n.substr(0, dot);
-        snprintf(buf, sizeof(buf), "A%02X %s", d, n.c_str());
+        snprintf(buf, sizeof(buf), "%s %s", clipLabel(d).c_str(), n.c_str());
         return buf;
     }
     const std::string &cn = viewData_->song_->GetChainName(d);
@@ -176,10 +176,19 @@ unsigned char SongView::freeClip() {
         int o = viewData_->project_->GetTrackInstrument(ch);
         if (o >= 0 && o < MAX_SAMPLEINSTRUMENT_COUNT) used[o] = true;
     }
-    for (int i = 0; i < MAX_SAMPLEINSTRUMENT_COUNT; i++) {
+    for (int i = AUDIO_CLIP_BASE; i < MAX_SAMPLEINSTRUMENT_COUNT; i++) {
         if (!used[i] && !isLoadedClip(i)) return (unsigned char)i;
     }
     return 0xFF;
+}
+
+// trk2als: cómo se ve un loop: A00 es el instrumento AUDIO_CLIP_BASE; los de
+// proyectos de antes (más abajo) en minúscula
+std::string SongView::clipLabel(unsigned char id) {
+    char buf[8];
+    if (id >= AUDIO_CLIP_BASE) snprintf(buf, sizeof(buf), "A%02X", id - AUDIO_CLIP_BASE);
+    else snprintf(buf, sizeof(buf), "a%02X", id);
+    return buf;
 }
 
 // trk2als: ¿el instrumento es un loop cargado desde la Song (aunque ya no
@@ -1671,7 +1680,7 @@ void SongView::DrawView() {
                 int cellIdx = int(data - 1 - viewData_->song_->data_);
                 if (cellIdx == newSlotCell_) strcpy(clip, "A+ ");   // loop nuevo, al soltar A
                 else if (d == 0xFF) strcpy(clip, "---");
-                else snprintf(clip, sizeof(clip), "A%02X", d);
+                else snprintf(clip, sizeof(clip), "%s", clipLabel(d).c_str());
                 DrawString(pos._x, pos._y, clip, props);
             } else if (d == 0xFF) {
                 DrawString(pos._x, pos._y, "--", props);
