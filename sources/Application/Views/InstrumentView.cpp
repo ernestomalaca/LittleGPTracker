@@ -527,8 +527,18 @@ void InstrumentView::fillSampleParameters() {
 			row++ ;
 		}
 		// presets: A abre la lista o el nombre
-		ADD(new UIIntVarField(AT(L),presetLoadVar_,"> cargar preset",0,0,1,1)) ;
-		ADD(new UIIntVarField(AT(R),presetSaveVar_,"> guardar preset",0,0,1,1)) ;
+		// el instrumento de una pista se cambia desde su cabecera: aquí solo se
+		// guarda (en proyectos de antes, sin dueño, también se carga)
+		bool owned=false ;
+		for (int ch=0;ch<SONG_CHANNEL_COUNT;ch++) {
+			if (viewData_->project_->GetTrackInstrument(ch)==i) owned=true ;
+		}
+		if (owned) {
+			ADD(new UIIntVarField(AT(L),presetSaveVar_,"> guardar preset",0,0,1,1)) ;
+		} else {
+			ADD(new UIIntVarField(AT(L),presetLoadVar_,"> cargar preset",0,0,1,1)) ;
+			ADD(new UIIntVarField(AT(R),presetSaveVar_,"> guardar preset",0,0,1,1)) ;
+		}
 		row++ ;
 		return ;
 	}
@@ -578,8 +588,18 @@ void InstrumentView::fillSampleParameters() {
 		ADD(new UIIntVarField(AT(R),*v,"fade: %s",0,1,1,1)) ;
 		row++ ;
 		row++ ;
-		ADD(new UIIntVarField(AT(L),presetLoadVar_,"> cargar preset",0,0,1,1)) ;
-		ADD(new UIIntVarField(AT(R),presetSaveVar_,"> guardar preset",0,0,1,1)) ;
+		// el instrumento de una pista se cambia desde su cabecera: aquí solo se
+		// guarda (en proyectos de antes, sin dueño, también se carga)
+		bool owned=false ;
+		for (int ch=0;ch<SONG_CHANNEL_COUNT;ch++) {
+			if (viewData_->project_->GetTrackInstrument(ch)==i) owned=true ;
+		}
+		if (owned) {
+			ADD(new UIIntVarField(AT(L),presetSaveVar_,"> guardar preset",0,0,1,1)) ;
+		} else {
+			ADD(new UIIntVarField(AT(L),presetLoadVar_,"> cargar preset",0,0,1,1)) ;
+			ADD(new UIIntVarField(AT(R),presetSaveVar_,"> guardar preset",0,0,1,1)) ;
+		}
 		row++ ;
 		return ;
 	}
