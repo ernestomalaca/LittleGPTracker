@@ -20,6 +20,7 @@ class ClipView : public View {
     virtual void OnPlayerUpdate(PlayerEventType, unsigned int tick = 0);
     virtual void OnFocus();
     virtual bool WantsRawButtons() { return true; }
+    virtual void AnimationUpdate();
 
     struct Note {
         int start, len, pitch, vel, instr;
@@ -40,6 +41,19 @@ class ClipView : public View {
     void putNote();
     void cutNote();
     void pasteNote();
+    // marcar bloques, como en Joy2Live
+    void selRect(int &s0, int &s1, int &p0, int &p1);
+    void selectedNotes(std::vector<Note> &notes, std::vector<int> &idx);
+    void copySelection(bool cut);
+    void moveSelection(int dt, int dir, int octave);
+    void duplicateSelection();
+    void placeNotes(std::vector<Note> &notes, std::vector<Note> &add);
+    // escala del proyecto (como Scale Awareness de Live)
+    int stepPitch(int pitch, int dir);
+    int degree(int pitch);
+    int fromDegree(int d);
+    int shiftPitch(int pitch, int fromRef, int toRef);
+    void message(const char *fmt, int n = -1);
     void moveNote(int dt, int dp);
     void changeLength(int d);
     void changeVelocity(int d);
@@ -56,8 +70,14 @@ class ClipView : public View {
     bool aUsed_, xUsed_, bUsed_;
     bool auditioning_;
     int playStep_;
-    bool hasClip_;
-    Note clip_;             // lo que cortó B + A
+    std::vector<Note> clipboard_;   // lo copiado o cortado
+    int copyStep_, copyPitch_;      // dónde estaba el cursor al copiar
+    bool marking_;
+    int markLevel_;                 // 1 libre, 2 pasos completos, 3 todo el clip
+    int anchorStep_, anchorPitch_;
+    bool aPending_, bPending_;      // A / B tocados solos (al soltar)
+    std::string msg_;
+    unsigned long msgTime_;
     int chainShown_;
 };
 

@@ -162,6 +162,13 @@ ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
         new UIIntVarField(position, *v, "Scale: %s", 0, scaleCount - 1, 1, 10);
     T_SimpleList<UIField>::Insert(field);
 
+    // trk2als: la raíz, como en Live
+    v = project_->FindVariable(VAR_SCALEROOT);
+    if (v->GetInt() < 0) v->SetInt(0);
+    position._y += 1;
+    field = new UIIntVarField(position, *v, "Root: %s", 0, 11, 1, 12);
+    T_SimpleList<UIField>::Insert(field);
+
     position._y += 2;
     UIActionField *a1 =
         new UIActionField("Compact Sequencer", ACTION_PURGE, position);

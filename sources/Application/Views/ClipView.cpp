@@ -2,6 +2,8 @@
 #include "Application/Player/Player.h"
 #include "Application/Model/Project.h"
 #include "Application/Instruments/CommandList.h"
+#include "Application/Model/Scale.h"
+#include "System/System/System.h"
 #include <algorithm>
 #include <stdio.h>
 #include <string.h>
@@ -36,7 +38,12 @@ ClipView::ClipView(GUIWindow &w, ViewData *viewData) : View(w, viewData) {
     aUsed_ = xUsed_ = bUsed_ = false;
     auditioning_ = false;
     playStep_ = -1;
-    hasClip_ = false;
+    copyStep_ = copyPitch_ = 0;
+    marking_ = false;
+    markLevel_ = 1;
+    anchorStep_ = anchorPitch_ = 0;
+    aPending_ = bPending_ = false;
+    msgTime_ = 0;
     chainShown_ = -1;
 }
 
@@ -226,26 +233,224 @@ void ClipView::cutNote() {
     std::vector<Note> notes;
     readNotes(notes);
     int i = noteAt(notes, cursorStep_);
-    if (i < 0) return;
-    clip_ = notes[i];
-    hasClip_ = true;
+    if (i < 0) { message("Nada que cortar"); return; }
+    clipboard_.clear();
+    clipboard_.push_back(notes[i]);
+    copyStep_ = notes[i].start;
+    copyPitch_ = notes[i].pitch;
     // la nota de antes no se alarga: termina donde empezaba esta
     notes.erase(notes.begin() + i);
+    writeNotes(notes);
+    message("Nota cortada");
+}
+
+// mete notas nuevas: las que empiezan donde ya había una la reemplazan y la
+// que sonaba encima se corta donde empieza la nueva
+void ClipView::placeNotes(std::vector<Note> &notes, std::vector<Note> &add) {
+    for (size_t k = 0; k < add.size(); k++) {
+        const Note &n = add[k];
+        for (size_t i = 0; i < notes.size(); i++) {
+            if (notes[i].start < n.start && notes[i].start + notes[i].len > n.start)
+                notes[i].len = n.start - notes[i].start;
+        }
+        for (size_t i = 0; i < notes.size();) {
+            if (notes[i].start == n.start) notes.erase(notes.begin() + i);
+            else i++;
+        }
+        notes.push_back(n);
+    }
     writeNotes(notes);
 }
 
 void ClipView::pasteNote() {
-    if (!hasClip_) return;
-    if (pages() == 0 && !addPage()) return;
+    if (clipboard_.empty()) { message("Nada que pegar"); return; }
+    std::vector<Note> add;
+    for (size_t k = 0; k < clipboard_.size(); k++) {
+        Note n = clipboard_[k];
+        n.start = cursorStep_ + (n.start - copyStep_);
+        n.pitch = shiftPitch(n.pitch, copyPitch_, cursorPitch_);
+        if (n.start < 0 || n.pitch < 0 || n.pitch > MAX_PITCH) continue;
+        add.push_back(n);
+    }
+    int last = 0;
+    for (size_t k = 0; k < add.size(); k++) last = std::max(last, add[k].start + 1);
+    while (total() < last && addPage()) {}
     std::vector<Note> notes;
     readNotes(notes);
-    int i = noteAt(notes, cursorStep_);
-    if (i >= 0 && notes[i].start < cursorStep_) notes[i].len = cursorStep_ - notes[i].start;
-    Note n = clip_;
-    n.start = cursorStep_;
-    n.pitch = cursorPitch_;
-    notes.push_back(n);
-    writeNotes(notes);
+    placeNotes(notes, add);
+    message(add.size() == 1 ? "Nota pegada" : "%d notas pegadas", (int)add.size());
+}
+
+/************************************************************
+ bloques
+ ************************************************************/
+
+void ClipView::selRect(int &s0, int &s1, int &p0, int &p1) {
+    s0 = std::min(anchorStep_, cursorStep_);
+    s1 = std::max(anchorStep_, cursorStep_);
+    p0 = std::min(anchorPitch_, cursorPitch_);
+    p1 = std::max(anchorPitch_, cursorPitch_);
+    if (markLevel_ >= 2) { p0 = 0; p1 = MAX_PITCH; }
+    if (markLevel_ >= 3) { s0 = 0; s1 = std::max(0, total() - 1); }
+}
+
+void ClipView::selectedNotes(std::vector<Note> &notes, std::vector<int> &idx) {
+    readNotes(notes);
+    idx.clear();
+    int s0, s1, p0, p1;
+    selRect(s0, s1, p0, p1);
+    for (size_t i = 0; i < notes.size(); i++) {
+        if (notes[i].start >= s0 && notes[i].start <= s1 && notes[i].pitch >= p0 &&
+            notes[i].pitch <= p1)
+            idx.push_back(int(i));
+    }
+}
+
+void ClipView::copySelection(bool cut) {
+    std::vector<Note> notes;
+    std::vector<int> idx;
+    selectedNotes(notes, idx);
+    marking_ = false;
+    if (idx.empty()) { message("Nada marcado"); return; }
+    clipboard_.clear();
+    for (size_t k = 0; k < idx.size(); k++) clipboard_.push_back(notes[idx[k]]);
+    copyStep_ = cursorStep_;
+    copyPitch_ = cursorPitch_;
+    if (cut) {
+        for (int k = int(idx.size()) - 1; k >= 0; k--) notes.erase(notes.begin() + idx[k]);
+        writeNotes(notes);
+    }
+    int n = (int)idx.size();
+    if (cut) message(n == 1 ? "Nota cortada" : "%d notas cortadas", n);
+    else message(n == 1 ? "Nota copiada" : "%d notas copiadas", n);
+}
+
+// A + flechas con un bloque marcado: lo mueve (dir = semitono o grado de la escala)
+void ClipView::moveSelection(int dt, int dir, int octave) {
+    std::vector<Note> notes;
+    std::vector<int> idx;
+    selectedNotes(notes, idx);
+    if (idx.empty()) { message("Nada marcado"); return; }
+    std::vector<Note> moved;
+    for (size_t k = 0; k < idx.size(); k++) {
+        Note n = notes[idx[k]];
+        n.start += dt;
+        if (dir) n.pitch = stepPitch(n.pitch, dir);
+        n.pitch += 12 * octave;
+        if (n.start < 0 || n.start >= total() || n.pitch < 0 || n.pitch > MAX_PITCH) return;
+        moved.push_back(n);
+    }
+    for (int k = int(idx.size()) - 1; k >= 0; k--) notes.erase(notes.begin() + idx[k]);
+    placeNotes(notes, moved);
+    // la marca y el cursor se van con el bloque
+    anchorStep_ += dt;
+    cursorStep_ += dt;
+    if (markLevel_ < 2) {
+        int a = anchorPitch_, c = cursorPitch_;
+        if (dir) { a = stepPitch(a, dir); c = stepPitch(c, dir); }
+        a += 12 * octave;
+        c += 12 * octave;
+        if (a >= 0 && a <= MAX_PITCH && c >= 0 && c <= MAX_PITCH) {
+            anchorPitch_ = a;
+            cursorPitch_ = c;
+        }
+    }
+    keepVisible();
+}
+
+// Select, B, A: lo marcado otra vez, justo después (y la marca se va a la copia)
+void ClipView::duplicateSelection() {
+    std::vector<Note> notes;
+    std::vector<int> idx;
+    selectedNotes(notes, idx);
+    if (idx.empty()) { message("Nada marcado"); return; }
+    int s0, s1, p0, p1;
+    selRect(s0, s1, p0, p1);
+    int end = s1 + 1;
+    for (size_t k = 0; k < idx.size(); k++)
+        end = std::max(end, notes[idx[k]].start + notes[idx[k]].len);
+    int width = end - s0;
+    std::vector<Note> add;
+    for (size_t k = 0; k < idx.size(); k++) {
+        Note n = notes[idx[k]];
+        n.start += width;
+        add.push_back(n);
+    }
+    int last = 0;
+    for (size_t k = 0; k < add.size(); k++) last = std::max(last, add[k].start + 1);
+    while (total() < last && addPage()) {}
+    readNotes(notes);
+    for (size_t k = 0; k < add.size();) {
+        if (add[k].start >= total()) add.erase(add.begin() + k);
+        else k++;
+    }
+    placeNotes(notes, add);
+    if (markLevel_ >= 3) markLevel_ = 2;   // la copia, no todo el clip otra vez
+    anchorStep_ = s0 + width;
+    cursorStep_ = s1 + width;
+    if (cursorStep_ >= total()) cursorStep_ = total() - 1;
+    int n = (int)add.size();
+    message(n == 1 ? "Nota duplicada" : "%d notas duplicadas", n);
+}
+
+/************************************************************
+ escala
+ ************************************************************/
+
+int ClipView::stepPitch(int pitch, int dir) {
+    int scale = viewData_->project_->GetScale();
+    int root = viewData_->project_->GetScaleRoot();
+    int p = pitch + dir;
+    while (p >= 0 && p <= MAX_PITCH && !InScale(scale, root, p)) p += dir;
+    if (p < 0 || p > MAX_PITCH) return pitch;
+    return p;
+}
+
+int ClipView::degree(int pitch) {   // cuántas notas de la escala hay debajo
+    int scale = viewData_->project_->GetScale();
+    int root = viewData_->project_->GetScaleRoot();
+    int d = 0;
+    for (int p = 0; p < pitch; p++)
+        if (InScale(scale, root, p)) d++;
+    return d;
+}
+
+int ClipView::fromDegree(int d) {
+    int scale = viewData_->project_->GetScale();
+    int root = viewData_->project_->GetScaleRoot();
+    for (int p = 0; p <= MAX_PITCH; p++) {
+        if (InScale(scale, root, p)) {
+            if (d == 0) return p;
+            d--;
+        }
+    }
+    return -1;
+}
+
+// pegar en otra altura: dentro de la escala se mueve por grados (Do-Mi-Sol
+// pegado en Re queda Re-Fa-La)
+int ClipView::shiftPitch(int pitch, int fromRef, int toRef) {
+    int scale = viewData_->project_->GetScale();
+    int root = viewData_->project_->GetScaleRoot();
+    if (scale == 0 || !InScale(scale, root, pitch) || !InScale(scale, root, fromRef) ||
+        !InScale(scale, root, toRef))
+        return pitch + (toRef - fromRef);
+    return fromDegree(degree(pitch) + degree(toRef) - degree(fromRef));
+}
+
+void ClipView::message(const char *fmt, int n) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), fmt, n);
+    msg_ = buf;
+    msgTime_ = System::GetInstance()->GetClock();
+    isDirty_ = true;
+}
+
+void ClipView::AnimationUpdate() {
+    if (!msg_.empty() && System::GetInstance()->GetClock() - msgTime_ > 1500) {
+        msg_.clear();
+        DrawView();
+    }
 }
 
 void ClipView::moveNote(int dt, int dp) {
@@ -254,8 +459,8 @@ void ClipView::moveNote(int dt, int dp) {
     int i = noteAt(notes, cursorStep_);
     if (i < 0) return;
     Note &n = notes[i];
-    if (dp) {
-        int p = n.pitch + dp;
+    if (dp) {   // un semitono, o un grado si hay escala (dp = ±12: octava)
+        int p = (dp == 1 || dp == -1) ? stepPitch(n.pitch, dp) : n.pitch + dp;
         if (p < 0 || p > MAX_PITCH) return;
         n.pitch = p;
         cursorPitch_ = p;
@@ -317,7 +522,8 @@ void ClipView::moveCursor(int dt, int dp) {
     cursorStep_ += dt;
     if (cursorStep_ < 0) cursorStep_ = 0;
     if (cursorStep_ >= t) cursorStep_ = t - 1;
-    cursorPitch_ += dp;
+    if (dp == 1 || dp == -1) cursorPitch_ = stepPitch(cursorPitch_, dp);   // con escala: solo sus notas
+    else cursorPitch_ += dp;
     if (cursorPitch_ < 0) cursorPitch_ = 0;
     if (cursorPitch_ > MAX_PITCH) cursorPitch_ = MAX_PITCH;
     keepVisible();
@@ -385,36 +591,64 @@ void ClipView::OnFocus() {
  ************************************************************/
 
 void ClipView::ProcessButtonMask(unsigned short mask, bool pressed) {
-    const unsigned short arrows = EPBM_UP | EPBM_DOWN | EPBM_LEFT | EPBM_RIGHT;
+    unsigned short v = View::pressedButton_;
     if (!pressed) {
-        if (!(mask & EPBM_A)) stopAudition();
+        if (!(mask & EPBM_A)) {
+            stopAudition();
+            if (aPending_ && marking_) {   // A sola con algo marcado: cancela
+                marking_ = false;
+                message("Marca cancelada");
+            }
+            aPending_ = false;
+        }
+        if (!(mask & EPBM_B)) {
+            if (bPending_ && marking_ && !(mask & EPBM_SELECT)) copySelection(false);   // B sola: copia
+            bPending_ = false;
+        }
         isDirty_ = true;
         return;
     }
-    unsigned short v = View::pressedButton_;
     int dt = (v == EPBM_LEFT) ? -1 : (v == EPBM_RIGHT) ? 1 : 0;
     int dp = (v == EPBM_UP) ? 1 : (v == EPBM_DOWN) ? -1 : 0;
     Player *player = Player::GetInstance();
+    if (v != EPBM_A) aPending_ = false;
+    if (v != EPBM_B) bPending_ = false;
 
     if (mask & EPBM_SELECT) {
-        if (v == EPBM_LEFT) switchView(VT_SONG);
-        else if (v == EPBM_RIGHT) {
+        if (v == EPBM_B) {   // Select, B: marcar; otra B: pasos completos; otra: todo el clip
+            if (!marking_) {
+                marking_ = true;
+                markLevel_ = 1;
+                anchorStep_ = cursorStep_;
+                anchorPitch_ = cursorPitch_;
+                message("Marcando: flechas para agrandar");
+            } else if (markLevel_ < 3) {
+                markLevel_++;
+                message(markLevel_ == 2 ? "Marcando pasos completos" : "Marcado todo el clip");
+            }
+        } else if (v == EPBM_A) {
+            if (marking_) duplicateSelection();   // Select, B, A
+            else pasteNote();
+        } else if (v == EPBM_START) {   // todo: la Song desde la fila de este clip
+            stopAudition();
+            if (player->IsRunning()) player->Stop();
+            else player->OnSongStartButton(0, SONG_CHANNEL_COUNT - 1, false, false);
+        } else if (v == EPBM_LEFT) {
+            marking_ = false;
+            switchView(VT_SONG);
+        } else if (v == EPBM_RIGHT) {
+            marking_ = false;
             int owner = viewData_->project_->GetTrackInstrument(viewData_->songX_);
             if (owner >= 0) viewData_->currentInstrument_ = owner;
             viewData_->instrumentFromSong_ = false;
             switchView(VT_INSTRUMENT);
         } else if (v == EPBM_DOWN && pages() > 0) {   // la phrase de esta página, a la antigua
+            marking_ = false;
             int p, pos;
             stepPtr(cursorStep_, p, pos);
             viewData_->currentPhrase_ = p;
             viewData_->chainRow_ = cursorStep_ / 16;
             switchView(VT_PHRASE);
-        } else if (v == EPBM_A) {
-            pasteNote();
-        } else if (v == EPBM_START) {   // todo: la Song desde la fila de este clip
-            stopAudition();
-            if (player->IsRunning()) player->Stop();
-            else player->OnSongStartButton(0, SONG_CHANNEL_COUNT - 1, false, false);
         }
         isDirty_ = true;
         return;
@@ -430,6 +664,29 @@ void ClipView::ProcessButtonMask(unsigned short mask, bool pressed) {
         isDirty_ = true;
         return;
     }
+
+    if (marking_) {
+        if (mask & EPBM_B) {
+            if (v == EPBM_B) bPending_ = true;
+            else if (v == EPBM_A) { bPending_ = false; copySelection(true); }   // B + A: corta
+        } else if (mask & EPBM_A) {
+            if (v == EPBM_A) aPending_ = true;
+            else {
+                aPending_ = false;
+                if (dt) moveSelection(dt, 0, 0);
+                else if (dp) moveSelection(0, dp, 0);
+                else if (v == EPBM_L) moveSelection(0, 0, -1);
+                else if (v == EPBM_R) moveSelection(0, 0, 1);
+            }
+        } else {   // la cruceta agranda la marca
+            if (dt || dp) moveCursor(dt, dp);
+            if (v == EPBM_L) moveCursor(0, -12);
+            if (v == EPBM_R) moveCursor(0, 12);
+        }
+        isDirty_ = true;
+        return;
+    }
+
     if (mask & EPBM_X) {               // propiedades de la nota
         if (dt) changeLength(dt);
         if (dp) changeVelocity(dp * 8);
@@ -465,7 +722,6 @@ void ClipView::ProcessButtonMask(unsigned short mask, bool pressed) {
     if (dt || dp) moveCursor(dt, dp);
     if (v == EPBM_L) moveCursor(0, -12);
     if (v == EPBM_R) moveCursor(0, 12);
-    (void)arrows;
     isDirty_ = true;
 }
 
@@ -490,6 +746,8 @@ void ClipView::DrawView() {
     int page = cursorStep_ / 16;
     int p0 = page * 16;
     int cur = noteAt(notes, cursorStep_);
+    int scale = viewData_->project_->GetScale();
+    int root = viewData_->project_->GetScaleRoot();
 
     // barra de arriba
     const std::string &cn = viewData_->song_->GetChainName(viewData_->currentChain_);
@@ -511,18 +769,29 @@ void ClipView::DrawView() {
             sprintf(info, "pag %d/%d   paso %d   %s", page + 1, npages > 0 ? npages : 1,
                     cursorStep_ % 16 + 1, nn.c_str());
         }
-        DrawText(10, 34, info, fg, 0);
+        if (!msg_.empty()) {   // el aviso de lo que acaba de pasar
+            int w = 8 * int(msg_.size()) + 12;
+            FillRect(6, 31, w, 18, Mix(bg, hi2, 25), 4);
+            DrawText(12, 34, msg_.c_str(), hi2, 0);
+        } else {
+            DrawText(10, 34, info, fg, 0);
+            if (scale > 0) {   // la escala, como en Live
+                std::string sc = std::string(scaleNotes[root]) + " " + scaleNames[scale];
+                if (sc.size() > 16) sc = sc.substr(0, 16);
+                DrawText(466 - 8 * int(sc.size()), 34, sc.c_str(), hi, 0);
+            }
+        }
         // las páginas, a la derecha
-        int bx = 632 - 16 * 14;
+        int bx = 632 - 16 * 10;
         for (int i = 0; i < 16; i++) {
-            int x = bx + i * 14;
+            int x = bx + i * 10;
             if (i < npages) {
                 bool playing = playStep_ >= 0 && playStep_ / 16 == i;
                 GUIColor c = (i == page) ? hi2 : Mix(bg, fg, 35);
-                FillRect(x, 36, 10, 8, c, 2);
-                if (playing) FillRect(x, 46, 10, 2, play);
+                FillRect(x, 36, 7, 8, c, 2);
+                if (playing) FillRect(x, 46, 7, 2, play);
             } else {
-                FillRect(x + 4, 39, 2, 2, Mix(bg, fg, 20));
+                FillRect(x + 3, 39, 2, 2, Mix(bg, fg, 20));
             }
         }
     }
@@ -533,13 +802,21 @@ void ClipView::DrawView() {
         int pitch = topPitch_ - r;
         int y = GRID_Y + r * ROW_H;
         bool black = isBlack(pitch);
-        FillRect(GRID_X, y, gw, ROW_H, Mix(bg, fg, black ? 3 : 8));
-        if (pitch % 12 == 0) FillRect(GRID_X, y + ROW_H - 1, gw, 1, Mix(bg, fg, 22));
+        bool in = InScale(scale, root, pitch);
+        bool isRoot = scale > 0 && (pitch - root) % 12 == 0;
+        // con escala: sus filas claras, las demás casi negras (como Live)
+        int shade = scale > 0 ? (in ? 9 : 1) : (black ? 3 : 8);
+        FillRect(GRID_X, y, gw, ROW_H, Mix(bg, fg, shade));
+        if ((scale > 0 ? isRoot : pitch % 12 == 0))
+            FillRect(GRID_X, y + ROW_H - 1, gw, 1, Mix(bg, fg, 22));
         // teclado
         GUIColor key = black ? Mix(bg, fg, 22) : Mix(bg, fg, 70);
+        if (scale > 0 && !in) key = Mix(bg, fg, black ? 10 : 25);
+        if (isRoot) key = Mix(bg, hi, 75);
         if (pitch == cursorPitch_) key = hi2;
         FillRect(8, y + 1, 44, ROW_H - 2, key, 2);
-        if (pitch % 12 == 0) DrawText(12, y + 1, noteName(pitch).c_str(), bg, 0);
+        if (scale > 0 ? isRoot : pitch % 12 == 0)
+            DrawText(12, y + 1, noteName(pitch).c_str(), bg, 0);
     }
     for (int s = 0; s <= 16; s++) {
         GUIColor c = (s % 4 == 0) ? Mix(bg, fg, 28) : Mix(bg, fg, 13);
@@ -550,6 +827,20 @@ void ClipView::DrawView() {
     if (t < p0 + 16) {
         int from = t > p0 ? t - p0 : 0;
         FillRect(GRID_X + from * STEP_W, GRID_Y, (16 - from) * STEP_W, ROWS * ROW_H, bg);
+    }
+
+    // lo marcado
+    if (marking_) {
+        int s0, s1, q0, q1;
+        selRect(s0, s1, q0, q1);
+        int a = std::max(s0, p0), b = std::min(s1, p0 + 15);
+        int r0 = std::max(0, topPitch_ - q1), r1 = std::min(ROWS - 1, topPitch_ - q0);
+        if (a <= b && r0 <= r1) {
+            int x = GRID_X + (a - p0) * STEP_W, y = GRID_Y + r0 * ROW_H;
+            int w = (b - a + 1) * STEP_W, h = (r1 - r0 + 1) * ROW_H;
+            FillRect(x, y, w, h, Mix(bg, hi, 22));
+            FrameRect(x, y, w, h, hi, 2, 2);
+        }
     }
 
     // las notas
@@ -599,7 +890,10 @@ void ClipView::DrawView() {
         FillRect(GRID_X + s * STEP_W + 10, VEL_Y + VEL_H - 4 - h, STEP_W - 20, h, c, 2);
     }
 
-    drawHelpBar("A:nota;A+flechas:mover;X+flechas:largo/vel;B+A:borrar;SEL+START:todo");
+    if (marking_)
+        drawHelpBar("flechas:marcar;B:copiar;B+A:cortar;A+<>:mover;SEL+A:duplicar;A:salir");
+    else
+        drawHelpBar("A:nota;X+flechas:largo/vel;B+A:cortar;SEL+A:pegar;SEL,B:marcar");
 }
 
 void ClipView::OnPlayerUpdate(PlayerEventType, unsigned int) {

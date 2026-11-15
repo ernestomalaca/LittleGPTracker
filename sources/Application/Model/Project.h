@@ -17,6 +17,7 @@
 #define VAR_SOFTCLIP_GAIN 	MAKE_FOURCC('S', 'F', 'G', 'N')
 #define VAR_PREGAIN   		MAKE_FOURCC('P', 'R', 'G', 'N')
 #define VAR_SCALE 			MAKE_FOURCC('S', 'C', 'A', 'L')
+#define VAR_SCALEROOT 		MAKE_FOURCC('S', 'C', 'R', 'T')   // trk2als: raíz de la escala
 #define VAR_RENDER MAKE_FOURCC('R', 'N', 'D', 'R')
 #define VAR_METRONOME MAKE_FOURCC('M', 'E', 'T', 'R') // trk2als: metrónomo off/on
 // trk2als: cuantos de los 8 canales (contando desde el ultimo) son pistas de audio
@@ -49,6 +50,7 @@ public:
   void OnTempoTap();
   void NudgeTempo(int value);
   int GetScale();
+  int GetScaleRoot();   // trk2als
   int GetTempo(); // Takes nudging into account
   int GetTranspose();
   int GetSoftclip();

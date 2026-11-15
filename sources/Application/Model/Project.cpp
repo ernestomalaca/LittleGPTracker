@@ -53,6 +53,9 @@ tempoNudge_(0)
         new Variable("scale", VAR_SCALE, scaleNames, scaleCount, 0);
     this->Insert(scale);
     scale->SetInt(0);
+    Variable *scaleRoot =
+        new Variable("scaleroot", VAR_SCALEROOT, scaleNotes, scaleNoteCount, 0);
+    this->Insert(scaleRoot);
     // trk2als: tipo de cada pista (MIDI o audio, como en Live); se cambia en
     // la cabecera de la Song. Proyectos nuevos: todas MIDI
     // trk2als: un proyecto nuevo arranca con cuatro pistas MIDI, cada una
@@ -112,7 +115,14 @@ Project::~Project() {
 int Project::GetScale() {
     Variable *v = FindVariable(VAR_SCALE);
     NAssert(v);
-    return v->GetInt();
+    int s = v->GetInt();
+    return (s < 0 || s >= scaleCount) ? 0 : s;   // escalas viejas (picoTracker): sin escala
+}
+
+int Project::GetScaleRoot() {
+    Variable *v = FindVariable(VAR_SCALEROOT);
+    int r = v ? v->GetInt() : 0;
+    return (r < 0 || r > 11) ? 0 : r;
 }
 
 int Project::GetTempo() {

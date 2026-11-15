@@ -208,12 +208,13 @@ void Variable::SetString(const char *input, bool notify) {
         value_.index_ = 0;
         for (int i = 0; i < listSize_; i++) {
             if (list_.char_[i]) {
+                // trk2als: antes, si la diferencia era la última letra, contaba
+                // como igual ("D" quedaba como "C", "Messiaen 4" como "Messiaen 3")
                 const char *d = list_.char_[i];
                 const char *s = input;
-                while (*s != 0) {
-                    if (tolower(*s++) != tolower(*d++)) {
-                        break;
-                    }
+                while (*s != 0 && *d != 0 && tolower(*s) == tolower(*d)) {
+                    s++;
+                    d++;
                 }
                 if (*s == 0 &&
                     *d == 0) { // Ensure both strings end at the same point
