@@ -10,7 +10,8 @@ class ImportSampleDialog:public ModalView {
 public:
 	// audioOnly (trk2als): para un loop de una pista de audio: sin SoundFonts y
 	// el preview a tempo. GetReturnCode(): 1 = importó, 0 = salió
-	ImportSampleDialog(View &view, bool audioOnly = false) ;
+	// sf2Only (trk2als): instrumento soundfont: solo .sf2
+	ImportSampleDialog(View &view, bool audioOnly = false, bool sf2Only = false) ;
 	virtual ~ImportSampleDialog() ;
 
 	virtual void DrawView() ;
@@ -34,6 +35,7 @@ private:
 	int toInstr_ ;
 	int selected_ ;
 	bool audioOnly_ ;
+	bool sf2Only_ ;
 	static bool initStatic_ ;
 	static Path sampleLib_ ;
 	static Path currentPath_ ;

@@ -278,7 +278,12 @@ private:
 	   // trk2als: warp complex; deja size cuadros estirados en warpOut_
 	   void renderComplex(int channel,renderParams *rp,int size) ;
 	   void readLoop(renderParams *rp,int n) ;
-	   public: void SetZones(const std::string &zones) ; bool IsZoned() { return zoned_ ; } int ZoneCount() { return (int)zones_.zones_.size() ; } private:
+	   public: void SetZones(const std::string &zones) ; bool IsZoned() { return zoned_ ; } int ZoneCount() { return (int)zones_.zones_.size() ; }
+	   const std::vector<ZoneSource::Zone> &Zones() { return zones_.zones_ ; }
+	   std::string ZoneSetName() ;   // "marimba" (de marimba_01.wav)
+	   int LastNote() { return lastNote_ ; }   // la última nota que empezó
+	   private:
+	   int lastNote_ ;
 	   bool cacheKey(renderParams *rp,int start,double speed,float transpose,WarpCacheKey &k) ;
 	   void readCache(renderParams *rp,int size,double speed) ;
 	   void dropCache(renderParams *rp) ;

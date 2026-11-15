@@ -82,6 +82,7 @@ SampleInstrument::SampleInstrument() {
 	 memset(varCacheId_,0,sizeof(varCacheId_)) ;   // trk2als
 	 zoned_=false ;
 	 zonesPoolSize_=-1 ;
+	 lastNote_=-1 ;
 	 static bool warpCfg=false ;   // trk2als: WARPQUALITY / WARPSPLIT de config.xml
 	 if (!warpCfg) {
 		 warpCfg=true ;
@@ -398,7 +399,8 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
       if ((*zs || !zonesStr_.empty()) &&
           (zonesStr_!=zs || zonesPoolSize_!=SamplePool::GetInstance()->GetNameListSize())) rebuildZones() ;
   }
-  rp->midiNote_=midinote ;
+ rp->midiNote_=midinote ;
+  lastNote_=midinote ;   // trk2als: para el mapa de zonas
   
   if (lastMidiNote_[channel] == -1) // To prevent First LEGA to go bonkers
   {
@@ -3012,4 +3014,14 @@ void SampleInstrument::rebuildZones() {
 void SampleInstrument::SetZones(const std::string &zones) {
 	FindVariable(SIP_S_ZONES)->SetString(zones.c_str()) ;
 	rebuildZones() ;
+}
+
+std::string SampleInstrument::ZoneSetName() {
+	if (zones_.zones_.empty()) return "" ;
+	std::string n=zones_.zones_[0].name ;
+	size_t dot=n.rfind('.') ;
+	if (dot!=std::string::npos) n=n.substr(0,dot) ;
+	size_t us=n.rfind('_') ;
+	if (us!=std::string::npos && us+1<n.size() && isdigit((unsigned char)n[us+1])) n=n.substr(0,us) ;
+	return n ;
 }

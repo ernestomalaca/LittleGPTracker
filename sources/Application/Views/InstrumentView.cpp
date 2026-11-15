@@ -3,6 +3,32 @@
 #include "Application/Instruments/SoundFontPreset.h"
 #include "Application/AppWindow.h"
 #include <math.h>
+
+// trk2als: en un instrumento soundfont el campo sample muestra el nombre y
+// cuántas zonas tiene, y no se recorre con las flechas (A,A abre el
+// navegador solo con .sf2)
+class UISoundfontField: public UIIntVarField {
+public:
+	UISoundfontField(GUIPoint &p,Variable &v,const std::string &label,int idx)
+		:UIIntVarField(p,v,"sample: %s",idx,idx,1,1),label_(label) {}
+	virtual void Draw(GUIWindow &w,int offset=0) {
+		GUITextProperties props ;
+		GUIPoint position=GetPosition() ;
+		position._y+=offset ;
+		if (focus_) {
+			((AppWindow&)w).SetColor(CD_HILITE2) ;
+			props.invert_=true ;
+		} else {
+			((AppWindow&)w).SetColor(CD_NORMAL) ;
+		}
+		std::string t="sample: "+label_ ;
+		w.DrawString(t.c_str(),position,props) ;
+	}
+	virtual void ProcessArrow(unsigned short) {}
+private:
+	std::string label_ ;
+} ;
+
 #include <stdio.h>
 #include <string.h>
 #include <algorithm>
@@ -157,6 +183,7 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data),
 	current_=0 ;
 	lastSampleIdx_=-2 ;
 	sf2Pending_=false ;
+	sfMode_=false ;
 	wfSample_=-1 ;
 	wfSize_=0 ;
 	wfFrom_=wfTo_=0 ;
@@ -285,7 +312,15 @@ void InstrumentView::fillSampleParameters() {
 	// el primero de la lista (A en él = vaciar instrumento)
 	v=instrument->FindVariable(SIP_SAMPLE) ;
 	SamplePool *sp=SamplePool::GetInstance() ;
-	f1=new UIIntVarField(AT(L),*v,"sample: %s",0,sp->GetNameListSize()-1,1,0x10) ;
+	sfMode_=!audioMode_ && !sync && instrument->IsZoned() ;
+	if (sfMode_) {   // trk2als: soundfont
+		char label[48] ;
+		snprintf(label,sizeof(label),"%s (%d zona%s)",instrument->ZoneSetName().c_str(),
+		         instrument->ZoneCount(),instrument->ZoneCount()==1?"":"s") ;
+		f1=new UISoundfontField(AT(L),*v,label,v->GetInt()) ;
+	} else {
+		f1=new UIIntVarField(AT(L),*v,"sample: %s",0,sp->GetNameListSize()-1,1,0x10) ;
+	}
 	ADD(f1) ;
 	f1->SetFocus() ;
 	row++ ;
@@ -297,6 +332,13 @@ void InstrumentView::fillSampleParameters() {
 		instrument->InitSimpler() ;
 		int mode=instrument->GetSimpler(SIP_S_MODE) ;
 		gaps=4 ;
+		if (sfMode_) {
+			// soundfont: cada tecla con su sample entero, sin región, slices
+			// ni warp (en Live es un Sampler con zonas)
+			ADD(new UIStaticField(AT(L),"mode: soundfont")) ;
+			row++ ;
+		}
+		if (!sfMode_) {   // mode, warp y PLAYBACK: solo con un sample
 		v=instrument->FindVariable(SIP_S_MODE) ;
 		ADD(new UIIntVarField(AT(L),*v,"mode: %s",0,2,1,1)) ;
 		// warp como en Simpler (también en slice: las rebanadas van a tempo)
@@ -351,6 +393,7 @@ void InstrumentView::fillSampleParameters() {
 			row++ ;
 		}
 
+		}   // !sfMode_
 		LABEL("PITCH") ;
 		v=instrument->FindVariable(SIP_S_TRANSP) ;
 		ADD(new UIIntVarField(AT(L),*v,"transpose: %+d",-48,48,1,12)) ;
@@ -603,6 +646,8 @@ void InstrumentView::fillMidiParameters() {
 } ;
 
 
+
+
 // trk2als: ¿el instrumento que se ve es el de una pista? Entonces solo se
 // cambia desde la cabecera de la pista, en la Song
 bool InstrumentView::ownedByTrack() {
@@ -687,7 +732,7 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 					 } else { ;
 						// Go to import sample
 
-						 ImportSampleDialog *isd=new ImportSampleDialog(*this) ;
+						 ImportSampleDialog *isd=new ImportSampleDialog(*this,false,sfMode_) ;
                          DoModal(isd, ImportSampleDialogCallback);
                      }
                     break ;
@@ -1005,6 +1050,11 @@ void InstrumentView::drawWaveform() {
 
 	const int X=16, Y=22, W=WF_BARS*8, H=simplerView_?92:124 ;
 	FillRect(X-8,Y-4,W+16,H+8,Mix(bg,fg,9),8) ;
+
+	if (sfMode_ && si->IsZoned()) {   // trk2als: soundfont: el mapa de zonas
+		drawZoneMap(si,X,Y,W,H) ;
+		return ;
+	}
 
 	int index=si->GetSampleIndex() ;
 	if (index<0) return ;
@@ -1809,4 +1859,63 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 		return true ;
 	}
 	return true ;
+}
+
+
+// trk2als: modo soundfont: el teclado (0..127) abajo y una franja por zona
+// encima, con su raíz marcada; la zona de la última nota tocada resaltada
+void InstrumentView::drawZoneMap(SampleInstrument *si,int X,int Y,int W,int H) {
+	GUIColor bg=ColorOf(CD_BACKGROUND) ;
+	GUIColor fg=ColorOf(CD_NORMAL) ;
+	GUIColor hi=ColorOf(CD_HILITE1) ;
+	GUIColor hi2=ColorOf(CD_HILITE2) ;
+	GUIColor dim2=Mix(bg,fg,55) ;
+	const std::vector<ZoneSource::Zone> &zones=si->Zones() ;
+	const int keys=128 ;
+	#define KX(k) (X+int((long long)(k)*W/keys))
+	// teclado
+	int ky=Y+H-18, kh=18 ;
+	FillRect(X,ky,W,kh,Mix(bg,fg,80)) ;
+	static const bool black[12]={false,true,false,true,false,false,true,false,true,false,true,false} ;
+	for (int k=0;k<keys;k++) {
+		if (black[k%12]) FillRect(KX(k),ky,KX(k+1)-KX(k),kh*6/10,Mix(bg,fg,15)) ;
+		if (k%12==0) {   // las C con su octava (C3 = 60)
+			FillRect(KX(k),ky,1,kh,Mix(bg,fg,40)) ;
+		}
+	}
+	// zona de la última nota (o la del C3)
+	int last=si->LastNote() ;
+	if (last<0) last=60 ;
+	int cur=-1, best=1000 ;
+	for (size_t i=0;i<zones.size();i++) {
+		int d=(last<zones[i].lo)?zones[i].lo-last:(last>zones[i].hi)?last-zones[i].hi:0 ;
+		if (d<best) { best=d ; cur=int(i) ; }
+	}
+	// franjas
+	int zy=Y+4, zh=ky-zy-6 ;
+	for (size_t i=0;i<zones.size();i++) {
+		const ZoneSource::Zone &z=zones[i] ;
+		int x0=KX(z.lo), x1=KX(z.hi+1) ;
+		bool on=(int(i)==cur) ;
+		GUIColor c=on?Mix(bg,hi,70):Mix(bg,(i%2)?hi2:hi,30) ;
+		FillRect(x0+1,zy,x1-x0-2>1?x1-x0-2:1,zh,c,4) ;
+		// raíz
+		if (z.root>=0 && z.root<keys) {
+			int rx=KX(z.root)+(KX(z.root+1)-KX(z.root))/2 ;
+			FillRect(rx,zy+zh-10,2,10,on?bg:fg) ;
+			FillRect(rx,ky,2,kh,hi2) ;
+		}
+	}
+	// nota tocada en el teclado
+	FillRect(KX(last),ky+kh-5,KX(last+1)-KX(last)>2?KX(last+1)-KX(last):2,5,hi) ;
+	// texto: zona actual
+	if (cur>=0) {
+		const ZoneSource::Zone &z=zones[cur] ;
+		static const char *names[12]={"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"} ;
+		char info[96] ;
+		snprintf(info,sizeof(info),"%s%d-%s%d  raiz %s%d  %s",names[z.lo%12],z.lo/12-2,names[z.hi%12],z.hi/12-2,
+		         names[z.root%12],z.root/12-2,z.name.c_str()) ;
+		DrawText(632-8*int(strlen(info)),3,info,dim2,0) ;
+	}
+	#undef KX
 }

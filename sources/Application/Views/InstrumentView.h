@@ -26,6 +26,8 @@ protected:
 	bool ownedByTrack() ;
 	bool sf2Pending_ ;   // trk2als: se eligió un .sf2: convertirlo al soltar A
 	void convertSf2(bool refresh) ;
+	bool sfMode_ ;       // instrumento soundfont (zonas)
+	void drawZoneMap(SampleInstrument *si,int X,int Y,int W,int H) ;
 	void onInstrumentChange() ;
 	void fillSampleParameters() ;
 	void fillMidiParameters() ;

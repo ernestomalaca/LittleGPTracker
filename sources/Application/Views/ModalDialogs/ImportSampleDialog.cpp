@@ -23,7 +23,7 @@ static const char *buttonText[3]= {
 	"Exit"	
 } ;
 
-ImportSampleDialog::ImportSampleDialog(View &view, bool audioOnly):ModalView(view),audioOnly_(audioOnly) {
+ImportSampleDialog::ImportSampleDialog(View &view, bool audioOnly, bool sf2Only):ModalView(view),audioOnly_(audioOnly),sf2Only_(sf2Only) {
 	if (!initStatic_) {
 		const char *slpath=SamplePool::GetInstance()->GetSampleLib() ;
 		sampleLib_=Path(slpath) ;
@@ -361,7 +361,7 @@ void ImportSampleDialog::setCurrentFolder(Path *path) {
 			for (it->Begin();!it->IsDone();it->Next()) {
                 Path &current = it->CurrentItem();
                 if (!current.IsDirectory()) {
-                                  if ((current.Matches("*.wav") || (!audioOnly_ && current.Matches("*.sf2"))) && current.GetName()[0]!='.') {
+                                  if (((current.Matches("*.wav") && !sf2Only_) || (!audioOnly_ && current.Matches("*.sf2"))) && current.GetName()[0]!='.') {
 						Path *sample=new Path(current) ;
 						sampleList_.Insert(sample) ;
 					}
