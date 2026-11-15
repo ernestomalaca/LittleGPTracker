@@ -92,6 +92,7 @@ public:
 	void OnPresetSave(const std::string &name) ;
 	void OnPresetFolder(const std::string &folder) ;
 	void OnPadImport(bool ok) ;
+	void OnKitLoad(const std::string &name) ;
 private:
 	// trk2als: editor de kits: una rejilla de 4x4 pads (como el Move); los
 	// campos editan el pad elegido y se escriben en 's pads' / 's zones'

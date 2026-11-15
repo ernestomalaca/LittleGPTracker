@@ -173,6 +173,11 @@ void ImportSampleDialogCallback(View &v, ModalView &dialog) {
     ((InstrumentView &)v).OnFocus();
 }
 
+static void KitLoadCallback(View &v, ModalView &dialog) {
+    if (dialog.GetReturnCode()==1)
+        ((InstrumentView &)v).OnKitLoad(((PresetDialog &)dialog).GetSelected());
+}
+
 static void PadImportCallback(View &v, ModalView &dialog) {
     ((InstrumentView &)v).OnPadImport(dialog.GetReturnCode()==1);
 }
@@ -1287,6 +1292,9 @@ void InstrumentView::drawWaveform() {
 	if (kitMode_ && GetFocus() && !GetFocus()->IsStatic() &&
 	    isPadField(((UIIntVarField *)GetFocus())->GetVariableID()))
 		help="X+^v vol;X+<> decay;Y+^v tono;Y+<> pan;L+<> inicio;L+^v choke" ;
+	if (kitMode_ && GetFocus() && !GetFocus()->IsStatic() &&
+	    ((UIIntVarField *)GetFocus())->GetVariableID()==SIP_SAMPLE)
+		help="A:cambiar de kit;B+A:vaciar el instrumento" ;
 	drawHelpBar(help) ;
 }
 
@@ -1779,8 +1787,8 @@ void InstrumentView::openPresetSave() {
 		View::SetNotification("Primero elige un sample") ;
 		return ;
 	}
-	// primero la carpeta (categoría), luego el nombre
-	PresetDialog *pd=new PresetDialog(*this,true) ;
+	// primero la carpeta (categoría), luego el nombre (un kit, de entrada en Kits)
+	PresetDialog *pd=new PresetDialog(*this,true,si->IsKit()?InstrumentPresets::PK_KIT:-1) ;
 	DoModal(pd,PresetFolderCallback) ;
 }
 
@@ -2381,6 +2389,21 @@ void InstrumentView::openPadBrowser() {
 // A suena el pad (en uno vacío abre el navegador; A,A en el sample también);
 // B+A corta el pad; Select+A pega el pad copiado (B lo copia).
 // Select+L deshace y Select+R rehace (en cualquier campo del kit)
+// otro kit en este instrumento (de los presets que son kits)
+void InstrumentView::OnKitLoad(const std::string &name) {
+	if (name.empty() || !current_ || current_->GetType()!=IT_SAMPLE) return ;
+	padBusy_=true ;
+	bool ok=InstrumentPresets::Load((SampleInstrument *)current_,name) ;
+	padBusy_=false ;
+	std::string shortName=name.substr(name.rfind('/')==std::string::npos?0:name.rfind('/')+1) ;
+	if (ok && ownedByTrack()) viewData_->project_->SetTrackName(viewData_->songX_,shortName.c_str()) ;
+	View::SetNotification(ok?(shortName+" cargado").c_str():"No se pudo cargar el kit") ;
+	padShown_=-1 ;
+	lastFocusID_=SIP_SAMPLE ;
+	onInstrumentChange() ;
+	isDirty_=true ;
+}
+
 bool InstrumentView::processKit(unsigned short mask) {
 	if (View::physMask_==(EPBM_SELECT|EPBM_L) || View::physMask_==(EPBM_SELECT|EPBM_R)) {
 		kitTrack() ;   // lo que haya cambiado sin botón (el navegador)
@@ -2398,6 +2421,13 @@ bool InstrumentView::processKit(unsigned short mask) {
 	UIField *f=GetFocus() ;
 	if (!f || f->IsStatic()) return false ;
 	FourCC id=((UIIntVarField *)f)->GetVariableID() ;
+	if (id==SIP_SAMPLE) {   // el nombre del kit: A cambia de kit (solo kits)
+		if (mask==EPBM_A) {
+			DoModal(new PresetDialog(*this,false,InstrumentPresets::PK_KIT),KitLoadCallback) ;
+			return true ;
+		}
+		return (mask&EPBM_A)!=0 && !(mask&EPBM_B) ;   // A + flechas: nada (no es un sample)
+	}
 	if (!isPadField(id)) return false ;
 	SampleInstrument *si=(SampleInstrument *)current_ ;
 	int note=padNote() ;

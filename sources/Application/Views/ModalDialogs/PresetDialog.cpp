@@ -1,14 +1,21 @@
 #include "PresetDialog.h"
 #include "Application/Instruments/InstrumentPresets.h"
+#include "System/FileSystem/FileSystem.h"
 #include <stdio.h>
 #include <string.h>
 
 #define PD_WIDTH 28
 #define PD_ROWS 12
 
-PresetDialog::PresetDialog(View &view, bool forSave)
-    : ModalView(view), forSave_(forSave), selected_(0), top_(0) {
+PresetDialog::PresetDialog(View &view, bool forSave, int kind)
+    : ModalView(view), forSave_(forSave), kind_(kind), selected_(0), top_(0) {
 	folder_ = InstrumentPresets::LastFolder() ;   // se abre donde se quedó
+	if (kind_ >= 0) {   // solo un tipo: en su carpeta (Kits...) si la hay
+		const char *kf = InstrumentPresets::KindFolder(kind_) ;
+		if (folder_.compare(0, strlen(kf), kf) != 0 || !InstrumentPresets::FolderHas(folder_, kind_))
+			folder_ = InstrumentPresets::FolderHas(kf, kind_) || forSave_ ? kf : "" ;
+		if (forSave_ && !Path(std::string("root:presets/") + kf).Exists()) folder_ = "" ;
+	}
 	load() ;
 	if (entries_.empty() && !folder_.empty()) {    // la carpeta ya no existe
 		folder_ = "" ;
@@ -35,12 +42,18 @@ void PresetDialog::load() {
 		entries_.push_back(e) ;
 	}
 	for (size_t i = 0; i < folders.size(); i++) {
+		if (kind_ >= 0 && !forSave_ &&
+		    !InstrumentPresets::FolderHas(folder_.empty() ? folders[i] : folder_ + "/" + folders[i], kind_))
+			continue ;
 		e.kind = K_FOLDER ;
 		e.name = folders[i] + "/" ;
 		entries_.push_back(e) ;
 	}
 	if (!forSave_) {
 		for (size_t i = 0; i < presets.size(); i++) {
+			if (kind_ >= 0 &&
+			    InstrumentPresets::KindOf(folder_.empty() ? presets[i] : folder_ + "/" + presets[i]) != kind_)
+				continue ;
 			e.kind = K_PRESET ;
 			e.name = presets[i] ;
 			entries_.push_back(e) ;
@@ -59,7 +72,7 @@ void PresetDialog::load() {
 void PresetDialog::DrawView() {
 	GUITextProperties props ;
 	char line[PD_WIDTH + 1] ;
-	std::string title = forSave_ ? "Guardar en: " : "Cargar preset: " ;
+	std::string title = forSave_ ? "Guardar en: " : (kind_ == InstrumentPresets::PK_KIT ? "Cambiar de kit: " : "Cargar preset: ") ;
 	title += folder_.empty() ? "/" : folder_ ;
 	if (title.size() > PD_WIDTH - 2) title = "..." + title.substr(title.size() - (PD_WIDTH - 5)) ;
 	int n = (int)entries_.size() ;
@@ -67,7 +80,7 @@ void PresetDialog::DrawView() {
 		SetWindow(PD_WIDTH, 5) ;
 		SetColor(CD_NORMAL) ;
 		DrawString(1, 0, title.c_str(), props) ;
-		DrawString(1, 2, "Todavia no hay presets.", props) ;
+		DrawString(1, 2, kind_ == InstrumentPresets::PK_KIT ? "Todavia no hay kits." : "Todavia no hay presets.", props) ;
 		DrawString(1, 4, "B: cerrar", props) ;
 		return ;
 	}

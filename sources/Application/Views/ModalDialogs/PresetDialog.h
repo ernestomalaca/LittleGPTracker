@@ -13,7 +13,9 @@
 // GetReturnCode(): 1 = listo; 0 = cancelar
 class PresetDialog : public ModalView {
 public:
-	PresetDialog(View &view, bool forSave = false) ;
+	// kind (trk2als): -1 = todos; si no, solo presets de ese tipo
+	// (InstrumentPresets::PK_KIT...) y las carpetas que tienen alguno
+	PresetDialog(View &view, bool forSave = false, int kind = -1) ;
 	virtual ~PresetDialog() ;
 	virtual void DrawView() ;
 	virtual void OnPlayerUpdate(PlayerEventType, unsigned int) ;
@@ -29,6 +31,7 @@ private:
 	} ;
 	void load() ;
 	bool forSave_ ;
+	int kind_ ;
 	std::string folder_ ;
 	std::vector<Entry> entries_ ;
 	std::string chosen_ ;

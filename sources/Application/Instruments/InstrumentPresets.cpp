@@ -300,3 +300,43 @@ bool InstrumentPresets::Load(SampleInstrument *instr, const std::string &name) {
 	}
 	return true ;
 }
+
+/************************************************************
+ trk2als: tipos de preset
+ ************************************************************/
+
+int InstrumentPresets::KindOf(const std::string &name) {
+	Path file=presetPath(name).Descend(PRESET_FILE) ;
+	TiXmlDocument doc(file.GetPath()) ;
+	if (!doc.LoadFile()) return PK_SAMPLE ;
+	TiXmlElement *top=doc.FirstChildElement("LGPTPRESET") ;
+	TiXmlElement *data=top?top->FirstChildElement("INSTRUMENT"):0 ;
+	if (!data) return PK_SAMPLE ;
+	bool kit=false, zones=false ;
+	for (TiXmlElement *p=data->FirstChildElement("PARAM");p;p=p->NextSiblingElement("PARAM")) {
+		const char *n=p->Attribute("NAME") ;
+		const char *v=p->Attribute("VALUE") ;
+		if (!n || !v) continue ;
+		if (!strcmp(n,"s kit") && strcmp(v,"0") && *v) kit=true ;
+		if (!strcmp(n,"s zones") && *v) zones=true ;
+	}
+	return kit?PK_KIT:(zones?PK_MULTI:PK_SAMPLE) ;
+}
+
+bool InstrumentPresets::FolderHas(const std::string &folder,int kind) {
+	std::vector<std::string> folders, presets ;
+	ListFolder(folder,folders,presets) ;
+	for (size_t i=0;i<presets.size();i++)
+		if (KindOf(folder.empty()?presets[i]:folder+"/"+presets[i])==kind) return true ;
+	for (size_t i=0;i<folders.size();i++)
+		if (FolderHas(folder.empty()?folders[i]:folder+"/"+folders[i],kind)) return true ;
+	return false ;
+}
+
+const char *InstrumentPresets::KindFolder(int kind) {
+	switch (kind) {
+		case PK_KIT: return "Kits" ;
+		case PK_MULTI: return "Multicapa" ;
+		default: return "Samples" ;
+	}
+}

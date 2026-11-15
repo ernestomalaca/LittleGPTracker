@@ -20,6 +20,12 @@ namespace InstrumentPresets {
 	                std::vector<std::string> &presets) ;
 	// la última carpeta usada (para guardar donde se estaba buscando)
 	std::string &LastFolder() ;
+	// trk2als: qué es un preset: sample (Sampler de un sample), multicapa
+	// (zonas/soundfont) o kit (16 pads); y si una carpeta tiene alguno de ese tipo
+	enum Kind { PK_SAMPLE=0, PK_MULTI=1, PK_KIT=2 } ;
+	int KindOf(const std::string &name) ;
+	bool FolderHas(const std::string &folder,int kind) ;
+	const char *KindFolder(int kind) ;   // "Samples", "Multicapa", "Kits"
 	bool Exists(const std::string &name) ;
 	// guarda el instrumento (sobrescribe si ya existe). false si falló
 	bool Save(SampleInstrument *instr, const std::string &name) ;
