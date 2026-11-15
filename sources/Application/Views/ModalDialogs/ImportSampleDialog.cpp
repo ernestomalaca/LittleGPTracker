@@ -5,6 +5,10 @@
 #include "Application/Instruments/WavFile.h"
 #include "Application/Player/Player.h"
 #include <math.h>
+#include <stdio.h>
+#include <string>
+#include "Application/Instruments/SF2Import.h"
+#include "System/io/Status.h"
 
 #define LIST_SIZE 15
 #define LIST_WIDTH 28
@@ -121,6 +125,14 @@ void ImportSampleDialog::OnFocus() {
 } ;
 
 void ImportSampleDialog::preview(Path &element) {
+	// trk2als: de un .sf2 se escucha su sample del C3 (se escribe aparte)
+	if (element.Matches("*.sf2")) {
+		Path tmp("root:sf2preview.wav") ;
+		if (SF2PreviewNote(element.GetPath().c_str(),0,60,tmp.GetPath().c_str())) {
+			Player::GetInstance()->StartStreaming(tmp) ;
+		}
+		return ;
+	}
 	// trk2als: si es un loop, el preview suena al tempo del proyecto, en loop
 	// y en fase: con la canción sonando entra en el siguiente tiempo, en el
 	// punto del loop que corresponde a ese tiempo del compás
@@ -165,6 +177,26 @@ void ImportSampleDialog::endPreview() {
 }
 
 void ImportSampleDialog::import(Path &element) {
+
+	// trk2als: un .sf2 se convierte: sus samples a .wav y el instrumento a
+	// zonas (el primer instrumento que trae; lo ideal es un .sf2 de uno solo)
+	if (element.Matches("*.sf2")) {
+		I_Instrument *instr=viewData_->project_->GetInstrumentBank()->GetInstrument(toInstr_) ;
+		if (instr->GetType()!=IT_SAMPLE) return ;
+		std::string msg ;
+		Status::Set("Convirtiendo %s", element.GetName().c_str()) ;
+		bool ok=SF2Import(element.GetPath().c_str(),0,(SampleInstrument *)instr,msg) ;
+		endPreview() ;
+		if (ok) {
+			char buf[64] ;
+			snprintf(buf,sizeof(buf),"%s: %d zonas",msg.c_str(),((SampleInstrument *)instr)->ZoneCount()) ;
+			View::SetNotification(buf) ;
+			EndModal(1) ;
+		} else {
+			View::SetNotification(msg.c_str()) ;
+		}
+		return ;
+	}
 
 	SamplePool *pool=SamplePool::GetInstance() ;
 	int sampleID=pool->ImportSample(element) ;
@@ -211,9 +243,7 @@ void ImportSampleDialog::ProcessButtonMask(unsigned short mask,bool pressed) {
 
 		switch(selected_) {
 			case 0: // preview
-                if (!(element->IsDirectory() ||
-                      element->Matches(
-                          "*.sf2"))) { // Don't preview folders or SoundFonts
+                if (!element->IsDirectory()) { // trk2als: un .sf2 también (su C3)
                     preview(*element);
                 }
                 break;

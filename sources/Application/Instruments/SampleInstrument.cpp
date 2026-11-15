@@ -80,6 +80,8 @@ int SampleInstrument::lastMidiNote_[SI_VOICE_COUNT]= {
 
 SampleInstrument::SampleInstrument() {
 	 memset(varCacheId_,0,sizeof(varCacheId_)) ;   // trk2als
+	 zoned_=false ;
+	 zonesPoolSize_=-1 ;
 	 static bool warpCfg=false ;   // trk2als: WARPQUALITY / WARPSPLIT de config.xml
 	 if (!warpCfg) {
 		 warpCfg=true ;
@@ -214,6 +216,7 @@ SampleInstrument::SampleInstrument() {
 	 Insert(new Variable("s slice by",SIP_S_SLICEBY,sliceBy,2,SSB_REGION)) ;
 	 Insert(new Variable("s marks",SIP_S_MARKS,"")) ;
 	 Insert(new Variable("audio clip",SIP_CLIP,0)) ;
+	 Insert(new Variable("s zones",SIP_S_ZONES,"")) ;
 	 Insert(new Variable("s transpose",SIP_S_TRANSP,0)) ;
 	 Insert(new Variable("s detune",SIP_S_DETUNE,0)) ;
 	 Insert(new Variable("s glide",SIP_S_GLIDE,0)) ;
@@ -388,6 +391,13 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
          }
      }
 
+  // trk2als: zonas al día si cambiaron (al cargar el proyecto llegan después
+  // del sample) o si cambió el pool (se cargaron samples después)
+  {
+      const char *zs=FindVariable(SIP_S_ZONES)->GetString() ;
+      if ((*zs || !zonesStr_.empty()) &&
+          (zonesStr_!=zs || zonesPoolSize_!=SamplePool::GetInstance()->GetNameListSize())) rebuildZones() ;
+  }
   rp->midiNote_=midinote ;
   
   if (lastMidiNote_[channel] == -1) // To prevent First LEGA to go bonkers
@@ -569,7 +579,7 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
     // complex la estira y transpone por separado
     rp->sWarp_=SW_OFF ;
     rp->warpTranspose_=1.0f ;
-    if (rp->simpler_ && GetSimpler(SIP_S_WARP)!=SW_OFF) {   // también en slice
+    if (rp->simpler_ && !zoned_ && GetSimpler(SIP_S_WARP)!=SW_OFF) {   // también en slice; las zonas no
         int bpm=GetSimpler(SIP_S_BPM) ;
         if (bpm<=0) bpm=GuessSimplerBpm() ;
         float tick=SyncMaster::GetInstance()->GetTickSampleCount() ;
@@ -1810,6 +1820,28 @@ void SampleInstrument::initSimplerFromLGPT() {
 // Región, modo de loop y afinación de la nota que empieza
 bool SampleInstrument::startSimpler(renderParams *rp,int channel,unsigned char note,
                                     int &first,bool &sliced,float &offset) {
+	if (zoned_) {
+		// trk2als: el sample de la tecla entero, en su tono en su raíz, con su
+		// loop si lo trae (sin región, slices ni warp)
+		const ZoneSource::Zone *z=zones_.Find(rp->midiNote_) ;
+		if (!z || !z->src) return false ;
+		int zsize=z->src->GetSize(-1) ;
+		if (zsize<=0) return false ;
+		offset=GetSimpler(SIP_S_TRANSP)+GetSimpler(SIP_S_DETUNE)/100.0f+
+		       float(int(note)-z->root)+z->cents/100.0f ;
+		first=0 ;
+		rp->gate_=true ;
+		rp->simplerLoop_=SILM_ONESHOT ;
+		rp->rendLoopStart_=0 ;
+		rp->rendLoopEnd_=zsize ;
+		if (z->loopStart>=0 && z->loopEnd>z->loopStart && z->loopEnd<=zsize) {
+			rp->rendLoopStart_=z->loopStart ;
+			rp->rendLoopEnd_=z->loopEnd ;
+			rp->simplerLoop_=SILM_LOOP ;
+		}
+		sliced=false ;
+		return true ;
+	}
 	int size=source_->GetSize(rp->midiNote_) ;
 	int mode=GetSimpler(SIP_S_MODE) ;
 	int a,b ;
@@ -2440,6 +2472,7 @@ void SampleInstrument::updateInstrumentData(bool search) {
     		instrSize=source_->GetSize(-1) ;
 		}
 	}
+	rebuildZones() ;   // trk2als: si el sample es el de las zonas, source_ son las zonas
 
 	Variable *v=FindVariable(SIP_END) ;
 	v->SetInt(instrSize) ;
@@ -2914,4 +2947,69 @@ void SampleInstrument::EnableDownsamplingLegacy()
 {
   useDirtyDownsampling_ = true;
   Trace::Log("CONFIG","Enabling downsampling legacy");
+}
+
+
+/************************************************************
+ trk2als: zonas (varios samples por teclas)
+ ************************************************************/
+
+const ZoneSource::Zone *ZoneSource::Find(int note) {
+	if (zones_.empty()) return 0 ;
+	if (note<0) note=60 ;
+	const Zone *best=0 ;
+	int bestD=1000 ;
+	for (size_t i=0;i<zones_.size();i++) {
+		const Zone &z=zones_[i] ;
+		int d=(note<z.lo)?z.lo-note:(note>z.hi)?note-z.hi:0 ;
+		if (d<bestD) { bestD=d ; best=&z ; }
+		if (d==0) break ;
+	}
+	return best ;
+}
+
+// Lee "s zones" y resuelve cada nombre en el pool. Las zonas valen mientras
+// el sample del instrumento sea el de la primera zona (si se elige otro
+// sample a mano, vuelve a ser un instrumento de un sample)
+void SampleInstrument::rebuildZones() {
+	SamplePool *pool=SamplePool::GetInstance() ;
+	zonesPoolSize_=pool->GetNameListSize() ;
+	const char *str=FindVariable(SIP_S_ZONES)->GetString() ;
+	zonesStr_=str?str:"" ;
+	std::vector<ZoneSource::Zone> zones ;
+	std::string all=str?str:"" ;
+	size_t pos=0 ;
+	while (pos<all.size()) {
+		size_t end=all.find(';',pos) ;
+		if (end==std::string::npos) end=all.size() ;
+		std::string item=all.substr(pos,end-pos) ;
+		pos=end+1 ;
+		ZoneSource::Zone z ;
+		char name[256] ;
+		name[0]=0 ;
+		if (sscanf(item.c_str(),"%d,%d,%d,%f,%d,%d,%255[^;]",&z.lo,&z.hi,&z.root,&z.cents,
+		           &z.loopStart,&z.loopEnd,name)<7) continue ;
+		z.name=name ;
+		z.src=0 ;
+		char **names=pool->GetNameList() ;
+		for (int i=0;i<zonesPoolSize_;i++) {
+			if (names[i] && z.name==names[i]) { z.src=pool->GetSource(i) ; break ; }
+		}
+		zones.push_back(z) ;
+	}
+	bool on=false ;
+	int index=FindVariable(SIP_SAMPLE)->GetInt() ;
+	if (!zones.empty() && index>=0 && index<zonesPoolSize_) {
+		char **names=pool->GetNameList() ;
+		on=(names[index] && zones[0].name==names[index]) ;
+	}
+	zones_.zones_.swap(zones) ;
+	zoned_=on ;
+	if (zoned_) source_=&zones_ ;
+	else if (source_==&zones_) source_=(index>=0)?pool->GetSource(index):0 ;
+}
+
+void SampleInstrument::SetZones(const std::string &zones) {
+	FindVariable(SIP_S_ZONES)->SetString(zones.c_str()) ;
+	rebuildZones() ;
 }

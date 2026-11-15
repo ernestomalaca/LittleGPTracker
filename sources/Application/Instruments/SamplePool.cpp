@@ -388,3 +388,26 @@ int SamplePool::loadSoundFont(const char *path) {
     */
     return SLOAD_OK;
 } ;
+
+// trk2als
+int SamplePool::IndexOf(const char *name) {
+    for (int i = 0; i < count_; i++) {
+        if (names_[i] && !strcmp(names_[i], name)) return i;
+    }
+    return -1;
+}
+
+int SamplePool::LoadProjectSample(const char *name) {
+    int idx = IndexOf(name);
+    if (idx >= 0) return idx;
+    std::string path = "samples:";
+    path += name;
+    Path p(path.c_str());
+    if (loadSample(p.GetPath().c_str()) != SLOAD_OK) return -1;
+    SetChanged();
+    SamplePoolEvent ev;
+    ev.index_ = count_ - 1;
+    ev.type_ = SPET_INSERT;
+    NotifyObservers(&ev);
+    return count_ - 1;
+}

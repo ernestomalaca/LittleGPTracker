@@ -6,6 +6,8 @@
 #include "SRPUpdaters.h"
 
 #include "SoundSource.h"
+#include <string>
+#include <vector>
 #include "WarpStretch.h"
 #include <vector>
 #include "Application/Model/Song.h" 
@@ -107,6 +109,7 @@ enum SampleInstrumentLoopMode {
 #define SIP_S_ETAB  MAKE_FOURCC('S', 'E', 'T', 'B')   // pantalla: amp / filter
 #define SIP_S_SLICEBY MAKE_FOURCC('S', 'S', 'B', 'Y') // slice by: region / manual
 #define SIP_S_MARKS MAKE_FOURCC('S', 'M', 'R', 'K')   // marcas manuales (cuadros, "a,b,c")
+#define SIP_S_ZONES MAKE_FOURCC('S', 'Z', 'O', 'N')   // trk2als: zonas "lo,hi,raíz,cents,loopIni,loopFin,sample;..."
 #define SIP_CLIP MAKE_FOURCC('C', 'L', 'I', 'P')      // trk2als: 1 = es un loop de pista de audio (cargado desde la Song)
 
 enum SimplerSliceBy { SSB_REGION=0, SSB_MANUAL=1 } ;
@@ -124,6 +127,31 @@ enum SimplerMode { SM_CLASSIC = 0, SM_ONESHOT, SM_SLICE };
 enum SimplerWarp { SW_OFF = 0, SW_REPITCH, SW_COMPLEX };
 
 #define FB_BUFFER_LENGTH 3500 // (in samples)
+
+// trk2als: varios samples repartidos por teclas (un instrumento de un .sf2,
+// un piano, un kit). Se presenta como un solo SoundSource cuyo audio depende
+// de la nota, así el Sampler no cambia: cada voz toma el sample de su tecla.
+class ZoneSource: public SoundSource {
+public:
+	struct Zone {
+		int lo,hi ;          // teclas
+		int root ;           // tecla en que suena en su tono
+		float cents ;
+		int loopStart,loopEnd ; // cuadros; -1 sin loop
+		std::string name ;   // sample del pool
+		SoundSource *src ;
+	} ;
+	std::vector<Zone> zones_ ;
+	const Zone *Find(int note) ;   // la de la tecla, o la más cercana; note<0: la del C3
+	virtual int GetSize(int note) { const Zone *z=Find(note) ; return (z&&z->src)?z->src->GetSize(-1):0 ; }
+	virtual int GetSampleRate(int note) { const Zone *z=Find(note) ; return (z&&z->src)?z->src->GetSampleRate(-1):44100 ; }
+	virtual int GetChannelCount(int note) { const Zone *z=Find(note) ; return (z&&z->src)?z->src->GetChannelCount(-1):1 ; }
+	virtual void *GetSampleBuffer(int note) { const Zone *z=Find(note) ; return (z&&z->src)?z->src->GetSampleBuffer(-1):0 ; }
+	virtual bool IsMulti() { return false ; }
+	virtual int GetRootNote(int note) { const Zone *z=Find(note) ; return z?z->root:60 ; }
+	virtual int GetLoopStart(int note) { const Zone *z=Find(note) ; return z?z->loopStart:-1 ; }
+	virtual int GetLoopEnd(int note) { const Zone *z=Find(note) ; return z?z->loopEnd:-1 ; }
+} ;
 
 class SampleInstrument: public I_Instrument,I_Observer {
 
@@ -230,6 +258,12 @@ protected:
 
 private:
        SoundSource *source_ ;
+       // trk2als: zonas (instrumento de varios samples)
+       ZoneSource zones_ ;
+       bool zoned_ ;            // source_ son las zonas
+       int zonesPoolSize_ ;     // tamaño del pool cuando se resolvieron los nombres
+       std::string zonesStr_ ;  // la lista ya resuelta
+       void rebuildZones() ;
        struct renderParams renderParams_[SI_VOICE_COUNT] ;
        bool running_ ;
        bool dirty_ ;
@@ -244,6 +278,7 @@ private:
 	   // trk2als: warp complex; deja size cuadros estirados en warpOut_
 	   void renderComplex(int channel,renderParams *rp,int size) ;
 	   void readLoop(renderParams *rp,int n) ;
+	   public: void SetZones(const std::string &zones) ; bool IsZoned() { return zoned_ ; } int ZoneCount() { return (int)zones_.zones_.size() ; } private:
 	   bool cacheKey(renderParams *rp,int start,double speed,float transpose,WarpCacheKey &k) ;
 	   void readCache(renderParams *rp,int size,double speed) ;
 	   void dropCache(renderParams *rp) ;

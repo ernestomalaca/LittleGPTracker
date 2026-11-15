@@ -39,6 +39,10 @@ public:
   char **GetNameList();
   int GetNameListSize();
   int ImportSample(Path &path);
+  // trk2als: un .wav ya escrito en la carpeta samples del proyecto (lo cargado
+  // se reusa por nombre). Índice, o <0
+  int LoadProjectSample(const char *name);
+  int IndexOf(const char *name);
   bool IsImported(std::string name);
   // int InsertSample(const std::string& sampleName, bool imported, std::string fi);
   int Reassign(std::string name, bool imported);
