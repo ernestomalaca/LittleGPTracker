@@ -1,4 +1,7 @@
 #include "MessageBox.h"
+#include <vector>
+#include <string>
+#include <string.h>
 
 static const char *buttonText[MBL_LAST] = {
 	"Ok",
@@ -26,8 +29,19 @@ MessageBox::~MessageBox() {
 } ;
 
 void MessageBox::DrawView() {
-// message size
-	int size=message_.size() ;
+// message size (trk2als: puede tener varias líneas, separadas por '\n')
+	std::vector<std::string> lines ;
+	{
+		std::string rest=message_ ;
+		size_t nl ;
+		while ((nl=rest.find('\n'))!=std::string::npos) {
+			lines.push_back(rest.substr(0,nl)) ;
+			rest=rest.substr(nl+1) ;
+		}
+		lines.push_back(rest) ;
+	}
+	int size=0 ;
+	for (size_t i=0;i<lines.size();i++) if ((int)lines[i].size()>size) size=lines[i].size() ;
 
 // compute space needed for buttons
 // and set window size
@@ -35,17 +49,20 @@ void MessageBox::DrawView() {
 	int btnSize=5 ;
 	int width=buttonCount_*(btnSize+1)+1 ;
 	width=(size>width)?size:width ;
-	SetWindow(width,3) ;
+	SetWindow(width,2+lines.size()) ;
 
 // draw text
 
 	int y=0 ;
-	int x=(width-size)/2;
 	GUITextProperties props ;
 	SetColor(CD_NORMAL) ;
-	DrawString(x,y,message_.c_str(),props) ;
+	for (size_t i=0;i<lines.size();i++) {
+		int x=(width-lines[i].size())/2;
+		DrawString(x,y++,lines[i].c_str(),props) ;
+	}
 	
-	y=2 ;
+	y=lines.size()+1 ;
+	int x ;
 	int offset=width/(buttonCount_+1) ;
 
 	for (int i=0;i<buttonCount_;i++) {

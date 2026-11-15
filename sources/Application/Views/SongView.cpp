@@ -606,7 +606,10 @@ void SongView::extendSelection() {
         called when current view is becoming active
  ******************************************************/
 
-void SongView::OnFocus() { clipboard_.active_ = false; };
+void SongView::OnFocus() {
+    clipboard_.active_ = false;
+    checkScaleChange();   // trk2als
+};
 
 GUIRect SongView::getSelectionRect() {
 

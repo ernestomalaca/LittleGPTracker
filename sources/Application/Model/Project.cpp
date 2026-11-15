@@ -58,6 +58,8 @@ tempoNudge_(0)
     this->Insert(scaleRoot);
     Variable *fold = new Variable("fold", VAR_FOLD, true);
     this->Insert(fold);
+    appliedScale_ = 1;
+    appliedRoot_ = 0;
     // trk2als: tipo de cada pista (MIDI o audio, como en Live); se cambia en
     // la cabecera de la Song. Proyectos nuevos: todas MIDI
     // trk2als: un proyecto nuevo arranca con cuatro pistas MIDI, cada una
@@ -119,6 +121,46 @@ int Project::GetScale() {
     NAssert(v);
     int s = v->GetInt();
     return (s < 0 || s >= scaleCount) ? 0 : s;   // escalas viejas (picoTracker): sin escala
+}
+
+void Project::AcceptScale() {
+    appliedScale_ = GetScale();
+    appliedRoot_ = GetScaleRoot();
+}
+
+bool Project::ScaleChanged() {
+    return appliedScale_ != GetScale() || appliedRoot_ != GetScaleRoot();
+}
+
+// notas de las pistas MIDI (todas las phrases usadas) fuera de la escala
+int Project::OutOfScaleNotes() {
+    int scale = GetScale(), root = GetScaleRoot(), n = 0;
+    if (scale == 0) return 0;
+    Phrase *ph = song_->phrase_;
+    for (int i = 0; i < PHRASE_COUNT * 16; i++) {
+        unsigned char note = ph->note_[i];
+        if (note != 0xFF && note < 0x80 && !InScale(scale, root, note)) n++;
+    }
+    return n;
+}
+
+// cada nota fuera de la escala a la nota de la escala más cercana (en empate,
+// la de abajo: Mi en Do menor queda Mib)
+int Project::FitToScale() {
+    int scale = GetScale(), root = GetScaleRoot(), n = 0;
+    if (scale == 0) return 0;
+    Phrase *ph = song_->phrase_;
+    for (int i = 0; i < PHRASE_COUNT * 16; i++) {
+        int note = ph->note_[i];
+        if (note == 0xFF || note >= 0x80 || InScale(scale, root, note)) continue;
+        for (int d = 1; d < 12; d++) {
+            if (note - d >= 0 && InScale(scale, root, note - d)) { note -= d; break; }
+            if (note + d < 0x78 && InScale(scale, root, note + d)) { note += d; break; }
+        }
+        ph->note_[i] = (unsigned char)note;
+        n++;
+    }
+    return n;
 }
 
 bool Project::GetFold() {
@@ -585,6 +627,7 @@ void Project::RestoreContent(TiXmlElement *element) {
 		if (ch>=0) FindVariable(VAR_TRACKTYPE(ch))->SetInt(TT_AUDIO) ;
 	}
 	FindVariable(VAR_AUDIOTRACKS)->SetInt(0) ;
+	AcceptScale() ;   // trk2als: lo guardado ya está en su escala
 	// las pistas TRK de antes ahora son MIDI
 	for (int ch=0;ch<SONG_CHANNEL_COUNT;ch++) {
 		Variable *t=FindVariable(VAR_TRACKTYPE(ch)) ;

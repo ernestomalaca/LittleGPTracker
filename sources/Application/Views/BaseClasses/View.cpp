@@ -6,6 +6,8 @@
 #include "Application/AppWindow.h"
 #include "Application/Model/Config.h"
 #include "ModalView.h"
+#include "Application/Views/ModalDialogs/MessageBox.h"
+#include "Application/Model/Scale.h"
 
 bool View::initPrivate_=false ;
 
@@ -485,4 +487,42 @@ bool View::drawHelpBar(const char *items) {
 		x+=w+16 ;
 	}
 	return true ;
+}
+
+/******************************************************
+ trk2als: Fit to Scale. Al volver a la Song o al piano roll después de
+ cambiar la escala o la raíz, si hay notas fuera de la nueva escala se
+ pregunta si se pasan a la nota más cercana (no se puede deshacer)
+ ******************************************************/
+
+static void FitScaleCallback(View &v, ModalView &dialog) {
+    v.FitScaleAnswer(dialog.GetReturnCode() == MBL_YES);
+}
+
+void View::checkScaleChange() {
+    Project *project = viewData_->project_;
+    if (!project || !project->ScaleChanged() || modalView_) return;
+    int n = project->OutOfScaleNotes();
+    if (n == 0) {
+        project->AcceptScale();
+        return;
+    }
+    int scale = project->GetScale(), root = project->GetScaleRoot();
+    char buf[160];
+    snprintf(buf, sizeof(buf), "Pasar las notas a %s %s?\n%d notas quedaron fuera\nNo se puede deshacer",
+             scaleNotes[root], scaleNames[scale], n);
+    MessageBox *mb = new MessageBox(*this, buf, MBBF_YES | MBBF_NO);
+    DoModal(mb, FitScaleCallback);
+}
+
+void View::FitScaleAnswer(bool yes) {
+    Project *project = viewData_->project_;
+    if (yes) {
+        int n = project->FitToScale();
+        char buf[48];
+        snprintf(buf, sizeof(buf), "%d notas ajustadas", n);
+        View::SetNotification(buf);
+    }
+    project->AcceptScale();
+    isDirty_ = true;
 }

@@ -53,6 +53,13 @@ public:
   int GetScale();
   int GetScaleRoot();   // trk2als
   bool GetFold();
+  // trk2als: la escala con la que se escribió el contenido; si cambia, la
+  // Song / el piano roll ofrecen pasar las notas a la nueva (Fit to Scale)
+  bool ScaleChanged();
+  int OutOfScaleNotes();
+  int FitToScale();
+  void AcceptScale();
+  int appliedScale_, appliedRoot_;
   int GetTempo(); // Takes nudging into account
   int GetTranspose();
   int GetSoftclip();

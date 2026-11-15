@@ -113,6 +113,9 @@ class View : public Observable {
     // trk2als: la vista recibe los botones tal cual (Select, L, R, X, Y), sin
     // la traducción a los atajos de LGPT; pressedButton_ = el que se acaba de apretar
     virtual bool WantsRawButtons() { return false; }
+    // trk2als: si cambiaron la escala, ofrece pasar las notas (Fit to Scale)
+    void checkScaleChange();
+    void FitScaleAnswer(bool yes);
     static unsigned short pressedButton_;
 
     void SetDirty(bool dirty);

@@ -513,8 +513,17 @@ void ClipView::duplicateSelection() {
 int ClipView::stepPitch(int pitch, int dir) {
     int scale = viewData_->project_->GetScale();
     int root = viewData_->project_->GetScaleRoot();
+    // las notas que quedaron fuera de la escala también se pueden alcanzar
+    bool used[MAX_PITCH + 1];
+    memset(used, 0, sizeof(used));
+    if (scale > 0) {
+        std::vector<Note> notes;
+        readNotes(notes);
+        for (size_t i = 0; i < notes.size(); i++)
+            if (notes[i].pitch >= 0 && notes[i].pitch <= MAX_PITCH) used[notes[i].pitch] = true;
+    }
     int p = pitch + dir;
-    while (p >= 0 && p <= MAX_PITCH && !InScale(scale, root, p)) p += dir;
+    while (p >= 0 && p <= MAX_PITCH && !InScale(scale, root, p) && !used[p]) p += dir;
     if (p < 0 || p > MAX_PITCH) return pitch;
     return p;
 }
@@ -787,6 +796,7 @@ std::string ClipView::noteName(int pitch) {
 }
 
 void ClipView::OnFocus() {
+    checkScaleChange();   // trk2als
     if (chainShown_ != viewData_->currentChain_) {
         chainShown_ = viewData_->currentChain_;
         undo_.clear();   // el historial es de cada clip
