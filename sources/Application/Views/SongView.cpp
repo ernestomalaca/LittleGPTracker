@@ -1348,7 +1348,11 @@ void SongView::processRowButtonMask(unsigned int mask) {
     }
     if (mask & EPBM_START) {
         viewData_->chainRow_ = 0;
-        startCurrentRow();
+        if (player->GetSequencerMode() == SM_LIVE) {
+            player->OnSongStartButton(0, SONG_CHANNEL_COUNT - 1, false, false);   // la escena
+        } else {
+            player->OnSongStartButton(0, SONG_CHANNEL_COUNT - 1, false, false);   // la canción desde esta fila
+        }
     }
     if (mask & EPBM_RIGHT) rowMode_ = false;
     if (mask & EPBM_DOWN) updateCursor(0, 1);

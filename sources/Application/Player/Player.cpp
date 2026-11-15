@@ -24,7 +24,7 @@ Player::Player() {
 
     lastSongPos_ = 0;
     mode_=PM_SONG;
-	sequencerMode_=SM_LIVE;   // trk2als: como el Move, las escenas se quedan dando vueltas
+	sequencerMode_=SM_SONG;   // trk2als: arranca en Song; el modo Live (escenas que dan vueltas, como el Move) con B + izq/der
 	lastPercentage_=0;
 	retrigAllImmediate_=false;
 	startTime_=0;
