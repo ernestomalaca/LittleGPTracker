@@ -53,6 +53,13 @@ class ClipView : public View {
     std::vector<Snap> undo_, redo_;
     bool pasting_;
     void loopButton(bool left);   // B + L / B + R
+    // compases: B + A + → / ← duplica el compás, B + A + ↑ lo borra
+    bool duplicatePage(bool right);
+    void askDeletePage();
+  public:
+    void deletePageAnswer(bool yes);
+  private:
+    bool baPending_;   // B + A sin flecha: corta la nota al soltar A
     unsigned long lastLoopL_;
     bool prevHas_;            // cómo estaba el loop antes del primer toque
     int prevS_, prevE_;   // Select + A sostenido: se ve dónde va a caer lo copiado

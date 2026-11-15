@@ -3,6 +3,7 @@
 #include "Application/Model/Project.h"
 #include "Application/Instruments/CommandList.h"
 #include "Application/Model/Scale.h"
+#include "Application/Views/ModalDialogs/MessageBox.h"
 #include "System/System/System.h"
 #include <algorithm>
 #include <stdio.h>
@@ -47,6 +48,7 @@ ClipView::ClipView(GUIWindow &w, ViewData *viewData) : View(w, viewData) {
     chainShown_ = -1;
     pasting_ = false;
     lastLoopL_ = 0;
+    baPending_ = false;
     prevHas_ = false;
     prevS_ = prevE_ = 0;
 }
@@ -344,6 +346,94 @@ void ClipView::loopButton(bool left) {
 }
 
 /************************************************************
+ compases: duplicar a la derecha / izquierda, borrar
+ ************************************************************/
+
+bool ClipView::duplicatePage(bool right) {
+    int n = pages();
+    if (n == 0) return false;
+    if (n >= 16) { message("El clip ya tiene 16 compases"); return false; }
+    int page = cursorStep_ / 16;
+    Song *song = viewData_->song_;
+    int chain = viewData_->currentChain_;
+    unsigned char *row = song->chain_->data_ + 16 * chain;
+    unsigned char *tr = song->chain_->transpose_ + 16 * chain;
+    unsigned short np = song->phrase_->GetNext();
+    if (np == NO_MORE_PHRASE) { message("No quedan phrases libres"); return false; }
+    Phrase *ph = song->phrase_;
+    ph->SetUsed((unsigned char)np);
+    int src = 16 * row[page], dst = 16 * np;
+    memcpy(ph->note_ + dst, ph->note_ + src, 16);
+    memcpy(ph->instr_ + dst, ph->instr_ + src, 16);
+    memcpy(ph->cmd1_ + dst, ph->cmd1_ + src, 16 * sizeof(FourCC));
+    memcpy(ph->cmd2_ + dst, ph->cmd2_ + src, 16 * sizeof(FourCC));
+    memcpy(ph->param1_ + dst, ph->param1_ + src, 16 * sizeof(ushort));
+    memcpy(ph->param2_ + dst, ph->param2_ + src, 16 * sizeof(ushort));
+    // la copia entra después (derecha) o en su lugar, empujando el original (izquierda)
+    int at = right ? page + 1 : page;
+    for (int r = n; r > at; r--) {
+        row[r] = row[r - 1];
+        tr[r] = tr[r - 1];
+    }
+    row[at] = (unsigned char)np;
+    tr[at] = tr[right ? page : page + 1];
+    // el loop se recorre con lo que se movió
+    int s, e;
+    if (song->GetChainLoop(chain, s, e)) {
+        if (at <= s) { s++; e++; }
+        else if (at <= e) e++;
+        if (e > 15) e = 15;
+        if (s > 15) song->ClearChainLoop(chain);
+        else song->SetChainLoop(chain, s, e);
+    }
+    if (right) cursorStep_ += 16;   // a la copia
+    message(right ? "Compas %d duplicado a la derecha" : "Compas %d duplicado a la izquierda", page + 1);
+    return true;
+}
+
+static void DeletePageCallback(View &v, ModalView &dialog) {
+    ((ClipView &)v).deletePageAnswer(dialog.GetReturnCode() == MBL_YES);
+}
+
+void ClipView::askDeletePage() {
+    if (pages() <= 1) { message("El clip necesita al menos un compas"); return; }
+    char buf[64];
+    snprintf(buf, sizeof(buf), "Borrar el compas %d?\nLo de despues se recorre", cursorStep_ / 16 + 1);
+    MessageBox *mb = new MessageBox(*this, buf, MBBF_YES | MBBF_NO);
+    DoModal(mb, DeletePageCallback);
+}
+
+void ClipView::deletePageAnswer(bool yes) {
+    isDirty_ = true;
+    if (!yes) return;
+    Snap before;
+    takeSnap(before);
+    int n = pages();
+    int page = cursorStep_ / 16;
+    Song *song = viewData_->song_;
+    int chain = viewData_->currentChain_;
+    unsigned char *row = song->chain_->data_ + 16 * chain;
+    unsigned char *tr = song->chain_->transpose_ + 16 * chain;
+    for (int r = page; r < n - 1; r++) {
+        row[r] = row[r + 1];
+        tr[r] = tr[r + 1];
+    }
+    row[n - 1] = 0xFF;
+    tr[n - 1] = 0;
+    int s, e;
+    if (song->GetChainLoop(chain, s, e)) {
+        if (page < s) { s--; e--; }
+        else if (page <= e) e--;
+        if (e < s || e < 0) song->ClearChainLoop(chain);
+        else song->SetChainLoop(chain, s, e);
+    }
+    if (cursorStep_ >= total()) cursorStep_ = total() - 1;
+    undo_.push_back(before);
+    redo_.clear();
+    message("Compas %d borrado", page + 1);
+}
+
+/************************************************************
  deshacer
  ************************************************************/
 
@@ -569,6 +659,7 @@ void ClipView::message(const char *fmt, int n) {
 }
 
 void ClipView::AnimationUpdate() {
+    if (HasModal()) return;   // no borrar la ventanita (se dibuja encima)
     if (!msg_.empty() && System::GetInstance()->GetClock() - msgTime_ > 1500) {
         msg_.clear();
         DrawView();
@@ -855,6 +946,10 @@ void ClipView::ProcessButtonMask(unsigned short mask, bool pressed) {
 void ClipView::handleButton(unsigned short mask, bool pressed) {
     unsigned short v = View::pressedButton_;
     if (!pressed) {
+        if (baPending_ && !(mask & EPBM_A)) {   // B + A sola: corta la nota
+            baPending_ = false;
+            cutNote();
+        }
         if (pasting_ && !(mask & EPBM_A)) {   // al soltar A queda pegado ahí
             pasting_ = false;
             pasteNote();
@@ -983,7 +1078,13 @@ void ClipView::handleButton(unsigned short mask, bool pressed) {
     if (mask & EPBM_B) {
         if (v == EPBM_L) loopButton(true);
         if (v == EPBM_R) loopButton(false);
-        if (v == EPBM_A) cutNote();
+        if (mask & EPBM_A) {           // B + A + flecha: el compás entero
+            if (v == EPBM_A) baPending_ = true;
+            else if (dt) { baPending_ = false; duplicatePage(dt > 0); }
+            else if (v == EPBM_UP) { baPending_ = false; askDeletePage(); }
+            isDirty_ = true;
+            return;
+        }
         if (dt) {                      // de página en página
             if (dt > 0 && cursorStep_ / 16 + 1 >= pages()) addPage();
             moveCursor(dt * 16, 0);
@@ -1220,6 +1321,7 @@ void ClipView::DrawView() {
 }
 
 void ClipView::OnPlayerUpdate(PlayerEventType, unsigned int) {
+    if (HasModal()) return;
     Player *player = Player::GetInstance();
     int ch = viewData_->songX_;
     int step = -1;
