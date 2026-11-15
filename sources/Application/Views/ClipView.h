@@ -24,7 +24,7 @@ class ClipView : public View {
 
     struct Note {
         int start, len, pitch, vel, instr;
-        int tick;   // nudge: 0..5 sextos de paso después de 'start'
+        int tick;   // nudge: 0..23 (1/24 de paso) después de 'start'
         int rat;    // subdivisiones (1 = la nota entera)
         int ramp;   // rampa de velocity de las subdivisiones (-4..4)
         Note() : start(0), len(1), pitch(60), vel(100), instr(0xFF), tick(0), rat(1), ramp(0) {}

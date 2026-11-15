@@ -39,6 +39,9 @@ public:
 	int Ratchet(int voice,int phrase,int pos) { return ((timing_[TIdx(voice,phrase,pos)]>>4)&7)+1 ; }
 	// rampa de velocity de las subdivisiones: -4..4 (+ crece, - se apaga)
 	uchar *ramp_ ;
+	// nudge fino: cuartos de tick (0..3) además de Tick(): 1/24 de paso
+	uchar *fine_ ;
+	int Fine(int voice,int phrase,int pos) { return fine_[TIdx(voice,phrase,pos)]&3 ; }
 	int Ramp(int voice,int phrase,int pos) { return (signed char)ramp_[TIdx(voice,phrase,pos)] ; }
 	void ClearVoices(int phrase) ;
 	void CopyVoices(int from,int to) ;

@@ -978,7 +978,7 @@ void Player::playCursorPosition(int channel) {
 
                 // Check if note is in acceptable midi range
 
-                if (note < 128 && t0 != 0) {
+                if (note < 128 && (t0 != 0 || late0)) {
                     // trk2als: nudge / subdivisiones: los golpes van programados
                     int vel = -1;
                     if (phrase->cmd1_[16 * currentPhrase + pos] == I_CMD_MVEL) vel = (phrase->param1_[16 * currentPhrase + pos] & 0xFF) / 2;
@@ -1043,10 +1043,10 @@ void Player::playCursorPosition(int channel) {
             if (!late)
                 mixer_->StartVoice(channel, vinstr, v, (unsigned char)vnote,
                                    vel == VVEL_DEFAULT ? -1 : vel);
-            if (tv)
+            if (tv || late)
                 scheduleHits(channel, v, currentPhrase, pos, vinstr, (unsigned char)vnote,
                              vel == VVEL_DEFAULT ? -1 : vel, !late);
-            lastTick_[channel][v] = tv & 0x0F;
+            lastTick_[channel][v] = ((tv & 0x0F) * 4 + phrase->Fine(v, currentPhrase, pos) + 2) / 4;
         }
         if ((note != 0xFF) || (instr != 0xFF)) {
             I_Instrument *instrument = mixer_->GetInstrument(channel);
@@ -1440,7 +1440,7 @@ int Player::noteSpan(int channel, int voice, int phrase, int pos) {
 void Player::scheduleHits(int channel, int voice, int phrase, int pos, I_Instrument *instr,
                           unsigned char note, int vel, bool skipFirst) {
     Phrase *ph = viewData_->song_->phrase_;
-    int tick = ph->Tick(voice, phrase, pos);
+    double tick = ph->Tick(voice, phrase, pos) + ph->Fine(voice, phrase, pos) / 4.0;   // en sextos de paso
     int n = ph->Ratchet(voice, phrase, pos);
     if (tick > 5) tick = 5;
     // lo que estaba pendiente en esta voz ya no va: llegó otra nota
@@ -1500,6 +1500,6 @@ void Player::fireTimed() {
 
 bool Player::firstLate(int voice, int phrase, int pos) {
     Phrase *ph = viewData_->song_->phrase_;
-    if (ph->Tick(voice, phrase, pos) != 0) return true;
+    if (ph->Tick(voice, phrase, pos) != 0 || ph->Fine(voice, phrase, pos) != 0) return true;
     return ph->Ratchet(voice, phrase, pos) > 1 && ph->Ramp(voice, phrase, pos) != 0;
 }

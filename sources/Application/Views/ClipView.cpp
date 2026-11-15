@@ -116,10 +116,10 @@ void ClipView::readNotes(std::vector<Note> &out) {
                 n.pitch = note;
                 n.instr = instr;
                 n.vel = vel < 1 ? 1 : vel;
-                n.tick = ph->Tick(v, p, pos);
+                n.tick = ph->Tick(v, p, pos) * 4 + ph->Fine(v, p, pos);
                 n.rat = ph->Ratchet(v, p, pos);
                 n.ramp = ph->Ramp(v, p, pos);
-                if (n.tick > 5) n.tick = 5;
+                if (n.tick > 23) n.tick = 23;
                 out.push_back(n);
                 open = int(out.size()) - 1;
             }
@@ -206,6 +206,7 @@ void ClipView::writeNotes(std::vector<Note> &notes) {
         for (int v = 0; v < VOICE_COUNT; v++) {
             ph->timing_[Phrase::TIdx(v, p, pos)] = 0;
             ph->ramp_[Phrase::TIdx(v, p, pos)] = 0;
+            ph->fine_[Phrase::TIdx(v, p, pos)] = 0;
         }
     }
     for (size_t k = 0; k < ok.size(); k++) {
@@ -221,7 +222,8 @@ void ClipView::writeNotes(std::vector<Note> &notes) {
         int end = n.start + n.len;
         if (n.tick > 0 || n.rat > 1)
             ph->timing_[Phrase::TIdx(v, p, pos)] =
-                (unsigned char)((n.tick & 0x0F) | (((n.rat - 1) & 7) << 4));
+                (unsigned char)(((n.tick / 4) & 0x0F) | (((n.rat - 1) & 7) << 4));
+        ph->fine_[Phrase::TIdx(v, p, pos)] = (unsigned char)(n.tick % 4);
         if (n.rat > 1 && n.ramp) ph->ramp_[Phrase::TIdx(v, p, pos)] = (unsigned char)(signed char)n.ramp;
         if (v == 0) {
             ph->note_[i] = (unsigned char)n.pitch;
@@ -235,8 +237,8 @@ void ClipView::writeNotes(std::vector<Note> &notes) {
                 stepPtr(end, p, pos);
                 int j = 16 * p + pos;
                 // con nudge el final también se recorre: KILL 0t = corta t sextos después
-                if (ph->cmd1_[j] == I_CMD_NONE) { ph->cmd1_[j] = I_CMD_KILL; ph->param1_[j] = n.tick; }
-                else if (ph->cmd2_[j] == I_CMD_NONE) { ph->cmd2_[j] = I_CMD_KILL; ph->param2_[j] = n.tick; }
+                if (ph->cmd1_[j] == I_CMD_NONE) { ph->cmd1_[j] = I_CMD_KILL; ph->param1_[j] = (n.tick + 2) / 4; }
+                else if (ph->cmd2_[j] == I_CMD_NONE) { ph->cmd2_[j] = I_CMD_KILL; ph->param2_[j] = (n.tick + 2) / 4; }
             }
         } else {
             int vi = Phrase::VIdx(v, p, pos);
@@ -572,6 +574,7 @@ void ClipView::takeSnap(Snap &s) {
             int ti = Phrase::TIdx(v, row[r], 0);
             s.data.insert(s.data.end(), ph->timing_ + ti, ph->timing_ + ti + 16);
             s.data.insert(s.data.end(), ph->ramp_ + ti, ph->ramp_ + ti + 16);
+            s.data.insert(s.data.end(), ph->fine_ + ti, ph->fine_ + ti + 16);
         }
     }
 }
@@ -602,6 +605,7 @@ void ClipView::restoreSnap(const Snap &s) {
         for (int v = 0; v < VOICE_COUNT; v++) {
             memcpy(ph->timing_ + Phrase::TIdx(v, row[r], 0), d, 16); d += 16;
             memcpy(ph->ramp_ + Phrase::TIdx(v, row[r], 0), d, 16); d += 16;
+            memcpy(ph->fine_ + Phrase::TIdx(v, row[r], 0), d, 16); d += 16;
         }
     }
     if (cursorStep_ >= total() && total() > 0) cursorStep_ = total() - 1;
@@ -904,7 +908,7 @@ void ClipView::changeVelocity(int d) {
     message(m);
 }
 
-// nudge: de sexto en sexto de paso; la nota se recorre entera
+// nudge: de 1/24 en 1/24 de paso; la nota se recorre entera
 void ClipView::nudge(int d) {
     std::vector<Note> notes;
     std::vector<int> idx;
@@ -912,19 +916,19 @@ void ClipView::nudge(int d) {
     int t = total();
     for (size_t k = 0; k < idx.size(); k++) {
         Note &n = notes[idx[k]];   // la nota entera se recorre (inicio y final)
-        int pos = n.start * 6 + n.tick + d;
+        int pos = n.start * 24 + n.tick + d;
         if (pos < 0) pos = 0;
-        if (pos > (t - n.len) * 6 + 5) pos = (t - n.len) * 6 + 5;
+        if (pos > (t - n.len) * 24 + 23) pos = (t - n.len) * 24 + 23;
         if (pos < 0) pos = 0;
-        n.start = pos / 6;
-        n.tick = pos % 6;
+        n.start = pos / 24;
+        n.tick = pos % 24;
     }
     int tk = notes[idx[0]].tick;
     if (!marking_) cursorStep_ = notes[idx[0]].start;
     writeNotes(notes);
     char m[32];
     if (tk == 0) snprintf(m, sizeof(m), "Nudge: en la rejilla");
-    else snprintf(m, sizeof(m), "Nudge +%d/6 de paso", tk);
+    else snprintf(m, sizeof(m), "Nudge +%d/24 de paso", tk);
     message(m);
     audition(cursorStep_);
 }
@@ -1442,7 +1446,7 @@ void ClipView::DrawView() {
             sprintf(info, "pag %d/%d   paso %d   %s   vel %d   largo %d", page + 1,
                     npages > 0 ? npages : 1, cursorStep_ % 16 + 1, noteName(notes[cur].pitch).c_str(),
                     notes[cur].vel, notes[cur].len);
-            if (notes[cur].tick) sprintf(info + strlen(info), "  +%d/6", notes[cur].tick);
+            if (notes[cur].tick) sprintf(info + strlen(info), "  +%d/24", notes[cur].tick);
             if (notes[cur].rat > 1) sprintf(info + strlen(info), "  x%d", notes[cur].rat);
         } else {
             sprintf(info, "pag %d/%d   paso %d   %s", page + 1, npages > 0 ? npages : 1,
@@ -1559,7 +1563,7 @@ void ClipView::DrawView() {
         int x = GRID_X + s0 * STEP_W + 1, y = GRID_Y + r * RH + 1;
         int w = (s1 - s0) * STEP_W - 2;
         if (n.tick > 0) {   // nudge: la nota entera un poco después
-            int off = n.tick * STEP_W / 6;
+            int off = n.tick * STEP_W / 24;
             if (n.start >= p0) x += off;
             else w += off;
             if (x + w > GRID_X + 16 * STEP_W) w = GRID_X + 16 * STEP_W - x;
