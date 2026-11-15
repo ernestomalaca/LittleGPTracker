@@ -4,6 +4,37 @@
 #include "Application/AppWindow.h"
 #include <math.h>
 
+
+// trk2als: campo sample que se salta los .wav de las zonas de un soundfont
+// (son partes internas de ese instrumento, no samples para usar sueltos)
+class UISampleField: public UIIntVarField {
+public:
+	UISampleField(GUIPoint &p,Variable &v,int max,const std::vector<bool> &hidden)
+		:UIIntVarField(p,v,"sample: %s",0,max,1,0x10),hidden_(hidden) {}
+	virtual void ProcessArrow(unsigned short mask) {
+		int value=src_.GetInt() ;
+		int step=0 ;
+		switch (mask) {
+			case EPBM_UP: step=yOffset_ ; break ;
+			case EPBM_DOWN: step=-yOffset_ ; break ;
+			case EPBM_LEFT: step=-xOffset_ ; break ;
+			case EPBM_RIGHT: step=xOffset_ ; break ;
+		}
+		if (!step) return ;
+		int dir=step>0?1:-1 ;
+		int target=value+step ;
+		if (target<min_) target=min_ ;
+		if (target>max_) target=max_ ;
+		// si cae en uno escondido, sigue en la misma dirección
+		while (target>=min_ && target<=max_ && isHidden(target)) target+=dir ;
+		if (target<min_ || target>max_) return ;
+		src_.SetInt(target) ;
+	}
+private:
+	bool isHidden(int i) { return i>=0 && i<(int)hidden_.size() && hidden_[i] ; }
+	std::vector<bool> hidden_ ;
+} ;
+
 // trk2als: en un instrumento soundfont el campo sample muestra el nombre y
 // cuántas zonas tiene, y no se recorre con las flechas (A,A abre el
 // navegador solo con .sf2)
@@ -319,7 +350,31 @@ void InstrumentView::fillSampleParameters() {
 		         instrument->ZoneCount(),instrument->ZoneCount()==1?"":"s") ;
 		f1=new UISoundfontField(AT(L),*v,label,v->GetInt()) ;
 	} else {
-		f1=new UIIntVarField(AT(L),*v,"sample: %s",0,sp->GetNameListSize()-1,1,0x10) ;
+		// los .wav de las zonas de cualquier soundfont del proyecto no salen
+		std::vector<bool> hidden(sp->GetNameListSize(),false) ;
+		for (int k=0;k<MAX_SAMPLEINSTRUMENT_COUNT;k++) {
+			I_Instrument *other=bank->GetInstrument(k) ;
+			if (!other || other->GetType()!=IT_SAMPLE) continue ;
+			const char *zs=((SampleInstrument *)other)->FindVariable(SIP_S_ZONES)->GetString() ;
+			if (!zs || !*zs) continue ;
+			std::string all=zs ;
+			size_t pos=0 ;
+			while (pos<all.size()) {
+				size_t end=all.find(';',pos) ;
+				if (end==std::string::npos) end=all.size() ;
+				std::string item=all.substr(pos,end-pos) ;
+				pos=end+1 ;
+				int commas=0 ;
+				for (size_t c=0;c<item.size();c++) {
+					if (item[c]==',' && ++commas==6) {
+						int idx=sp->IndexOf(item.substr(c+1).c_str()) ;
+						if (idx>=0) hidden[idx]=true ;
+						break ;
+					}
+				}
+			}
+		}
+		f1=new UISampleField(AT(L),*v,sp->GetNameListSize()-1,hidden) ;
 	}
 	ADD(f1) ;
 	f1->SetFocus() ;
