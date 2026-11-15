@@ -95,6 +95,9 @@ SampleInstrument::SampleInstrument() {
 			 else WarpCache::SetBudget(mb) ;
 		 }
 	 }
+	 kitStarting_=false ;
+	 for (int i=0;i<SONG_CHANNEL_COUNT;i++) lastKitSlot_[i]=i ;
+	 for (int i=0;i<SI_VOICE_COUNT;i++) kitStartClock_[i]=0 ;
 	 static bool notesInit=false ;
 	 if (!notesInit) {
 		 notesInit=true ;
@@ -221,6 +224,7 @@ SampleInstrument::SampleInstrument() {
 	 Insert(new Variable("s marks",SIP_S_MARKS,"")) ;
 	 Insert(new Variable("audio clip",SIP_CLIP,0)) ;
 	 Insert(new Variable("s zones",SIP_S_ZONES,"")) ;
+	 Insert(new Variable("s kit",SIP_S_KIT,0)) ;
 	 Insert(new Variable("s transpose",SIP_S_TRANSP,0)) ;
 	 Insert(new Variable("s detune",SIP_S_DETUNE,0)) ;
 	 Insert(new Variable("s glide",SIP_S_GLIDE,0)) ;
@@ -346,6 +350,11 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 
   if (source_==0) return false ;
 
+  // trk2als: kit: el golpe va a una voz libre del canal (no corta a los otros)
+  if (channel<SONG_CHANNEL_COUNT && !kitStarting_ && IsKit()) {
+      return startKit(channel,midinote,-1,flags) ;
+  }
+
   // Get Rendering params for current voice & fill init data
 
   renderParams *rp=renderParams_+channel ;
@@ -360,14 +369,14 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
      // o completa en trigger) en vez de cortarse; con glide no: se desliza
      // trk2als: clip de audio que sigue sonando: pasa a la voz de cola y se
      // apaga en 4 ms mientras entra el nuevo (sin click)
-     if (channel<SONG_CHANNEL_COUNT && rp->audioClip_ && !rp->finished_ &&
+     if (!kitStarting_ && channel<SONG_CHANNEL_COUNT && rp->audioClip_ && !rp->finished_ &&
          voiceClock_[channel]!=0 &&
          System::GetInstance()->GetClock()-voiceClock_[channel]<200) {
          startTail(channel) ;
          renderParams *tp=renderParams_+channel+SONG_CHANNEL_COUNT ;
          tp->declickOut_=tp->declickOutLen_=176 ;
      }
-     if (channel<SONG_CHANNEL_COUNT) {
+     if (channel<SONG_CHANNEL_COUNT && !kitStarting_) {
          int t=channel+SONG_CHANNEL_COUNT ;
          unsigned long now=System::GetInstance()->GetClock() ;
          // una cola que nadie renderiza hace rato (cambió el instrumento del
@@ -694,7 +703,56 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 	return true ;
 }
 
+// trk2als: un golpe del kit. Voces del canal: la principal, la de cola y las
+// tres de acorde. El mismo pad se reinicia en su voz; si no, una libre; si no
+// hay, la que empezó antes
+bool SampleInstrument::startKit(int channel,unsigned char note,int velocity,int flags) {
+	int slots[2+SI_CHORD_VOICES] ;
+	for (int k=0;k<2+SI_CHORD_VOICES;k++) slots[k]=channel+k*SONG_CHANNEL_COUNT ;
+	int pick=-1 ;
+	for (int k=0;k<2+SI_CHORD_VOICES && pick<0;k++) {
+		renderParams *rp=renderParams_+slots[k] ;
+		if (!rp->finished_ && rp->envStage_<4 && rp->midiNote_==note) pick=slots[k] ;
+	}
+	for (int k=0;k<2+SI_CHORD_VOICES && pick<0;k++) {
+		renderParams *rp=renderParams_+slots[k] ;
+		if (rp->finished_ || (rp->simpler_ && rp->envStage_>=4)) pick=slots[k] ;
+	}
+	if (pick<0) {
+		pick=slots[0] ;
+		for (int k=1;k<2+SI_CHORD_VOICES;k++)
+			if (kitStartClock_[slots[k]]<kitStartClock_[pick]) pick=slots[k] ;
+	}
+	kitStarting_=true ;
+	bool ok=Start(pick,note,flags) ;
+	kitStarting_=false ;
+	if (!ok) return false ;
+	renderParams *rp=renderParams_+pick ;
+	rp->gate_=false ;   // one-shot: no importa el largo de la nota
+	kitStartClock_[pick]=System::GetInstance()->GetClock()+1 ;
+	lastKitSlot_[channel]=pick ;
+	if (velocity>=0 && velocity!=100) ProcessCommand(pick,I_CMD_MVEL,(ushort)(velocity*2)) ;
+	return true ;
+}
+
+std::string SampleInstrument::PadName(int note) {
+	ensureZones() ;
+	for (size_t i=0;i<zones_.zones_.size();i++) {
+		const ZoneSource::Zone &z=zones_.zones_[i] ;
+		if (note>=z.lo && note<=z.hi) {
+			std::string n=z.name ;
+			size_t sl=n.rfind('/') ;
+			if (sl!=std::string::npos) n=n.substr(sl+1) ;
+			size_t dot=n.rfind('.') ;
+			if (dot!=std::string::npos) n=n.substr(0,dot) ;
+			return n ;
+		}
+	}
+	return "" ;
+}
+
 void SampleInstrument::Stop(int channel) {
+	if (channel<SONG_CHANNEL_COUNT && IsKit()) return ;   // trk2als: kit: los golpes suenan completos
 
 	// Get Rendering params for current voice & fill init data
 
@@ -725,6 +783,7 @@ void SampleInstrument::Stop(int channel) {
 // suelta con su release y, si vuelve a sonar, arranca de nuevo)
 bool SampleInstrument::StartVoice(int channel,int voice,unsigned char note,int velocity,int flags) {
 	if (voice<1 || voice>SI_CHORD_VOICES || channel<0 || channel>=SONG_CHANNEL_COUNT) return false ;
+	if (IsKit()) return startKit(channel,note,velocity,flags) ;
 	int idx=ChordIdx(channel,voice) ;
 	bool ok=Start(idx,note,flags) ;
 	if (ok && velocity>=0 && velocity!=100) ProcessCommand(idx,I_CMD_MVEL,(ushort)(velocity*2)) ;
@@ -733,6 +792,7 @@ bool SampleInstrument::StartVoice(int channel,int voice,unsigned char note,int v
 
 void SampleInstrument::StopVoice(int channel,int voice) {
 	if (voice<1 || voice>SI_CHORD_VOICES || channel<0 || channel>=SONG_CHANNEL_COUNT) return ;
+	if (IsKit()) return ;   // los golpes suenan completos
 	Stop(ChordIdx(channel,voice)) ;
 }
 
@@ -1860,6 +1920,8 @@ bool SampleInstrument::startSimpler(renderParams *rp,int channel,unsigned char n
 		// loop si lo trae (sin región, slices ni warp)
 		const ZoneSource::Zone *z=zones_.Find(rp->midiNote_) ;
 		if (!z || !z->src) return false ;
+		if (GetSimpler(SIP_S_KIT) && (int(rp->midiNote_)<z->lo || int(rp->midiNote_)>z->hi))
+			return false ;   // trk2als: kit: fuera de los pads no suena
 		int zsize=z->src->GetSize(-1) ;
 		if (zsize<=0) return false ;
 		offset=GetSimpler(SIP_S_TRANSP)+GetSimpler(SIP_S_DETUNE)/100.0f+
@@ -2561,6 +2623,9 @@ void SampleInstrument::Update(Observable &o,I_ObservableData *d)
 } ;
 
 void SampleInstrument::ProcessCommand(int channel,FourCC cc,ushort value) {
+	// trk2als: en un kit, el velocity de la nota va a la voz donde cayó el golpe
+	if (channel<SONG_CHANNEL_COUNT && (cc==I_CMD_MVEL || cc==I_CMD_VOLM) && IsKit())
+		channel=lastKitSlot_[channel] ;
 	
  	renderParams *rp=renderParams_+channel ;
 	if (!source_) return ;

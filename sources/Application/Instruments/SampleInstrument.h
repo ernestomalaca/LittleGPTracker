@@ -109,6 +109,7 @@ enum SampleInstrumentLoopMode {
 #define SIP_S_ETAB  MAKE_FOURCC('S', 'E', 'T', 'B')   // pantalla: amp / filter
 #define SIP_S_SLICEBY MAKE_FOURCC('S', 'S', 'B', 'Y') // slice by: region / manual
 #define SIP_S_MARKS MAKE_FOURCC('S', 'M', 'R', 'K')   // marcas manuales (cuadros, "a,b,c")
+#define SIP_S_KIT MAKE_FOURCC('S', 'K', 'I', 'T')   // trk2als: las zonas son pads de batería (one-shot)
 #define SIP_S_ZONES MAKE_FOURCC('S', 'Z', 'O', 'N')   // trk2als: zonas "lo,hi,raíz,cents,loopIni,loopFin,sample;..."
 #define SIP_CLIP MAKE_FOURCC('C', 'L', 'I', 'P')      // trk2als: 1 = es un loop de pista de audio (cargado desde la Song)
 
@@ -288,6 +289,16 @@ private:
 	   const std::vector<ZoneSource::Zone> &Zones() { ensureZones() ; return zones_.zones_ ; }
 	   std::string ZoneSetName() ;   // "marimba" (de marimba_01.wav)
 	   int LastNote() { return lastNote_ ; }   // la última nota que empezó
+	   // trk2als: kit de batería. Cada zona es un pad (una tecla) que suena
+	   // completo; los golpes se reparten en las 5 voces del canal
+	   bool IsKit() { return IsZoned() && GetSimpler(SIP_S_KIT)!=0 ; }
+	   std::string PadName(int note) ;   // nombre corto del sample del pad, o ""
+	   private:
+	   bool startKit(int channel,unsigned char note,int velocity,int flags) ;
+	   bool kitStarting_ ;
+	   int lastKitSlot_[SONG_CHANNEL_COUNT] ;
+	   unsigned long kitStartClock_[SI_VOICE_COUNT] ;
+	   public:
 	   private:
 	   int lastNote_ ;
 	   bool cacheKey(renderParams *rp,int start,double speed,float transpose,WarpCacheKey &k) ;
