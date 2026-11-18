@@ -25,6 +25,8 @@ public:
   
   FourCC GetVariableID() ;
 	Variable &GetVariable() ;
+	const char *GetFormat() { return format_ ; }
+	int GetDrawnLength() { return drawnLen_ ; }   // trk2als: cuántas letras se dibujaron (el puntito va después)
 protected:
 	Variable &src_ ;
 	const char *format_ ;
@@ -33,6 +35,7 @@ protected:
 	int xOffset_ ;
 	int yOffset_ ;
   int displayOffset_;
+	int drawnLen_ ;
 } ;
 
 #endif

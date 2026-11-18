@@ -1,4 +1,5 @@
 #include "InstrumentView.h"
+#include "Application/Mixer/MixerService.h"
 #include "Application/Instruments/SF2Import.h"
 #include "Application/Instruments/SoundFontPreset.h"
 #include "Application/AppWindow.h"
@@ -149,6 +150,7 @@ public:
 		if (hz>=10000) sprintf(buffer,"freq: %dkHz",(hz+500)/1000) ;
 		else if (hz>=1000) sprintf(buffer,"freq: %d.%dkHz",hz/1000,(hz%1000+50)/100>9?9:(hz%1000+50)/100) ;
 		else sprintf(buffer,"freq: %dHz",hz) ;
+		drawnLen_=int(strlen(buffer)) ;
 		w.DrawString(buffer,position,props) ;
 	}
 	virtual void ProcessArrow(unsigned short mask) {
@@ -304,6 +306,15 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data),
 	padClipCut_=false ;
 	padAPending_=false ;
 	kitOwner_=0 ;
+	touching_=false ;   // trk2als: automatización
+	touchID_=0 ;
+	touchCh_=touchClip_=touchLast_=-1 ;
+	touchHadOld_=false ;
+	laneUndo_=false ;
+	laneUndoClip_=-1 ;
+	laneUndoTime_=0 ;
+	selTap_=false ;
+	recShown_=false ;
 	markTap_=false ;
 	waveEdit_=false ;
 	waveZoom_=1 ;
@@ -899,6 +910,12 @@ void InstrumentView::warpToNext(int offset) {
 } ;
 
 void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
+	// trk2als: automatización
+	if (pressed && mask==(EPBM_Y|EPBM_START)) { toggleAutoRec() ; return ; }
+	// un toque de Select (nada más) poco después de borrar: recupera la lane
+	if (pressed) selTap_=(mask==EPBM_L) ;
+	else if (selTap_ && !(mask&EPBM_L)) { selTap_=false ; if (undoLane()) return ; }
+	if (!pressed && touching_ && !(mask&EPBM_A)) endTouch() ;
 	if (kitMode_ && padAPending_) {   // A tocada sola en un pad vacío (sin flechas)
 		if (pressed && mask!=EPBM_A) padAPending_=false ;
 		else if (!pressed && !(mask&EPBM_A)) {
@@ -910,6 +927,11 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 	if (pressed && kitMode_ && processKit(mask)) { kitTrack() ; return ; }
 	processButtonMask(mask,pressed) ;
 	if (pressed) { kitSync() ; kitTrack() ; }
+	// A sostenido en un parámetro mientras se graba: se escribe la lane
+	if (pressed && (mask&EPBM_A) && !(mask&EPBM_B) && Player::GetInstance()->IsAutoRec()) {
+		if (!touching_) beginTouch() ;
+		if (touching_) recordTouch() ;
+	}
 }
 
 void InstrumentView::processButtonMask(unsigned short mask,bool pressed) {
@@ -1094,7 +1116,8 @@ void InstrumentView::processButtonMask(unsigned short mask,bool pressed) {
 		   // trk2als: B+A en cualquier otro campo lo regresa a su valor por defecto
 		   if (GetFocus()!=T_SimpleList<UIField>::GetFirst() && !onTable &&
 		       !GetFocus()->IsStatic()) {
-				resetFocusedField() ;
+				// trk2als: si está automatizado, B+A quita la automatización
+				if (!deleteLane()) resetFocusedField() ;
 		   }
         }
         if (mask&EPBM_L) {
@@ -1233,8 +1256,29 @@ void InstrumentView::DrawView() {
     if (!SupportsShapes()) DrawString(pos._x, pos._y, title, props);
 
     // Draw fields
-
+    // trk2als: lo automatizado se ve con el valor que va sonando
+    std::vector<Variable *> tmpVar ;
+    std::vector<int> tmpOld ;
+    autoShown_.clear() ;
+    if (current_ && current_->GetType()==IT_SAMPLE && Player::GetInstance()->IsRunning()) {
+        SampleInstrument *si=(SampleInstrument *)current_ ;
+        IteratorPtr<UIField> it(T_SimpleList<UIField>::GetIterator()) ;
+        for (it->Begin();!it->IsDone();it->Next()) {
+            UIField &f=it->CurrentItem() ;
+            if (f.IsStatic()) continue ;
+            Variable &v=((UIIntVarField &)f).GetVariable() ;
+            int av ;
+            if (!automatable(v.GetID()) || !si->GetAutomated(v.GetID(),av)) continue ;
+            if (touching_ && v.GetID()==touchID_) continue ;   // lo que se está moviendo
+            tmpVar.push_back(&v) ;
+            tmpOld.push_back(v.GetInt()) ;
+            v.SetInt(av) ;
+            autoShown_.push_back(av) ;
+        }
+    }
     FieldView::Redraw();
+    for (size_t k=0;k<tmpVar.size();k++) tmpVar[k]->SetInt(tmpOld[k]) ;
+    recShown_=Player::GetInstance()->IsAutoRec() ;
     drawMap() ;
 
     // trk2als: cuánto se acelera o frena el loop para ir al tempo del proyecto
@@ -1292,7 +1336,12 @@ void InstrumentView::drawWaveform() {
 	if (kitMode_ && GetFocus() && !GetFocus()->IsStatic() &&
 	    ((UIIntVarField *)GetFocus())->GetVariableID()==SIP_SAMPLE)
 		help="A:cambiar de kit;B+A:vaciar el instrumento" ;
+	if (!helpText_ && GetFocus() && !GetFocus()->IsStatic() &&
+	    automatable(((UIIntVarField *)GetFocus())->GetVariableID()))
+		help=Player::GetInstance()->IsAutoRec() ? "A sostenido+<>:grabar;Y+START:dejar de grabar"
+		                                        : "A+<>:valor;Y+START:grabar automatizacion;B+A:borrarla" ;
 	drawHelpBar(help) ;
+	drawAutoMarks() ;   // trk2als
 }
 
 void InstrumentView::drawWaveformBody() {
@@ -1710,6 +1759,26 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 void InstrumentView::AnimationUpdate() {
 	if (!current_ || current_->GetType()!=IT_SAMPLE || HasModal()) return ;
 	SampleInstrument *si=(SampleInstrument *)current_ ;
+	// trk2als: automatización: seguir escribiendo mientras se sostiene A, y
+	// redibujar si cambió algún valor automatizado (o la grabación)
+	if (touching_) recordTouch() ;
+	{
+		std::vector<int> now ;
+		if (Player::GetInstance()->IsRunning()) {
+			IteratorPtr<UIField> it(T_SimpleList<UIField>::GetIterator()) ;
+			for (it->Begin();!it->IsDone();it->Next()) {
+				UIField &f=it->CurrentItem() ;
+				if (f.IsStatic()) continue ;
+				FourCC id=((UIIntVarField &)f).GetVariableID() ;
+				int av ;
+				if (automatable(id) && si->GetAutomated(id,av) && !(touching_ && id==touchID_)) now.push_back(av) ;
+			}
+		}
+		if (now!=autoShown_ || recShown_!=Player::GetInstance()->IsAutoRec()) {
+			DrawView() ;
+			return ;
+		}
+	}
 	int pos=si->GetPlayPosition() ;
 	int px=-1 ;
 	if (pos>=wfFrom_ && wfTo_>wfFrom_ && pos<=wfTo_) {
@@ -2574,4 +2643,209 @@ void InstrumentView::drawPadGrid(SampleInstrument *si,int X,int Y,int W,int H) {
 	char info[96] ;
 	snprintf(info,sizeof(info),"pad %d %s",sel+1,padNoteName(note).c_str()) ;
 	topInfo_=info ;
+}
+
+/************************************************************
+ trk2als: automatización desde la pantalla del instrumento
+ ************************************************************/
+
+// los parámetros del Sampler que suenan en vivo (los lee GetSimpler)
+bool InstrumentView::automatable(FourCC id) {
+	switch (id) {
+		case SIP_S_START: case SIP_S_END: case SIP_S_LLEN:
+		case SIP_S_TRANSP: case SIP_S_DETUNE: case SIP_S_GLIDE:
+		case SIP_S_FTYPE: case SIP_S_FHZ: case SIP_S_FQ: case SIP_S_FST:
+		case SIP_S_FATK: case SIP_S_FDEC: case SIP_S_FSUS: case SIP_S_FREL: case SIP_S_FKEY:
+		case SIP_S_FIN: case SIP_S_FOUT:
+		case SIP_S_ATK: case SIP_S_DEC: case SIP_S_SUS: case SIP_S_REL:
+		case SIP_S_VOL: case SIP_S_PAN:
+			return true ;
+		default:
+			return false ;
+	}
+}
+
+int InstrumentView::autoChannel() {
+	for (int ch=0;ch<SONG_CHANNEL_COUNT;ch++)
+		if (viewData_->project_->GetTrackInstrument(ch)==viewData_->currentInstrument_) return ch ;
+	return -1 ;
+}
+
+int InstrumentView::autoClip(int ch) {
+	if (ch<0) return -1 ;
+	Player *player=Player::GetInstance() ;
+	if (player->ClipTickPos(ch)>=0) return viewData_->currentPlayChain_[ch] ;
+	// sin sonar: el de la celda de la Session donde está el cursor
+	if (viewData_->songX_!=ch) return -1 ;
+	unsigned char c=*viewData_->GetCurrentSongPointer() ;
+	if (c>=CLIP_COUNT || viewData_->song_->clips_->Get(c).IsEmpty()) return -1 ;
+	return c ;
+}
+
+static FourCC focusID(FieldView &fv) {
+	UIField *f=fv.GetFocus() ;
+	if (!f || f->IsStatic()) return 0 ;
+	return ((UIIntVarField *)f)->GetVariableID() ;
+}
+
+void InstrumentView::toggleAutoRec() {
+	Player *player=Player::GetInstance() ;
+	if (player->IsAutoRec()) {
+		if (touching_) endTouch() ;
+		player->SetAutoRec(false) ;
+		View::SetNotification("automatizacion: grabacion apagada") ;
+		isDirty_=true ;
+		return ;
+	}
+	int ch=autoChannel() ;
+	if (ch<0 || autoClip(ch)<0) {
+		View::SetNotification("no hay clip en la pista para grabar") ;
+		return ;
+	}
+	if (!player->IsRunning() || player->ClipTickPos(ch)<0) {
+		// arranca el clip de la celda (desde su loop), como Start en el clip
+		viewData_->songX_=ch ;
+		viewData_->chainRow_=0 ;
+		if (player->IsRunning()) player->Stop() ;
+		player->OnStartButton(PM_CHAIN,ch,false,0) ;
+	}
+	player->SetAutoRec(true) ;
+	View::SetNotification("grabando: A sostenido + flechas escribe") ;
+	isDirty_=true ;
+}
+
+void InstrumentView::beginTouch() {
+	FourCC id=focusID(*this) ;
+	if (!automatable(id) || !current_ || current_->GetType()!=IT_SAMPLE) return ;
+	int ch=autoChannel() ;
+	int clip=autoClip(ch) ;
+	if (clip<0 || Player::GetInstance()->ClipTickPos(ch)<0) return ;
+	touching_=true ;
+	touchID_=id ;
+	touchCh_=ch ;
+	touchClip_=clip ;
+	touchLast_=-1 ;
+	Clip &c=viewData_->song_->clips_->Get(clip) ;
+	AutoLane *l=c.FindLane(id,-1) ;
+	touchHadOld_=(l!=0) ;
+	if (l) touchOld_=*l ;
+}
+
+// escribe el valor del campo desde la última vez hasta donde va el clip: lo
+// que había ahí se sobrescribe (y al dar la vuelta, desde el inicio del loop)
+void InstrumentView::recordTouch() {
+	if (!touching_) return ;
+	Player *player=Player::GetInstance() ;
+	int pos=player->ClipTickPos(touchCh_) ;
+	if (pos<0 || viewData_->currentPlayChain_[touchCh_]!=touchClip_ || !player->IsAutoRec()) {
+		endTouch() ;
+		return ;
+	}
+	int value=current_->FindVariable(touchID_)->GetInt() ;
+	MixerService::GetInstance()->Lock() ;   // el audio lee las lanes
+	Clip &c=viewData_->song_->clips_->Get(touchClip_) ;
+	AutoLane &lane=c.GetLane(touchID_,-1) ;
+	std::vector<AutoPoint> &p=lane.points ;
+	int from=touchLast_<0?pos:touchLast_+1 ;
+	int loopFrom=(c.loopStart>=0?c.loopStart:0)*CLIP_STEPS_PER_PAGE*CLIP_TICKS ;
+	bool wrapped=(touchLast_>=0 && pos<touchLast_) ;
+	for (size_t k=0;k<p.size();) {
+		bool gone=wrapped ? (p[k].pos>=from || (p[k].pos>=loopFrom && p[k].pos<=pos))
+		                  : (p[k].pos>=from && p[k].pos<=pos) ;
+		if (gone) p.erase(p.begin()+k) ;
+		else k++ ;
+	}
+	if (wrapped) p.push_back(AutoPoint(loopFrom,value,false)) ;
+	p.push_back(AutoPoint(pos,value,false)) ;
+	lane.Sort() ;
+	MixerService::GetInstance()->Unlock() ;
+	touchLast_=pos ;
+}
+
+// al soltar: lo de después vuelve a lo que había (como touch en Live) y la
+// lane se limpia (puntos que repiten el valor no cambian nada)
+void InstrumentView::endTouch() {
+	if (!touching_) return ;
+	touching_=false ;
+	MixerService::GetInstance()->Lock() ;
+	Clip &c=viewData_->song_->clips_->Get(touchClip_) ;
+	AutoLane *lane=c.FindLane(touchID_,-1) ;
+	if (lane) {
+		int v ;
+		if (touchHadOld_ && touchLast_>=0 && touchOld_.ValueAt(touchLast_+1,v) &&
+		    touchLast_+1<c.Steps()*CLIP_TICKS) {
+			lane->points.push_back(AutoPoint(touchLast_+1,v,false)) ;
+			lane->Sort() ;
+		}
+		std::vector<AutoPoint> out ;
+		for (size_t k=0;k<lane->points.size();k++) {
+			const AutoPoint &a=lane->points[k] ;
+			if (!out.empty() && !out.back().ramp && !a.ramp && out.back().value==a.value) continue ;
+			out.push_back(a) ;
+		}
+		lane->points=out ;
+	}
+	MixerService::GetInstance()->Unlock() ;
+	isDirty_=true ;
+}
+
+bool InstrumentView::deleteLane() {
+	FourCC id=focusID(*this) ;
+	if (!automatable(id)) return false ;
+	int clip=autoClip(autoChannel()) ;
+	if (clip<0) return false ;
+	Clip &c=viewData_->song_->clips_->Get(clip) ;
+	AutoLane *l=c.FindLane(id,-1) ;
+	if (!l) return false ;
+	if (touching_) endTouch() ;
+	laneUndoLane_=*l ;
+	laneUndoClip_=clip ;
+	laneUndo_=true ;
+	laneUndoTime_=System::GetInstance()->GetClock() ;
+	MixerService::GetInstance()->Lock() ;
+	c.RemoveLane(id,-1) ;
+	MixerService::GetInstance()->Unlock() ;
+	View::SetNotification("automatizacion borrada (Select la recupera)") ;
+	isDirty_=true ;
+	return true ;
+}
+
+bool InstrumentView::undoLane() {
+	if (!laneUndo_) return false ;
+	laneUndo_=false ;
+	if (System::GetInstance()->GetClock()-laneUndoTime_>5000) return false ;
+	Clip &c=viewData_->song_->clips_->Get(laneUndoClip_) ;
+	if (c.IsEmpty()) return false ;
+	MixerService::GetInstance()->Lock() ;
+	c.RemoveLane(laneUndoLane_.target,laneUndoLane_.pad) ;
+	c.lanes.push_back(laneUndoLane_) ;
+	MixerService::GetInstance()->Unlock() ;
+	View::SetNotification("automatizacion recuperada") ;
+	isDirty_=true ;
+	return true ;
+}
+
+// un puntito arriba, a la derecha del valor de cada parámetro automatizado
+// en el clip; y "REC" mientras se graba
+void InstrumentView::drawAutoMarks() {
+	if (!SupportsShapes()) return ;
+	GUIColor hi=ColorOf(CD_HILITE2) ;
+	if (Player::GetInstance()->IsAutoRec()) {
+		FillRect(640-64,2,58,16,GUIColor(0xD0,0x30,0x30),6) ;
+		DrawText(640-56,4,"REC",GUIColor(0xFF,0xFF,0xFF),0) ;
+	}
+	int clip=autoClip(autoChannel()) ;
+	if (clip<0) return ;
+	Clip &c=viewData_->song_->clips_->Get(clip) ;
+	if (c.lanes.empty()) return ;
+	IteratorPtr<UIField> it(T_SimpleList<UIField>::GetIterator()) ;
+	for (it->Begin();!it->IsDone();it->Next()) {
+		UIField &f=it->CurrentItem() ;
+		if (f.IsStatic()) continue ;
+		UIIntVarField &vf=(UIIntVarField &)f ;
+		if (!c.FindLane(vf.GetVariableID(),-1)) continue ;
+		// a la derecha del valor, arriba (como superíndice)
+		GUIPoint p=f.GetPosition() ;
+		FillRect((p._x+vf.GetDrawnLength())*16+3,p._y*16-1,6,6,hi,3) ;
+	}
 }

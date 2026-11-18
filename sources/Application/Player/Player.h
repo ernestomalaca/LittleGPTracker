@@ -31,6 +31,7 @@ enum QueueingMode {
 
 class PlayerEvent: public ViewEvent {
 public:
+
 	PlayerEvent(PlayerEventType type,unsigned int tickCount=0) ;
 	PlayerEventType GetType() ;
 	unsigned int GetTickCount() ;
@@ -47,6 +48,12 @@ public:
 
 	static Player *GetInstance() ;
 	bool Init(Project*,ViewData *) ;
+	// trk2als: automatización. Dónde va el clip de una pista en 1/24 de paso
+	// desde su inicio (-1 si no suena un clip) y si se está grabando
+	int ClipTickPos(int channel) ;
+	void SetAutoRec(bool on) { autoRec_ = on ; }
+	bool IsAutoRec() { return autoRec_ ; }
+
 	void Reset() ;
 	void Close() ;
 
@@ -187,6 +194,7 @@ protected:
 	                   int vel, bool newInstrument) ;
 	unsigned long voiceEnd_[SONG_CHANNEL_COUNT][4] ;   // rebanada en que se libera cada voz
 	// trk2als: automatización (las lanes del clip)
+	bool autoRec_ ;   // grabando automatización (suena el metrónomo)
 	void updateAutomation() ;
 	void clearAutomation(int channel) ;
 	class SampleInstrument *trackSampler(int channel) ;

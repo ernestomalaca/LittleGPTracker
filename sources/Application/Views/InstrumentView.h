@@ -8,6 +8,7 @@
 #include "Foundation/Variables/Variable.h"
 #include <string>
 #include "Application/Instruments/SampleInstrument.h"
+#include "Application/Model/Clip.h"
 
 class SampleInstrument ;
 
@@ -125,5 +126,30 @@ private:
 	void kitRestore(const std::vector<std::string> &snap) ;
 	void kitTrack() ;
 	void drawPadGrid(SampleInstrument *si,int X,int Y,int W,int H) ;
+	// trk2als: automatización. Y + Start arma la grabación; A sostenido en un
+	// parámetro escribe en la lane del clip que suena (como "touch" en Live);
+	// un puntito marca lo automatizado y el valor se mueve mientras suena
+	static bool automatable(FourCC id) ;
+	int autoChannel() ;            // la pista dueña de este instrumento
+	int autoClip(int ch) ;         // el clip que suena en ella (o el de la celda)
+	void toggleAutoRec() ;
+	void beginTouch() ;
+	void recordTouch() ;
+	void endTouch() ;
+	bool deleteLane() ;           // B+A: quita la automatización del campo
+	bool undoLane() ;
+	void drawAutoMarks() ;
+	bool touching_ ;
+	FourCC touchID_ ;
+	int touchCh_, touchClip_, touchLast_ ;
+	AutoLane touchOld_ ;
+	bool touchHadOld_ ;
+	bool laneUndo_ ;               // hay una lane borrada que se puede recuperar
+	int laneUndoClip_ ;
+	unsigned long laneUndoTime_ ;
+	bool selTap_ ;
+	AutoLane laneUndoLane_ ;
+	std::vector<int> autoShown_ ;  // los valores en vivo que se dibujaron
+	bool recShown_ ;
 } ;
 #endif

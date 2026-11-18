@@ -1,4 +1,5 @@
 #include "ClipView.h"
+#include "Application/Mixer/MixerService.h"
 #include "Application/Player/Player.h"
 #include "Application/Model/Project.h"
 #include "Application/Instruments/CommandList.h"
@@ -1061,7 +1062,11 @@ void ClipView::ProcessButtonMask(unsigned short mask, bool pressed) {
     }
     Snap before;
     takeSnap(before);
+    // trk2als: el audio lee las notas y las lanes del clip: que no lo haga a
+    // media edición
+    MixerService::GetInstance()->Lock();
     handleButton(mask, pressed);
+    MixerService::GetInstance()->Unlock();
     Snap after;
     takeSnap(after);
     if (before.chain == after.chain && before.clip != after.clip) {

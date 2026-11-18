@@ -20,6 +20,7 @@ Player::Player() {
     isRunning_ = false;
     metroStep_ = 0;
     sliceCount_ = 0;
+    autoRec_ = false;
     viewData_=0;
     for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {   // trk2als
         autoInstr_[i] = 0;
@@ -205,6 +206,7 @@ void Player::Stop() {
     }
     MidiService::GetInstance()->OnPlayerStop();
     mixer_->OnPlayerStop();
+    autoRec_ = false;   // trk2als: parar también deja de grabar
 
     SyncMaster::GetInstance()->Stop();
     isRunning_ = false;
@@ -594,7 +596,7 @@ void Player::Update(Observable &o,I_ObservableData *d) {
         // trk2als: metrónomo, un click en cada tiempo (4 pasos)
         if (firstPlayCycle_) metroStep_ = 0;
         if ((firstPlayCycle_ || sync->MajorSlice()) && metroStep_ % 4 == 0 &&
-            project_->FindVariable(VAR_METRONOME)->GetInt()) {
+            (project_->FindVariable(VAR_METRONOME)->GetInt() || autoRec_)) {
             mixer_->MetronomeClick(metroStep_ % 16 == 0);
         }
 
@@ -1347,4 +1349,15 @@ void Player::updateAutomation() {
         }
         autoApplied_[ch] = now;
     }
+}
+
+int Player::ClipTickPos(int channel) {
+    if (!isRunning_ || channel < 0 || channel >= SONG_CHANNEL_COUNT) return -1;
+    if (!mixer_->IsChannelPlaying(channel) || isAudio(channel)) return -1;
+    if (viewData_->currentPlayChain_[channel] == 0xFF ||
+        viewData_->currentPlayPhrase_[channel] != CLIP_PHRASE) return -1;
+    int sub = int(sliceCount_ - autoStepSlice_[channel]);
+    if (sub < 0) sub = 0;
+    if (sub > 5) sub = 5;
+    return autoStep_[channel] * CLIP_TICKS + sub * (CLIP_TICKS / 6);
 }

@@ -4,6 +4,7 @@
 #include "UIIntVarField.h"
 #include "UIFramework/Interfaces/I_GUIGraphics.h"
 #include "System/Console/Trace.h"
+#include <string.h>
 #include "Application/AppWindow.h"
 
 #define abs(x) (x<0?-x:x)
@@ -26,6 +27,7 @@ UIIntVarField::UIIntVarField(
 	xOffset_=xOffset ;
 	yOffset_=yOffset ;
   displayOffset_ = displayOffset;
+	drawnLen_ = 0 ;
 } ;
 
 void UIIntVarField::Draw(GUIWindow &w,int offset) {
@@ -60,6 +62,7 @@ void UIIntVarField::Draw(GUIWindow &w,int offset) {
 		default:
 			strcpy(buffer,"++wtf++");
 	}
+	drawnLen_=int(strlen(buffer)) ;
 	w.DrawString(buffer,position,props) ;
 } ;
 
