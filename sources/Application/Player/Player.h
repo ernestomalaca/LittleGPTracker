@@ -51,8 +51,14 @@ public:
 	// trk2als: automatización. Dónde va el clip de una pista en 1/24 de paso
 	// desde su inicio (-1 si no suena un clip) y si se está grabando
 	int ClipTickPos(int channel) ;
-	void SetAutoRec(bool on) { autoRec_ = on ; }
+	void SetAutoRec(bool on) { autoRec_ = on ; autoRecPending_ = false ; }
 	bool IsAutoRec() { return autoRec_ ; }
+	// armar sonando: empieza a grabar en el siguiente uno del compás
+	void ArmAutoRec() { autoRecPending_ = true ; }
+	// la siguiente vez que arranque: 4 tiempos de precuenta y graba
+	void RequestCountIn() { countInRequest_ = true ; }
+	// 0 apagado, 1 esperando (precuenta o el siguiente compás), 2 grabando
+	int AutoRecState() { return autoRec_ ? 2 : ((autoRecPending_ || countIn_) ? 1 : 0) ; }
 
 	void Reset() ;
 	void Close() ;
@@ -195,6 +201,11 @@ protected:
 	unsigned long voiceEnd_[SONG_CHANNEL_COUNT][4] ;   // rebanada en que se libera cada voz
 	// trk2als: automatización (las lanes del clip)
 	bool autoRec_ ;   // grabando automatización (suena el metrónomo)
+	bool autoRecPending_ ;   // empieza en el siguiente uno
+	bool countInRequest_ ;   // el próximo arranque lleva precuenta
+	bool countIn_ ;          // en la precuenta (no suena nada más)
+	int countStep_ ;
+	bool countFirst_ ;
 	void updateAutomation() ;
 	void clearAutomation(int channel) ;
 	class SampleInstrument *trackSampler(int channel) ;

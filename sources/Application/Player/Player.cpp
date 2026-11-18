@@ -21,6 +21,11 @@ Player::Player() {
     metroStep_ = 0;
     sliceCount_ = 0;
     autoRec_ = false;
+    autoRecPending_ = false;
+    countInRequest_ = false;
+    countIn_ = false;
+    countStep_ = 0;
+    countFirst_ = false;
     viewData_=0;
     for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {   // trk2als
         autoInstr_[i] = 0;
@@ -135,6 +140,11 @@ void Player::Start(PlayMode mode, bool forceSongMode) {
 
     firstPlayCycle_ = true;
     mode_ = viewData_->playMode_;
+    // trk2als: precuenta (grabar automatización sin nada sonando)
+    countIn_ = countInRequest_;
+    countInRequest_ = false;
+    countStep_ = 0;
+    countFirst_ = true;
 
     mixer_->OnPlayerStart();
 
@@ -207,6 +217,8 @@ void Player::Stop() {
     MidiService::GetInstance()->OnPlayerStop();
     mixer_->OnPlayerStop();
     autoRec_ = false;   // trk2als: parar también deja de grabar
+    autoRecPending_ = false;
+    countIn_ = false;
 
     SyncMaster::GetInstance()->Stop();
     isRunning_ = false;
@@ -563,6 +575,26 @@ void Player::Update(Observable &o,I_ObservableData *d) {
         SyncMaster *sync = SyncMaster::GetInstance();
         sync->SetTempo(project_->GetTempo());
 
+        // trk2als: precuenta: 4 tiempos de metrónomo y en el uno arranca
+        if (countIn_) {
+            if (!countFirst_) sync->NextSlice();
+            bool beat = countFirst_ || sync->MajorSlice();
+            countFirst_ = false;
+            if (beat && countStep_ < 16) {
+                if (countStep_ % 4 == 0) mixer_->MetronomeClick(countStep_ == 0);
+                countStep_++;
+                beat = false;
+            }
+            if (!(beat && countStep_ >= 16)) {
+                PlayerEvent pe(PET_UPDATE, 0);
+                SetChanged();
+                NotifyObservers(&pe);
+                return;
+            }
+            countIn_ = false;   // este es el uno: arranca grabando
+            autoRec_ = true;
+        }
+
         if (!firstPlayCycle_) {
             Groove::GetInstance()->Trigger();
             sync->NextSlice();
@@ -596,8 +628,13 @@ void Player::Update(Observable &o,I_ObservableData *d) {
         // trk2als: metrónomo, un click en cada tiempo (4 pasos)
         if (firstPlayCycle_) metroStep_ = 0;
         if ((firstPlayCycle_ || sync->MajorSlice()) && metroStep_ % 4 == 0 &&
-            (project_->FindVariable(VAR_METRONOME)->GetInt() || autoRec_)) {
+            (project_->FindVariable(VAR_METRONOME)->GetInt() || autoRec_ || autoRecPending_)) {
             mixer_->MetronomeClick(metroStep_ % 16 == 0);
+        }
+        // trk2als: armado sonando: la grabación empieza en el uno del compás
+        if (autoRecPending_ && (firstPlayCycle_ || sync->MajorSlice()) && metroStep_ % 16 == 0) {
+            autoRecPending_ = false;
+            autoRec_ = true;
         }
 
         // Initialise retrigger table

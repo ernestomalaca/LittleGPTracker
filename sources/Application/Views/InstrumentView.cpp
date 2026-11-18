@@ -314,7 +314,7 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data),
 	laneUndoClip_=-1 ;
 	laneUndoTime_=0 ;
 	selTap_=false ;
-	recShown_=false ;
+	recShown_=0 ;
 	markTap_=false ;
 	waveEdit_=false ;
 	waveZoom_=1 ;
@@ -1278,7 +1278,8 @@ void InstrumentView::DrawView() {
     }
     FieldView::Redraw();
     for (size_t k=0;k<tmpVar.size();k++) tmpVar[k]->SetInt(tmpOld[k]) ;
-    recShown_=Player::GetInstance()->IsAutoRec() ;
+    recShown_=Player::GetInstance()->AutoRecState() ;
+    if (recShown_==1) recShown_=(System::GetInstance()->GetClock()/250)%2 ? 1 : 3 ;
     drawMap() ;
 
     // trk2als: cuánto se acelera o frena el loop para ir al tempo del proyecto
@@ -1338,7 +1339,7 @@ void InstrumentView::drawWaveform() {
 		help="A:cambiar de kit;B+A:vaciar el instrumento" ;
 	if (!helpText_ && GetFocus() && !GetFocus()->IsStatic() &&
 	    automatable(((UIIntVarField *)GetFocus())->GetVariableID()))
-		help=Player::GetInstance()->IsAutoRec() ? "A sostenido+<>:grabar;Y+START:dejar de grabar"
+		help=Player::GetInstance()->AutoRecState() ? "A sostenido+<>:grabar;Y+START:dejar de grabar"
 		                                        : "A+<>:valor;Y+START:grabar automatizacion;B+A:borrarla" ;
 	drawHelpBar(help) ;
 	drawAutoMarks() ;   // trk2als
@@ -1774,7 +1775,9 @@ void InstrumentView::AnimationUpdate() {
 				if (automatable(id) && si->GetAutomated(id,av) && !(touching_ && id==touchID_)) now.push_back(av) ;
 			}
 		}
-		if (now!=autoShown_ || recShown_!=Player::GetInstance()->IsAutoRec()) {
+		int rs=Player::GetInstance()->AutoRecState() ;
+		if (rs==1) rs=(System::GetInstance()->GetClock()/250)%2 ? 1 : 3 ;   // parpadea
+		if (now!=autoShown_ || recShown_!=rs) {
 			DrawView() ;
 			return ;
 		}
@@ -2690,7 +2693,7 @@ static FourCC focusID(FieldView &fv) {
 
 void InstrumentView::toggleAutoRec() {
 	Player *player=Player::GetInstance() ;
-	if (player->IsAutoRec()) {
+	if (player->AutoRecState()!=0) {
 		if (touching_) endTouch() ;
 		player->SetAutoRec(false) ;
 		View::SetNotification("automatizacion: grabacion apagada") ;
@@ -2703,14 +2706,19 @@ void InstrumentView::toggleAutoRec() {
 		return ;
 	}
 	if (!player->IsRunning() || player->ClipTickPos(ch)<0) {
-		// arranca el clip de la celda (desde su loop), como Start en el clip
+		// no suena: precuenta de 4 tiempos y arranca el clip de la celda
+		// (desde su loop) ya grabando
 		viewData_->songX_=ch ;
 		viewData_->chainRow_=0 ;
 		if (player->IsRunning()) player->Stop() ;
+		player->RequestCountIn() ;
 		player->OnStartButton(PM_CHAIN,ch,false,0) ;
+		View::SetNotification("precuenta: 4 tiempos y graba") ;
+	} else {
+		// ya suena: empieza en el siguiente uno del compás
+		player->ArmAutoRec() ;
+		View::SetNotification("graba desde el siguiente compas") ;
 	}
-	player->SetAutoRec(true) ;
-	View::SetNotification("grabando: A sostenido + flechas escribe") ;
 	isDirty_=true ;
 }
 
@@ -2830,9 +2838,13 @@ bool InstrumentView::undoLane() {
 void InstrumentView::drawAutoMarks() {
 	if (!SupportsShapes()) return ;
 	GUIColor hi=ColorOf(CD_HILITE2) ;
-	if (Player::GetInstance()->IsAutoRec()) {
+	int rs=Player::GetInstance()->AutoRecState() ;
+	if (rs==2 || (rs==1 && recShown_==1)) {   // esperando: parpadea
 		FillRect(640-64,2,58,16,GUIColor(0xD0,0x30,0x30),6) ;
 		DrawText(640-56,4,"REC",GUIColor(0xFF,0xFF,0xFF),0) ;
+	} else if (rs==1) {
+		FrameRect(640-64,2,58,16,GUIColor(0xD0,0x30,0x30),6,2) ;
+		DrawText(640-56,4,"REC",GUIColor(0xD0,0x30,0x30),0) ;
 	}
 	int clip=autoClip(autoChannel()) ;
 	if (clip<0) return ;

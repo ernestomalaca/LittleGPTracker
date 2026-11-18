@@ -150,6 +150,6 @@ private:
 	bool selTap_ ;
 	AutoLane laneUndoLane_ ;
 	std::vector<int> autoShown_ ;  // los valores en vivo que se dibujaron
-	bool recShown_ ;
+	int recShown_ ;   // cómo se dibujó el REC (0 no, 1/3 parpadeo, 2 grabando)
 } ;
 #endif
