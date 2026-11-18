@@ -612,6 +612,28 @@ void AppWindow::onUpdate() {
         return;
     }
 
+    // trk2als: pruebas sin teclado (p. ej. el binario de ARM en un emulador):
+    // TRK_AUTOPLAY=segundos toca la Session desde el inicio y sale
+    {
+        static int autoplay = -2;
+        static unsigned long autoStart = 0;
+        if (autoplay == -2) {
+            const char *e = getenv("TRK_AUTOPLAY");
+            autoplay = e ? atoi(e) : -1;
+        }
+        if (autoplay > 0 && _currentView == _songView) {
+            unsigned long now = System::GetInstance()->GetClock();
+            if (autoStart == 0) {
+                autoStart = now;
+                Player::GetInstance()->OnSongStartButton(0, 7, false, false);
+            } else if (now - autoStart > (unsigned long)autoplay * 1000) {
+                autoplay = -1;
+                Player::GetInstance()->Stop();
+                System::GetInstance()->PostQuitMessage();
+            }
+        }
+    }
+
     // Call AnimationUpdate periodically (~10-25Hz depending on frame rate)
     static unsigned int animTick = 0;
     if ((animTick++ % 2) == 0) {  // every 2nd call, roughly 25Hz at 50Hz main loop

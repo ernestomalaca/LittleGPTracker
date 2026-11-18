@@ -33,3 +33,7 @@ projects/last_project
 projects/config.xml
 projects/presets/
 projects/crash.log
+projects/chancho6-rg353v*.elf
+projects/chancho6-rg353v.zip
+projects/buildRG353V/
+projects/buildRG35XXPLUS/

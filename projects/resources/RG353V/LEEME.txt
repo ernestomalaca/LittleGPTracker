@@ -1,0 +1,30 @@
+CHANCHO 6 EN LA ANBERNIC RG353V
+===============================
+
+Qué necesita
+  Un Linux con Ports y SDL2: ROCKNIX (recomendado). También debería ir en
+  dArkOS. El ArkOS original es demasiado viejo para este programa.
+
+Instalar (una sola vez)
+  1. Copia a la carpeta de Ports de la tarjeta (en ROCKNIX: roms/ports):
+       Chancho 6.sh
+       Actualizar Chancho 6.sh
+       Detectar botones.sh
+       la carpeta chancho6/
+  2. Copia tu samplelib dentro de chancho6/ (chancho6/samplelib).
+  3. En la consola: Ports > Chancho 6.
+
+Si los botones no responden bien
+  Ports > Detectar botones. Presiona en orden: arriba, abajo, izquierda,
+  derecha, A, B, X, Y, L, R, Select, Start, y sal (Project > Exit).
+  Lo que presionaste queda en chancho6/botones.txt y con eso se arregla
+  chancho6/mapping.xml.
+
+Actualizar (por Wi-Fi, sin sacar la tarjeta)
+  Ports > Actualizar Chancho 6. Baja la última versión y cambia solo el
+  programa; tus proyectos, samples y ajustes se quedan. Lo que pasó queda en
+  chancho6/actualizar.txt. La versión anterior queda como
+  chancho6/chancho6-rg353v.elf.anterior.
+
+Si algo falla
+  chancho6/log.txt tiene lo que dijo el programa.
