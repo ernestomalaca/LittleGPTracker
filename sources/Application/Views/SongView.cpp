@@ -492,8 +492,17 @@ void SongView::clonePosition() {
     for (int i = 0; i < 16; i++) {
         *dst++ = *src++;
     };
+    int ls, le;   // trk2als: el loop del clip también
+    if (viewData_->song_->GetChainLoop(current, ls, le))
+        viewData_->song_->SetChainLoop(next, ls, le);
+    else
+        viewData_->song_->ClearChainLoop(next);
     setChain((unsigned char)next);
     nameNewChain((unsigned char)next);
+    // trk2als: como en Live, el clip clonado es independiente: sus propias
+    // phrases (antes compartía las del original y editar uno cambiaba el otro)
+    deepClonePosition();
+    View::SetNotification("clip clonado");
     isDirty_ = true;
 };
 
@@ -567,6 +576,7 @@ void SongView::deepClonePosition() {
                 *(ph->param2_ + 16 * newPhraseNum + k) =
                     *(ph->param2_ + 16 * srcPhraseNum + k);
             }
+            ph->CopyVoices(srcPhraseNum, newPhraseNum);   // trk2als: acordes, nudge, subdivisiones
         }
         srcPhrases[i] = srcPhraseNum;
         dstPhrases[i] = newPhraseNum;
@@ -687,29 +697,11 @@ void SongView::cutSelection() {
     fillClipboardData();
     GUIRect selRect = getSelectionRect();
 
-    // now move all rows up for cut
-
-    unsigned char *dst = viewData_->song_->data_ + selRect.Left() +
-                         SONG_CHANNEL_COUNT * (selRect.Top());
-    unsigned char *src = dst + SONG_CHANNEL_COUNT * clipboard_.height_;
-
-    int rowCount = SONG_ROW_COUNT - selRect.Bottom() - 1;
-
-    for (int j = 0; j < rowCount; j++) {
-
-        for (int i = 0; i < clipboard_.width_; i++) {
-            *dst++ = *src++;
-        }
-        src += (SONG_CHANNEL_COUNT - clipboard_.width_);
-        dst += (SONG_CHANNEL_COUNT - clipboard_.width_);
-    }
-
-    for (int j = 0; j > clipboard_.height_; j++) {
-        for (int i = 0; i < clipboard_.width_; i++) {
-            *dst++ = 0xFF;
-        }
-        dst += (SONG_CHANNEL_COUNT - clipboard_.width_);
-    };
+    // trk2als: como en la Session de Live, cortar vacía las celdas y lo de
+    // abajo se queda en su lugar (LGPT subía todas las filas)
+    for (int y = selRect.Top(); y <= selRect.Bottom(); y++)
+        for (int x = selRect.Left(); x <= selRect.Right(); x++)
+            viewData_->song_->data_[x + SONG_CHANNEL_COUNT * y] = 0xFF;
 
     clipboard_.active_ = false;
     viewMode_ = VM_NORMAL;
@@ -1027,7 +1019,7 @@ void SongView::ProcessButtonMask(unsigned short mask, bool pressed) {
         if ((mask & EPBM_A) && (mask & EPBM_L)) {
             clonePosition();
             mask &= (0xFFFF - (EPBM_A | EPBM_L));
-            canDeepClone_ = true;
+            canDeepClone_ = false;   // trk2als: ya es independiente
         } else {
             viewMode_ = VM_SELECTION;
         }
