@@ -6,7 +6,6 @@ ViewData::ViewData(Project *project) {
 	project_=project ;
 	song_=project->song_ ;
 	currentChain_=0 ;
-	currentPhrase_=0 ;
 	songX_=0 ;
 	songY_=0 ;
 	songOffset_=0 ;
@@ -28,7 +27,7 @@ ViewData::~ViewData() {
 
 unsigned char ViewData::UpdateSongChain(int offset) {
 	unsigned char *c=song_->data_+songX_+8*(songOffset_+songY_) ;
-	updateData(c,offset,CHAIN_COUNT-1,false) ;
+	updateData(c,offset,CLIP_COUNT-1,false) ;
 	return *c ;
 
 }
@@ -73,43 +72,5 @@ unsigned char *ViewData::GetCurrentSongPointer() {
 } ;
 
 
-unsigned char ViewData::UpdateChainCursorValue(int offset,int dx,int dy) {
 
-	unsigned char *c=0 ;
-	unsigned char limit=0 ;
-	bool wrap=false ;
-
-	switch (chainCol_+dx) {
-		case 0:
-			c=song_->chain_->data_+(16*currentChain_+chainRow_+dy) ;
-			limit=0xFE ;
-			wrap=false ;
-			break ;
-		case 1:
-			c=song_->chain_->transpose_+(16*currentChain_+chainRow_+dy) ;
-			limit=0xFF ;
-			wrap=true;
-			break ;
-	} 
-	updateData(c,offset,limit,wrap) ;
-	return *c ;
-}
-
-void ViewData::UpdateChainCursor(int dx,int dy) {
-	chainCol_+=dx ;
-	chainRow_+=dy ;
-	if (chainCol_>1) chainCol_=1 ;
-	if (chainCol_<0) chainCol_=0 ;
-	if (chainRow_>15) chainRow_=15 ;
-	if (chainRow_<0) chainRow_=0 ;
-}
-
-void ViewData::SetChainPhrase(unsigned char value) {
-	unsigned char *c=song_->chain_->data_+(16*currentChain_+chainRow_) ;
-	*c=value ;
-}
-
-unsigned char *ViewData::GetCurrentChainPointer() {
-	return song_->chain_->data_+(16*currentChain_+chainRow_) ;
-} ;
 

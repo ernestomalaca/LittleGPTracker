@@ -123,7 +123,7 @@ std::string SongView::cellName() {
         snprintf(buf, sizeof(buf), "%s %s", clipLabel(d).c_str(), n.c_str());
         return buf;
     }
-    const std::string &cn = viewData_->song_->GetChainName(d);
+    const std::string &cn = viewData_->song_->GetClipName(d);
     if (!cn.empty()) return cn;
     snprintf(buf, sizeof(buf), "chain %02X", d);
     return buf;
@@ -139,8 +139,8 @@ void SongView::nameNewChain(unsigned char chain) {
     if (base.size() > 12) base = base.substr(0, 12);
     int next = 1;
     Song *song = viewData_->song_;
-    for (int c = 0; c < CHAIN_COUNT; c++) {
-        const std::string &n = song->GetChainName(c);
+    for (int c = 0; c < CLIP_COUNT; c++) {
+        const std::string &n = song->GetClipName(c);
         if (n.size() > base.size() + 1 && n.compare(0, base.size() + 1, base + " ") == 0) {
             int k = atoi(n.c_str() + base.size() + 1);
             if (k >= next) next = k + 1;
@@ -148,7 +148,7 @@ void SongView::nameNewChain(unsigned char chain) {
     }
     char buf[32];
     snprintf(buf, sizeof(buf), "%s %d", base.c_str(), next);
-    song->SetChainName(chain, buf);
+    song->SetClipName(chain, buf);
 }
 
 void SongView::prepareClip(unsigned char clip) {
@@ -415,8 +415,8 @@ unsigned short SongView::newClipId() {
         return id;
     }
     song->clips_->Get(id).Clear();
-    song->ClearChainLoop(id);
-    song->SetChainName(id, "");
+    song->ClearClipLoop(id);
+    song->SetClipName(id, "");
     return id;
 }
 
@@ -477,8 +477,8 @@ void SongView::clonePosition() {
     // su largo y su loop
     viewData_->song_->clips_->Copy(current, next);
     int ls, le;
-    if (viewData_->song_->GetChainLoop(current, ls, le))
-        viewData_->song_->SetChainLoop(next, ls, le);
+    if (viewData_->song_->GetClipLoop(current, ls, le))
+        viewData_->song_->SetClipLoop(next, ls, le);
     setChain((unsigned char)next);
     nameNewChain((unsigned char)next);
     View::SetNotification("clip clonado");

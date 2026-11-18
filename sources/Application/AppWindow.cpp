@@ -89,8 +89,6 @@ AppWindow::AppWindow(I_GUIWindowImp &imp) : GUIWindow(imp) {
     _currentView = 0;
     _viewData = 0;
     _songView = 0;
-    _chainView = 0;
-    _phraseView = 0;
     _projectView = 0;
     _instrumentView = 0;
     _tableView = 0;
@@ -445,11 +443,7 @@ void AppWindow::LoadProject(const Path &p) {
     _songView = new SongView((*this), _viewData, _root.GetName().c_str());
     _songView->AddObserver((*this));
 
-    _chainView = new ChainView((*this), _viewData);
-    _chainView->AddObserver((*this));
 
-    _phraseView = new PhraseView((*this), _viewData);
-    _phraseView->AddObserver((*this));
 
     _projectView = new ProjectView((*this), _viewData);
     _projectView->AddObserver((*this));
@@ -512,8 +506,6 @@ void AppWindow::CloseProject() {
     ApplicationCommandDispatcher::GetInstance()->Close();
 
     SAFE_DELETE(_songView);
-    SAFE_DELETE(_chainView);
-    SAFE_DELETE(_phraseView);
     SAFE_DELETE(_projectView);
     SAFE_DELETE(_instrumentView);
     SAFE_DELETE(_tableView);
@@ -710,12 +702,6 @@ void AppWindow::Update(Observable &o, I_ObservableData *d) {
         switch (*vt) {
         case VT_SONG:
             _currentView = _songView;
-            break;
-        case VT_CHAIN:
-            _currentView = _chainView;
-            break;
-        case VT_PHRASE:
-            _currentView = _phraseView;
             break;
         case VT_PROJECT:
             _currentView = _projectView;

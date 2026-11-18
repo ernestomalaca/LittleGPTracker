@@ -166,12 +166,8 @@ void MixerView::processNormalButtonMask(unsigned int mask) {
             // Go back to the same column as in MixerView
             viewData_->songX_ = viewData_->mixerCol_;
             unsigned char *data = viewData_->GetCurrentSongPointer();
-            if (*data != 0xFF) { // Set chain
+            if (*data != 0xFF) { // el clip
                 viewData_->currentChain_ = *data;
-            }
-            data = viewData_->GetCurrentChainPointer();
-            if (*data != 0xFF) { // Set phrase
-                viewData_->currentPhrase_ = *data;
             }
             SetChanged();
             NotifyObservers(&ve);

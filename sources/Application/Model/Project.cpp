@@ -132,41 +132,34 @@ bool Project::ScaleChanged() {
     return appliedScale_ != GetScale() || appliedRoot_ != GetScaleRoot();
 }
 
-// las phrases que tocan las pistas con kit de batería: sus notas son pads
-void Project::kitPhrases(bool *skip) {
-    for (int p = 0; p < PHRASE_COUNT; p++) skip[p] = false;
+// trk2als: los clips que tocan las pistas con kit de batería: sus notas son
+// pads y no se ajustan a la escala
+void Project::kitClips(bool *skip) {
+    for (int c = 0; c < CLIP_COUNT; c++) skip[c] = false;
     for (int ch = 0; ch < SONG_CHANNEL_COUNT; ch++) {
+        if (IsAudioChannel(ch)) continue;
         int owner = GetTrackInstrument(ch);
         if (owner < 0 || owner >= MAX_SAMPLEINSTRUMENT_COUNT) continue;
         I_Instrument *in = instrumentBank_->GetInstrument(owner);
         if (!in || in->GetType() != IT_SAMPLE || !((SampleInstrument *)in)->IsKit()) continue;
         for (int row = 0; row < 256; row++) {
             unsigned char c = song_->data_[ch + SONG_CHANNEL_COUNT * row];
-            if (c == 0xFF || c >= CHAIN_COUNT) continue;
-            for (int r = 0; r < 16; r++) {
-                unsigned char p = song_->chain_->data_[16 * c + r];
-                if (p != 0xFF && p < PHRASE_COUNT) skip[p] = true;
-            }
+            if (c < CLIP_COUNT) skip[c] = true;
         }
     }
 }
 
-// notas de las pistas MIDI (todas las phrases usadas) fuera de la escala
+// notas de los clips MIDI fuera de la escala
 int Project::OutOfScaleNotes() {
     int scale = GetScale(), root = GetScaleRoot(), n = 0;
     if (scale == 0) return 0;
-    Phrase *ph = song_->phrase_;
-    bool skip[PHRASE_COUNT];
-    kitPhrases(skip);
-    for (int i = 0; i < PHRASE_COUNT * 16; i++) {
-        unsigned char note = ph->note_[i];
-        if (skip[i / 16]) continue;
-        if (note != 0xFF && note < 0x80 && !InScale(scale, root, note)) n++;
-    }
-    for (int i = 0; i < VOICE_LAYERS * PHRASE_COUNT * 16; i++) {   // las capas de acordes
-        unsigned char note = ph->voiceNote_[i];
-        if (skip[(i / 16) % PHRASE_COUNT]) continue;
-        if (note != 0xFF && note < 0x80 && !InScale(scale, root, note)) n++;
+    bool skip[CLIP_COUNT];
+    kitClips(skip);
+    for (int c = 0; c < CLIP_COUNT; c++) {
+        if (skip[c]) continue;
+        Clip &clip = song_->clips_->Get(c);
+        for (size_t k = 0; k < clip.notes.size(); k++)
+            if (!InScale(scale, root, clip.notes[k].pitch)) n++;
     }
     return n;
 }
@@ -176,20 +169,19 @@ int Project::OutOfScaleNotes() {
 int Project::FitToScale() {
     int scale = GetScale(), root = GetScaleRoot(), n = 0;
     if (scale == 0) return 0;
-    Phrase *ph = song_->phrase_;
-    bool skip[PHRASE_COUNT];
-    kitPhrases(skip);   // las baterías no se tocan
-    for (int layer = 0; layer < VOICE_COUNT; layer++) {   // la columna de notas y las capas
-        uchar *notes = layer == 0 ? ph->note_ : ph->voiceNote_ + (layer - 1) * PHRASE_COUNT * 16;
-        for (int i = 0; i < PHRASE_COUNT * 16; i++) {
-            if (skip[i / 16]) continue;
-            int note = notes[i];
-            if (note == 0xFF || note >= 0x80 || InScale(scale, root, note)) continue;
+    bool skip[CLIP_COUNT];
+    kitClips(skip);   // las baterías no se tocan
+    for (int c = 0; c < CLIP_COUNT; c++) {
+        if (skip[c]) continue;
+        Clip &clip = song_->clips_->Get(c);
+        for (size_t k = 0; k < clip.notes.size(); k++) {
+            int note = clip.notes[k].pitch;
+            if (InScale(scale, root, note)) continue;
             for (int d = 1; d < 12; d++) {
                 if (note - d >= 0 && InScale(scale, root, note - d)) { note -= d; break; }
                 if (note + d < 0x78 && InScale(scale, root, note + d)) { note += d; break; }
             }
-            notes[i] = (unsigned char)note;
+            clip.notes[k].pitch = note;
             n++;
         }
     }
@@ -306,16 +298,12 @@ int Project::AddTrack(TrackType type) {
     FindVariable(VAR_TRACKNAME(ch))->SetString("");
     int owner = -1;
     if (type != TT_AUDIO) {
-        // un instrumento de sample que nadie usa: ni otra pista, ni una
-        // phrase, ni un loop de audio
+        // un instrumento de sample que nadie usa: ni otra pista ni un loop
+        // de audio
         bool used[MAX_SAMPLEINSTRUMENT_COUNT] = {false};
         for (int c = 0; c < SONG_CHANNEL_COUNT; c++) {
             int o = GetTrackInstrument(c);
             if (c != ch && o >= 0 && o < MAX_SAMPLEINSTRUMENT_COUNT) used[o] = true;
-        }
-        for (int i = 0; i < PHRASE_COUNT * 16; i++) {
-            unsigned char ins = song_->phrase_->instr_[i];
-            if (ins < MAX_SAMPLEINSTRUMENT_COUNT) used[ins] = true;
         }
         for (int i = 0; i < 256 * SONG_CHANNEL_COUNT; i++) {
             unsigned char c = data[i];
@@ -333,15 +321,10 @@ int Project::AddTrack(TrackType type) {
 void Project::DeleteTrack(int channel) {
     if (!TrackExists(channel)) return;
     unsigned char *song = song_->data_;
-    Chain *chain = song_->chain_;
-    Phrase *phrase = song_->phrase_;
-    // qué es de esta pista y qué usa alguien más (otra pista, o una phrase
-    // que no cuelga de ninguna chain de esta pista)
-    static bool chainMine[CHAIN_COUNT], chainOther[CHAIN_COUNT];
-    static bool phraseMine[PHRASE_COUNT], phraseOther[PHRASE_COUNT];
+    // qué es de esta pista y qué usa alguien más
+    static bool clipMine[CLIP_COUNT], clipOther[CLIP_COUNT];
     static bool instrMine[MAX_INSTRUMENT_COUNT], instrOther[MAX_INSTRUMENT_COUNT];
-    memset(chainMine, 0, sizeof(chainMine)); memset(chainOther, 0, sizeof(chainOther));
-    memset(phraseMine, 0, sizeof(phraseMine)); memset(phraseOther, 0, sizeof(phraseOther));
+    memset(clipMine, 0, sizeof(clipMine)); memset(clipOther, 0, sizeof(clipOther));
     memset(instrMine, 0, sizeof(instrMine)); memset(instrOther, 0, sizeof(instrOther));
     for (int r = 0; r < 256; r++) {
         for (int c = 0; c < SONG_CHANNEL_COUNT; c++) {
@@ -349,27 +332,9 @@ void Project::DeleteTrack(int channel) {
             if (v == 0xFF) continue;
             if (IsAudioChannel(c)) {
                 if (v < MAX_INSTRUMENT_COUNT) (c == channel ? instrMine : instrOther)[v] = true;
-            } else if (v < CHAIN_COUNT) {
-                (c == channel ? chainMine : chainOther)[v] = true;
+            } else if (v < CLIP_COUNT) {
+                (c == channel ? clipMine : clipOther)[v] = true;
             }
-        }
-    }
-    for (int i = 0; i < CHAIN_COUNT; i++) {
-        if (!chainMine[i] && !chainOther[i]) continue;
-        for (int j = 0; j < 16; j++) {
-            unsigned char p = chain->data_[i * 16 + j];
-            if (p == 0xFF || p >= PHRASE_COUNT) continue;
-            if (chainOther[i]) phraseOther[p] = true;
-            else phraseMine[p] = true;
-        }
-    }
-    for (int p = 0; p < PHRASE_COUNT; p++) {
-        bool mine = phraseMine[p] && !phraseOther[p];
-        for (int j = 0; j < 16; j++) {
-            unsigned char ins = phrase->instr_[p * 16 + j];
-            if (ins >= MAX_INSTRUMENT_COUNT) continue;
-            if (mine) instrMine[ins] = true;
-            else instrOther[ins] = true;
         }
     }
     int owner = GetTrackInstrument(channel);
@@ -380,24 +345,8 @@ void Project::DeleteTrack(int channel) {
         }
     }
     // borrar lo que era solo de esta pista
-    for (int i = 0; i < CHAIN_COUNT; i++) {
-        if (!chainMine[i] || chainOther[i]) continue;
-        memset(chain->data_ + i * 16, 0xFF, 16);
-        memset(chain->transpose_ + i * 16, 0, 16);
-        song_->SetChainName(i, "");
-        song_->ClearChainLoop(i);
-    }
-    for (int p = 0; p < PHRASE_COUNT; p++) {
-        if (!phraseMine[p] || phraseOther[p]) continue;
-        for (int j = 0; j < 16; j++) {
-            int k = p * 16 + j;
-            phrase->note_[k] = 0xFF;
-            phrase->instr_[k] = 0xFF;
-            phrase->cmd1_[k] = '----';
-            phrase->param1_[k] = 0;
-            phrase->cmd2_[k] = '----';
-            phrase->param2_[k] = 0;
-        }
+    for (int i = 0; i < CLIP_COUNT; i++) {
+        if (clipMine[i] && !clipOther[i]) song_->clips_->Get(i).Clear();
     }
     InstrumentBank *bank = GetInstrumentBank();
     for (int i = 0; i < MAX_INSTRUMENT_COUNT; i++) {
@@ -482,88 +431,16 @@ void Project::Purge() {
 
 	song_->clips_->Purge(song_->data_,256*SONG_CHANNEL_COUNT) ;   // trk2als
 
-	song_->chain_->ClearAllocation() ;
-	song_->phrase_->ClearAllocation() ;
-
-		
-	unsigned char *data=song_->data_ ;
-	for (int i=0;i<256*SONG_CHANNEL_COUNT;i++) {
-		if (*data!=0xFF) {
-			song_->chain_->SetUsed(*data) ;
-		} 
-		data++ ;
-	}
-                
-    data=song_->chain_->data_ ;        
-    unsigned char *data2=song_->chain_->transpose_ ;
-    
-	for (int i=0;i<CHAIN_COUNT;i++) {
-
-		if (song_->chain_->IsUsed(i)) {
-			for (int j=0;j<16;j++) {
-				if (*data!=0xFF) {
-					song_->phrase_->SetUsed(*data) ;
-				}
-				data++ ;
-				data2++ ;
-			}
-		} else {
-
-			for (int j=0;j<16;j++) {
-				*data++=0xFF ;
-				*data2++=0x00 ;
-			} 
-			song_->SetChainName(i,"") ;   // trk2als
-			song_->ClearChainLoop(i) ;
-		}
-    }
-
-    for (int i=0;i<PHRASE_COUNT;i++)   // trk2als: las capas de voces de las que no se usan
-        if (!song_->phrase_->IsUsed(i)) song_->phrase_->ClearVoices(i) ;
-
-    data=song_->phrase_->note_ ;
-    data2=song_->phrase_->instr_ ;
-
-	FourCC *cmd1=song_->phrase_->cmd1_ ;
-	ushort *param1=song_->phrase_->param1_ ;
-	FourCC *cmd2=song_->phrase_->cmd2_ ;
-	ushort *param2=song_->phrase_->param2_ ;    
-
-	for (int i=0;i<PHRASE_COUNT;i++) {
-		for (int j=0;j<16;j++) {
-			if (!song_->phrase_->IsUsed(i)) {
-				*data=0xFF ;
-				*data2=0xFF ;
-				*cmd1='----' ;
-				*param1=0 ;
-				*cmd2='----' ;
-				*param2=0 ;
-			}
-            data++ ;
-            data2++ ;
-			cmd1++ ;
-			param1++ ;
-			cmd2++ ;
-			param2++ ;
-        } ;	
-    }	
 } ;
 
- 
 void Project::PurgeInstruments(bool removeFromDisk) {
 
     bool used[MAX_INSTRUMENT_COUNT] = {false};
 
-    unsigned char *data=song_->phrase_->instr_ ;
-
-	for (int i=0;i<PHRASE_COUNT;i++) {
-		for (int j=0;j<16;j++) {
-			if (*data!=0xFF) {
-				NAssert(*data<MAX_INSTRUMENT_COUNT) ;
-				used[*data]=true ;
-			}
-			data++ ;
-		}
+	// trk2als: el instrumento de cada pista MIDI
+	for (int ch=0;ch<SONG_CHANNEL_COUNT;ch++) {
+		int o=GetTrackInstrument(ch) ;
+		if (o>=0) used[o]=true ;
 	}
 
 	// trk2als: los loops de las pistas de audio también son instrumentos usados
@@ -698,112 +575,6 @@ void Project::SaveContent(TiXmlNode *node) {
 		node->InsertEndChild(param) ;
 	}
 } ;
-
-void Project::LoadFirstGen(const char *root) {
-
-
-	char filename[1024] ;
-	sprintf(filename,"%s/lgptsav.dat",root) ;
-
-	FileSystem *fs=FileSystem::GetInstance() ;
-	I_File *file=fs->Open(filename,"r") ;
-
-	if (file) {
-		// Read file
-		int tempo ;
-		SyncMaster::GetInstance()->SetTableRatio(2) ;
-		file->Read(&tempo,sizeof(int),1) ;
-		Variable *v=FindVariable(VAR_TEMPO) ;
-		v->SetInt(tempo);
-		file->Read(song_->data_,sizeof(char),SONG_CHANNEL_COUNT*256) ;
-		file->Read(song_->chain_->data_,sizeof(char),CHAIN_COUNT*16) ;
-		file->Read(song_->chain_->transpose_,sizeof(char),CHAIN_COUNT*16) ;
-		file->Read(song_->phrase_->note_,sizeof(char),PHRASE_COUNT*16) ;
-		file->Read(song_->phrase_->instr_,sizeof(char),PHRASE_COUNT*16) ;
-
-		// read instrument data
-		int buffer[MAX_INSTRUMENT_COUNT*3] ; // Three parameters per instruments
-		int byteRead=file->Read(buffer,sizeof(int),MAX_INSTRUMENT_COUNT*3) ;
-		if (byteRead>0) {
-			int *current=buffer ;
-			InstrumentBank *bank=this->instrumentBank_ ;
-			for (int i=0;i<MAX_INSTRUMENT_COUNT;i++) {
-				I_Instrument *instr=bank->GetInstrument(i) ;
-				int count=0 ;
-				IteratorPtr<Variable> it(instr->GetIterator()) ;
-				for (it->Begin();count<3;it->Next()) {
-					Variable &ip=it->CurrentItem() ;
-					ip.SetInt(*current++) ;
-					count++ ;
-				}
-			}
-		}
-		file->Close() ;
-		delete file ;
-
-		// Restore chain & phrase allocation table
-		
-		unsigned char *data=song_->data_ ;
-		for (int i=0;i<256*SONG_CHANNEL_COUNT;i++) {
-			if (*data!=0xFF) {
-				song_->chain_->SetUsed(*data) ;
-			} 
-		    data++ ;
-		}
-                
-        data=song_->chain_->data_ ;        
-
-		for (int i=0;i<CHAIN_COUNT;i++) {
-            for (int j=0;j<16;j++) {
-                if (*data!=0xFF) {
-                    song_->chain_->SetUsed(i) ;
-                    song_->phrase_->SetUsed(*data) ;
-                }
-                data++ ;
-            } ;	
-        }
-
-        data=song_->phrase_->note_ ;
-             
-		for (int i=0;i<PHRASE_COUNT;i++) {
-            for (int j=0;j<16;j++) {
-                if (*data!=0xFF) {
-                    song_->phrase_->SetUsed(i) ;
-                }
-                data++ ;
-            } ;	
-        }	
-        
-        // TEMP: clear out Phrase 0xFE
-        
-		data=song_->phrase_->note_+0xFE*16 ;
-		for (int i=0;i<16;i++) {
-			*data++=0xFF ;
-		} ;
-        // Trace output unused instruments to the console
-        
-        bool used[MAX_INSTRUMENT_COUNT] ;
-        for (int i=0;i<MAX_INSTRUMENT_COUNT;i++) {
-            used[i]=false ;
-        } ;	
-        
-        data=song_->phrase_->instr_ ;
-        for (int i=0;i<PHRASE_COUNT;i++) {
-            for (int j=0;j<16;j++) {
-                if (*data!=0xFF) {
-                    used[*data]=true ;
-                }
-                data++ ;
-            } ;
-        } ;
-        
-        //for (int i=0;i<MAX_INSTRUMENT_COUNT;i++) {
-        //    if ((!used[i])&&(song_->instrument_[i]->IsInitialized())) {
-        //        Trace::Dump("Instrument %x not used",i) ;
-        //    }
-        //} ;	
-	}
-}
 
 void Project::buildMidiDeviceList() {
 	if (midiDeviceList_) {

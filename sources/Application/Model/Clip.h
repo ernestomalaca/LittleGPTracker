@@ -15,6 +15,7 @@
 #define CLIP_MAX_PAGES 16
 #define CLIP_STEPS_PER_PAGE 16
 #define CLIP_TICKS 24          // nudge: 1/24 de paso
+#define VOICE_COUNT 4          // notas a la vez por pista (voces del canal)
 
 class TiXmlNode ;
 class TiXmlElement ;
@@ -36,14 +37,18 @@ struct ClipNote {
 
 class Clip {
 public:
-	Clip():pages(0) {}
-	void Clear() { pages=0 ; notes.clear() ; }
+	Clip():pages(0),loopStart(-1),loopEnd(-1) {}
+	void Clear() { pages=0 ; notes.clear() ; name.clear() ; loopStart=loopEnd=-1 ; }
 	bool IsEmpty() const { return pages==0 ; }
 	int Steps() const { return pages*CLIP_STEPS_PER_PAGE ; }
-	bool operator==(const Clip &o) const { return pages==o.pages && notes==o.notes ; }
+	bool operator==(const Clip &o) const {
+		return pages==o.pages && notes==o.notes && loopStart==o.loopStart && loopEnd==o.loopEnd ;
+	}
 	bool operator!=(const Clip &o) const { return !(*this==o) ; }
 	int pages ;                    // 0 = clip vacío (sin crear)
 	std::vector<ClipNote> notes ;  // ordenadas por inicio
+	std::string name ;             // "woodblock 1"; vacío = sin nombre
+	int loopStart,loopEnd ;        // compases; -1 = sin loop (suena entero)
 } ;
 
 class ClipBank {

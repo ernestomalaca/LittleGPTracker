@@ -71,7 +71,6 @@ public:
     bool IsRunning();
     bool Clipped() ;
 
-    void ProcessCommands();
     bool ProcessChannelCommand(int channel,FourCC cmd,ushort param) ;
 
 	void StartStreaming(const Path &path) ;
@@ -115,7 +114,6 @@ protected:
 	void updateChainPos(int position,int channel,int hop=0) ;
 	void updatePhrasePos(int pos,int channel) ;
 	void playCursorPosition(int channel) ;
-    int  getChannelHop(int channel,int pos) ;
 	void moveToNextStep() ;
 	void moveToNextPhrase(int channel,int hop=-1) ;
 	void moveToNextChain(int channel,int hop) ;
@@ -182,17 +180,12 @@ protected:
 	} ;
 	std::vector<TimedHit> timed_[SONG_CHANNEL_COUNT] ;
 	unsigned long sliceCount_ ;
-	int noteSpan(int channel, int voice, int phrase, int pos) ;
-	void scheduleHits(int channel, int voice, int phrase, int pos, I_Instrument *instr,
-	                  unsigned char note, int vel, bool skipFirst) ;
 	void fireTimed() ;
-	bool firstLate(int voice, int phrase, int pos) ;   // el primer golpe no va en el paso
-	int lastTick_[SONG_CHANNEL_COUNT][4] ;
 	// trk2als: el clip MIDI propio
 	void playClipStep(int channel) ;
 	void startClipNote(int channel, int voice, I_Instrument *instr, unsigned char note,
 	                   int vel, bool newInstrument) ;
-	unsigned long voiceEnd_[SONG_CHANNEL_COUNT][4] ;   // rebanada en que se libera cada voz             // nudge de la nota que suena en cada voz
+	unsigned long voiceEnd_[SONG_CHANNEL_COUNT][4] ;   // rebanada en que se libera cada voz
 };
 
 #endif

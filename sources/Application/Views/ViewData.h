@@ -8,7 +8,7 @@
 enum PlayMode {
 	PM_SONG,
 	PM_CHAIN,
-	PM_PHRASE,
+	PM_PHRASE,   // trk2als: repite el compás actual del clip
 	PM_LIVE,
 	PM_AUDITION
 } ;
@@ -26,10 +26,6 @@ public:
 	void SetSongChain(unsigned char) ;
 	unsigned char *GetCurrentSongPointer() ;
 
-	void UpdateChainCursor(int dx,int dy) ;
-	unsigned char UpdateChainCursorValue(int offset,int dx,int dy) ;
-	void SetChainPhrase(unsigned char value) ;
-	unsigned char *GetCurrentChainPointer() ;
 
 protected:
 
@@ -63,8 +59,7 @@ public:
 	int chainRow_ ;  			// .Current row in chain editor 
 	int chainCol_ ;			    // .Current column in chain editor
 
-	int currentChain_ ;         // .Current edited chain
-	int currentPhrase_ ;        // .Current edited phrase
+	int currentChain_ ;         // .trk2als: el clip que se edita
 
 	int currentInstrument_ ;    // .Current edited instrument
 	bool instrumentFromSong_ ;  // .trk2als: se abrió desde un loop de la song

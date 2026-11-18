@@ -1,8 +1,6 @@
 #ifndef _SONG_H_
 #define _SONG_H_
 
-#include "Chain.h"
-#include "Phrase.h"
 #include "Clip.h"
 #include "Application/Persistency/Persistent.h"
 #include <string>
@@ -18,6 +16,8 @@
 
 #define MAX_INSTRUMENT_COUNT (MAX_SAMPLEINSTRUMENT_COUNT+MAX_MIDIINSTRUMENT_COUNT)
 
+// trk2als: la Session. Cada celda de una pista MIDI es un clip propio
+// (Model/Clip.h); en una pista de audio, el instrumento con el loop.
 class Song:Persistent {
 public:
 	Song() ;
@@ -27,27 +27,21 @@ public:
 	virtual void RestoreContent(TiXmlElement *element);
 
 	unsigned char *data_ ;
-	Chain *chain_ ;
-	Phrase *phrase_ ;
-	ClipBank *clips_ ;   // trk2als: los clips MIDI propios
+	ClipBank *clips_ ;
 
-	// trk2als: nombre de cada chain ("woodblock 1"); vacío = sin nombre
-	const std::string &GetChainName(int chain) { return chainName_[chain] ; }
-	void SetChainName(int chain,const std::string &name) { chainName_[chain]=name ; }
-	// trk2als: loop del clip (filas de la chain, como las páginas del Move);
-	// sin loop suena entero
-	bool GetChainLoop(int chain,int &start,int &end) {
-		start=loopStart_[chain] ; end=loopEnd_[chain] ;
-		return start!=0xFF ;
+	const std::string &GetClipName(int clip) { return clips_->Get(clip).name ; }
+	void SetClipName(int clip,const std::string &name) { clips_->Get(clip).name=name ; }
+	// loop del clip en compases (como las páginas del Move); sin loop suena entero
+	bool GetClipLoop(int clip,int &start,int &end) {
+		Clip &c=clips_->Get(clip) ;
+		start=c.loopStart ; end=c.loopEnd ;
+		return start>=0 ;
 	}
-	void SetChainLoop(int chain,int start,int end) {
-		loopStart_[chain]=(unsigned char)start ; loopEnd_[chain]=(unsigned char)end ;
+	void SetClipLoop(int clip,int start,int end) {
+		Clip &c=clips_->Get(clip) ;
+		c.loopStart=start ; c.loopEnd=end ;
 	}
-	void ClearChainLoop(int chain) { loopStart_[chain]=loopEnd_[chain]=0xFF ; }
-private:
-	unsigned char loopStart_[CHAIN_COUNT] ;
-	unsigned char loopEnd_[CHAIN_COUNT] ;
-	std::string chainName_[CHAIN_COUNT] ;
+	void ClearClipLoop(int clip) { Clip &c=clips_->Get(clip) ; c.loopStart=c.loopEnd=-1 ; }
 } ;
 
 #endif

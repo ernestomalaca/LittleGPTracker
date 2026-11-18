@@ -27,7 +27,7 @@ void ClipBank::Purge(const unsigned char *songData,int songSize) {
 		if (!inSong[i]) clip_[i].Clear() ;
 }
 
-// <CLIPS><CLIP ID="03" PAGES="2" NOTES="ssttllppvvrrmm..."/></CLIPS>
+// <CLIPS><CLIP ID="03" PAGES="2" NAME=".." LOOPSTART="0" LOOPEND="1" NOTES="ssttllppvvrrmm..."/></CLIPS>
 // cada nota son 7 bytes en hex: inicio, nudge, largo-1, nota, velocity,
 // subdivisiones-1 y rampa (con signo)
 void ClipBank::Save(TiXmlNode *node) {
@@ -40,6 +40,11 @@ void ClipBank::Save(TiXmlNode *node) {
 		sprintf(id,"%02X",i) ;
 		e.SetAttribute("ID",id) ;
 		e.SetAttribute("PAGES",c.pages) ;
+		if (!c.name.empty()) e.SetAttribute("NAME",c.name.c_str()) ;
+		if (c.loopStart>=0) {
+			e.SetAttribute("LOOPSTART",c.loopStart) ;
+			e.SetAttribute("LOOPEND",c.loopEnd) ;
+		}
 		std::string hex ;
 		for (size_t k=0;k<c.notes.size();k++) {
 			const ClipNote &n=c.notes[k] ;
@@ -72,6 +77,11 @@ void ClipBank::Restore(TiXmlElement *element) {
 		if (pages<1) pages=1 ;
 		if (pages>CLIP_MAX_PAGES) pages=CLIP_MAX_PAGES ;
 		clip.pages=pages ;
+		if (const char *nm=e->Attribute("NAME")) clip.name=nm ;
+		// ojo: este TinyXML pone 0 si el atributo no está
+		const char *lsa=e->Attribute("LOOPSTART"),*lea=e->Attribute("LOOPEND") ;
+		int ls=lsa?atoi(lsa):-1,le=lea?atoi(lea):-1 ;
+		if (ls>=0 && le>=ls && le<pages) { clip.loopStart=ls ; clip.loopEnd=le ; }
 		const char *hex=e->Attribute("NOTES") ;
 		if (!hex) continue ;
 		size_t len=strlen(hex) ;

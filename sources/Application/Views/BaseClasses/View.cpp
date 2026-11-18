@@ -115,16 +115,6 @@ void View::drawMap() {
 		pos._y = anchor._y;
 		switch(viewType_)
 		{
-		case VT_CHAIN:
-			pos._x+=1;
-			pos._y+=1;
-	        DrawString(pos._x,pos._y,"C",props) ;
-			break;
-		case VT_PHRASE:
-			pos._x+=2;
-			pos._y+=1;
-	        DrawString(pos._x,pos._y,"P",props) ;
-			break;
 		case VT_PROJECT:
 	        DrawString(pos._x,pos._y,"P",props) ;
 			break;

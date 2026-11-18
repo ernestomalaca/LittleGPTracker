@@ -307,24 +307,24 @@ void ClipView::loopButton(bool left) {
     if (n == 0) return;
     int page = cursorStep_ / 16;
     int s, e;
-    bool has = song->GetChainLoop(chain, s, e);
+    bool has = song->GetClipLoop(chain, s, e);
     if (!has) { s = 0; e = n - 1; }
     unsigned long now = System::GetInstance()->GetClock();
     if (left && now - lastLoopL_ < 400) {   // L dos veces: este compás solo, o sin loop
         lastLoopL_ = 0;
         if (prevHas_ && prevS_ == page && prevE_ == page) {
-            song->ClearChainLoop(chain);
+            song->ClearClipLoop(chain);
             message("Loop apagado: suena todo el clip");
         } else {
-            song->SetChainLoop(chain, page, page);
+            song->SetClipLoop(chain, page, page);
             message("Loop: solo el compas %d", page + 1);
         }
         return;
     }
     if (left) {
         lastLoopL_ = now;
-        song->GetChainLoop(chain, prevS_, prevE_);
-        prevHas_ = song->GetChainLoop(chain, s, e);
+        song->GetClipLoop(chain, prevS_, prevE_);
+        prevHas_ = song->GetClipLoop(chain, s, e);
         if (!prevHas_) { s = 0; e = n - 1; }
         s = page;
         if (e < s) e = s;
@@ -332,7 +332,7 @@ void ClipView::loopButton(bool left) {
         e = page;
         if (s > e) s = e;
     }
-    song->SetChainLoop(chain, s, e);
+    song->SetClipLoop(chain, s, e);
     char buf[48];
     if (s == e) sprintf(buf, "Loop: compas %d", s + 1);
     else sprintf(buf, "Loop: compases %d a %d", s + 1, e + 1);
@@ -374,12 +374,12 @@ bool ClipView::duplicatePage(bool right) {
     int at = right ? page + 1 : page;
     // el loop se recorre con lo que se movió
     int s, e;
-    if (song->GetChainLoop(chain, s, e)) {
+    if (song->GetClipLoop(chain, s, e)) {
         if (at <= s) { s++; e++; }
         else if (at <= e) e++;
         if (e > 15) e = 15;
-        if (s > 15) song->ClearChainLoop(chain);
-        else song->SetChainLoop(chain, s, e);
+        if (s > 15) song->ClearClipLoop(chain);
+        else song->SetClipLoop(chain, s, e);
     }
     if (right) cursorStep_ += 16;   // a la copia
     message(right ? "Compas %d duplicado a la derecha" : "Compas %d duplicado a la izquierda", page + 1);
@@ -420,11 +420,11 @@ void ClipView::deletePageAnswer(bool yes) {
     c.notes = out;
     c.pages = n - 1;
     int s, e;
-    if (song->GetChainLoop(chain, s, e)) {
+    if (song->GetClipLoop(chain, s, e)) {
         if (page < s) { s--; e--; }
         else if (page <= e) e--;
-        if (e < s || e < 0) song->ClearChainLoop(chain);
-        else song->SetChainLoop(chain, s, e);
+        if (e < s || e < 0) song->ClearClipLoop(chain);
+        else song->SetClipLoop(chain, s, e);
     }
     if (cursorStep_ >= total()) cursorStep_ = total() - 1;
     undo_.push_back(before);
@@ -1160,7 +1160,7 @@ void ClipView::handleButton(unsigned short mask, bool pressed) {
             player->Stop();
         } else if (pages() > 0) {
             int ls, le;
-            int from = viewData_->song_->GetChainLoop(viewData_->currentChain_, ls, le) ? ls : 0;
+            int from = viewData_->song_->GetClipLoop(viewData_->currentChain_, ls, le) ? ls : 0;
             viewData_->chainRow_ = from;
             player->OnStartButton(PM_CHAIN, viewData_->songX_, false, from);
         }
@@ -1275,7 +1275,7 @@ void ClipView::DrawView() {
     const int RH = kitInstr ? (ROWS * ROW_H) / 16 : ROW_H;   // 16 pads llenan la rejilla
 
     // barra de arriba
-    const std::string &cn = viewData_->song_->GetChainName(viewData_->currentChain_);
+    const std::string &cn = viewData_->song_->GetClipName(viewData_->currentChain_);
     char cname[16];
     sprintf(cname, "Clip %2.2X", viewData_->currentChain_);
     std::string ctx = std::string(viewData_->project_->GetTrackName(viewData_->songX_)) + " > " +
@@ -1310,7 +1310,7 @@ void ClipView::DrawView() {
         }
         // las páginas, a la derecha (y el loop debajo)
         int loopS = 0, loopE = 0;
-        bool hasLoop = viewData_->song_->GetChainLoop(viewData_->currentChain_, loopS, loopE);
+        bool hasLoop = viewData_->song_->GetClipLoop(viewData_->currentChain_, loopS, loopE);
         int bx = 632 - 16 * 10;
         for (int i = 0; i < 16; i++) {
             int x = bx + i * 10;

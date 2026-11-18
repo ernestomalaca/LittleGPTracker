@@ -254,14 +254,14 @@ COMMONFILES := \
 	NewProjectDialog.o \
 	ImportSampleDialog.o \
 	MixerView.o ClipView.o NullView.o \
-	SongView.o ChainView.o PhraseView.o ViewData.o ConsoleView.o ProjectView.o InstrumentView.o UIController.o \
+	SongView.o ViewData.o ConsoleView.o ProjectView.o InstrumentView.o UIController.o \
 	View.o ModalView.o FieldView.o UIField.o UIIntField.o \
 	UIIntVarOffField.o UIIntVarField.o ViewEvent.o I_Action.o\
 	UITempoField.o UIActionField.o \
 	MessageBox.o TrackTypeDialog.o PresetDialog.o CommandSelectorModal.o \
 	GrooveView.o UINoteVarField.o UIBigHexVarField.o \
 	SRPUpdaters.o UIStaticField.o \
-	Song.o Chain.o Phrase.o Clip.o Project.o Scale.o \
+	Song.o Clip.o Project.o Scale.o \
 	char.o n_assert.o fixed.o wildcard.o \
 	SyncMaster.o TablePlayback.o Player.o \
 	Table.o TableView.o\

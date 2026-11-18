@@ -40,11 +40,9 @@ enum GUIEventPadButtonMasks {
 
 enum ViewType {
     VT_SONG,
-    VT_CHAIN,
-    VT_PHRASE,
     VT_PROJECT,
     VT_INSTRUMENT,
-    VT_TABLE,  // Table screen under phrase
+    VT_TABLE,  // Table screen (bajo el clip)
     VT_TABLE2, // Table screen under instrument
     VT_GROOVE,
     VT_MIXER,

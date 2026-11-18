@@ -2,14 +2,12 @@
 #ifndef _APP_WINDOW_H_
 #define _APP_WINDOW_H_
 
-#include "Application/Views/ChainView.h"
 #include "Application/Views/ConsoleView.h"
 #include "Application/Views/GrooveView.h"
 #include "Application/Views/InstrumentView.h"
 #include "Application/Views/MixerView.h"
 #include "Application/Views/ClipView.h"
 #include "Application/Views/NullView.h"
-#include "Application/Views/PhraseView.h"
 #include "Application/Views/ProjectView.h"
 #include "Application/Views/SongView.h"
 #include "Application/Views/TableView.h"
@@ -87,8 +85,6 @@ class AppWindow : public GUIWindow, I_Observer, Status {
     void joyStep(unsigned short dir);
     ViewData *_viewData;
     SongView *_songView;
-    ChainView *_chainView;
-    PhraseView *_phraseView;
     ProjectView *_projectView;
     InstrumentView *_instrumentView;
     TableView *_tableView;

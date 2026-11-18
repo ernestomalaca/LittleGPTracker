@@ -58,7 +58,7 @@ public:
   bool ScaleChanged();
   int OutOfScaleNotes();
   int FitToScale();
-  void kitPhrases(bool *skip);   // trk2als: phrases de pistas de batería (no se ajustan)
+  void kitClips(bool *skip);   // trk2als: clips de pistas de batería (no se ajustan)
   void AcceptScale();
   int appliedScale_, appliedRoot_;
   int GetTempo(); // Takes nudging into account
@@ -91,7 +91,6 @@ public:
   virtual void SaveContent(TiXmlNode *node);
   virtual void RestoreContent(TiXmlElement *element);
 
-  void LoadFirstGen(const char *root);
 
 protected:
   void buildMidiDeviceList();

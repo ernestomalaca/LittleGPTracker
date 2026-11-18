@@ -108,7 +108,7 @@ void Player::Start(PlayMode mode, bool forceSongMode) {
         timeToLive_[i] = 0;
         timeToStart_[i]=0;
         timed_[i].clear();
-        for (int v = 0; v < 4; v++) { lastTick_[i][v] = 0; voiceEnd_[i][v] = 0; }
+        for (int v = 0; v < 4; v++) voiceEnd_[i][v] = 0;
         audioStarted_[i] = false;
         SampleInstrument::SetChannelSync(i, isAudio(i));
 		TablePlayback &tpb=TablePlayback::GetTablePlayback(i);
@@ -175,8 +175,6 @@ void Player::Start(PlayMode mode, bool forceSongMode) {
             NInvalid;
             break;
         }
-
-        ProcessCommands();
 
         startTime_ = mixer_->GetAudioOut()->GetStreamTime();
 
@@ -591,9 +589,6 @@ void Player::Update(Observable &o,I_ObservableData *d) {
             mixer_->MetronomeClick(metroStep_ % 16 == 0);
         }
 
-        // Process commands in current phrase
-        ProcessCommands();
-
         // Initialise retrigger table
         int instrRetrigger[SONG_CHANNEL_COUNT];
         memset(instrRetrigger, -1, SONG_CHANNEL_COUNT * sizeof(int));
@@ -650,73 +645,6 @@ void Player::Update(Observable &o,I_ObservableData *d) {
     PlayerEvent pe(PET_UPDATE, 0);
     SetChanged();
     NotifyObservers(&pe);
-}
-
-/************************************************************
- ProcessCommands:
-    Check if there's any command to trigger at current playing
-    position for all channels
- ************************************************************/
-
-void Player::ProcessCommands() {
-
-    // loop on all channels
-
-    Groove *gs = Groove::GetInstance();
-
-    for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
-
-        if (mixer_->IsChannelPlaying(i)) {
-
-            // check if there's any phrase playing
-
-            uchar phrase = viewData_->currentPlayPhrase_[i];
-            if (phrase != 0xFF && phrase != CLIP_PHRASE && !isAudio(i)) {
-                if (gs->TriggerChannel(
-                        i)) { // If groove says it is time to play
-                    int pos=viewData_->phrasePlayPos_[i];
-                    // trk2als: con nudge el velocity va con el golpe (no a la nota de antes)
-                    bool lateVel = firstLate(0, phrase, pos);
-                    FourCC cc =
-                        viewData_->song_->phrase_->cmd1_[phrase * 16 + pos];
-                    if (lateVel && cc == I_CMD_MVEL) cc = I_CMD_NONE;
-                    ushort param =
-                        viewData_->song_->phrase_->param1_[phrase * 16 + pos];
-
-                    // if there's any command to trigger, first pass it on the
-                    // player then pass it on to the instrument
-
-                    if (cc != I_CMD_NONE) {
-                        if (!ProcessChannelCommand(i, cc, param)) {
-                            I_Instrument *instrument = mixer_->GetInstrument(i);
-                            if (instrument) {
-                                instrument->ProcessCommand(i, cc, param);
-                            }
-                        }
-                    }
-
-                    // Now process second command row
-
-                    cc = viewData_->song_->phrase_->cmd2_[phrase * 16 + pos];
-                    if (lateVel && cc == I_CMD_MVEL) cc = I_CMD_NONE;
-                    param =
-                        viewData_->song_->phrase_->param2_[phrase * 16 + pos];
-
-                    // if there's any command to trigger, first pass it on the
-                    // player then pass it on to the instrument
-
-                    if (cc != I_CMD_NONE) {
-                        if (!ProcessChannelCommand(i,cc,param)) {
-                            I_Instrument *instrument = mixer_->GetInstrument(i);
-                            if (instrument) {
-                                instrument->ProcessCommand(i, cc, param);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
 }
 
 bool Player::ProcessChannelCommand(int channel, FourCC cmd, ushort param) {
@@ -836,13 +764,13 @@ void Player::triggerLiveChains() {
 // trk2als: el loop del clip (filas de la chain); sin loop, entero
 int Player::loopStart(int channel, int chain) {
     int s, e;
-    if (chain == 0xFF || isAudio(channel) || !viewData_->song_->GetChainLoop(chain, s, e)) return 0;
+    if (chain == 0xFF || isAudio(channel) || !viewData_->song_->GetClipLoop(chain, s, e)) return 0;
     return s;
 }
 
 int Player::loopEnd(int channel, int chain) {
     int s, e;
-    if (chain == 0xFF || isAudio(channel) || !viewData_->song_->GetChainLoop(chain, s, e)) return 15;
+    if (chain == 0xFF || isAudio(channel) || !viewData_->song_->GetClipLoop(chain, s, e)) return 15;
     return e;
 }
 
@@ -890,22 +818,6 @@ void Player::updatePhrasePos(int pos, int channel) {
     // See if we need to delay the trigger
     timeToStart_[channel] = 1;
 
-    uchar phrase = viewData_->currentPlayPhrase_[channel];
-    if (isAudio(channel) || phrase == 0xFF || phrase == CLIP_PHRASE) return; // sin comandos
-
-    // Check both param colum 1 & 2
-
-    FourCC cc = viewData_->song_->phrase_->cmd1_[phrase * 16 + pos];
-    if (cc == I_CMD_DLAY) {
-        ushort param=viewData_->song_->phrase_->param1_[phrase*16+pos];
-        timeToStart_[channel] = (param & 0x0F) + 1;
-    }
-
-    cc = viewData_->song_->phrase_->cmd2_[phrase * 16 + pos];
-    if (cc == I_CMD_DLAY) {
-        ushort param=viewData_->song_->phrase_->param1_[phrase*16+pos];
-        timeToStart_[channel] = (param & 0x0F) + 1;
-    }
 }
 
 void Player::playCursorPosition(int channel) {
@@ -915,184 +827,7 @@ void Player::playCursorPosition(int channel) {
         return;
     }
 
-    if (viewData_->currentPlayPhrase_[channel] == CLIP_PHRASE) {   // trk2als
-        playClipStep(channel);
-        return;
-    }
-
-    int pos = viewData_->phrasePlayPos_[channel];
-
-    // Get chain content and see if instr needs to be started/Stopped
-    unsigned char currentPhrase = viewData_->currentPlayPhrase_[channel];
-
-    if (currentPhrase != 0xFF) {
-
-        Song *song = viewData_->song_;
-        Phrase *phrase = song->phrase_;
-        unsigned char note=phrase->note_[16*currentPhrase+pos] ;
-        unsigned char instr = phrase->instr_[16 * currentPhrase + pos];
-
-        TableHolder *th = TableHolder::GetInstance();
-        TablePlayback &tpb = TablePlayback::GetTablePlayback(channel);
-
-        int t0 = phrase->timing_[Phrase::TIdx(0, currentPhrase, pos)];
-        bool late0 = firstLate(0, currentPhrase, pos);   // trk2als: nudge o rampa: la nota suena después
-        if (note != 0xFF) {
-
-            // Stop instrument if playing
-
-            if (!late0) mixer_->StopInstrument(channel);
-            InstrumentBank *bank = viewData_->project_->GetInstrumentBank();
-
-            // get instrument for next note
-
-            bool newInstrument = false;
-
-            I_Instrument *instrument;
-            int owner = project_->GetTrackInstrument(channel);
-            if (owner >= 0) {
-                // trk2als: la pista es dueña de su instrumento; la columna de
-                // instrumento de la phrase ya no cuenta
-                instrument = bank->GetInstrument(owner);
-                newInstrument = (instr != 0xFF) ||
-                                (mixer_->GetLastInstrument(channel) != instrument);
-                instr = (unsigned char)owner;
-            } else if (instr != 0xFF) {
-                instrument = bank->GetInstrument(instr);
-                newInstrument = true;
-            } else {
-                instrument = mixer_->GetLastInstrument(channel);
-            }
-
-            if (instrument == 0) {
-                instrument = bank->GetInstrument(0);
-            }
-
-            if (instrument != 0) {
-
-                int chain = viewData_->currentPlayChain_[channel];
-                int chainPos = viewData_->chainPlayPos_[channel];
-                unsigned char *trsp = viewData_->song_->chain_->transpose_ +
-                                      (16 * chain + chainPos);
-                note += *trsp;
-                note += project_->GetTranspose();
-                instrumentOnChannel_[channel][0] = (instr / 16) > 9
-                                                       ? 'A' - 10 + (instr / 16)
-                                                       : '0' + (instr / 16);
-                instrumentOnChannel_[channel][1] = (instr % 16) > 9
-                                                       ? 'A' - 10 + (instr % 16)
-                                                       : '0' + (instr % 16);
-                instrumentOnChannel_[channel][2] = '\0';
-
-                // Check if note is in acceptable midi range
-
-                if (note < 128 && (t0 != 0 || late0)) {
-                    // trk2als: nudge / subdivisiones: los golpes van programados
-                    int vel = -1;
-                    if (phrase->cmd1_[16 * currentPhrase + pos] == I_CMD_MVEL) vel = (phrase->param1_[16 * currentPhrase + pos] & 0xFF) / 2;
-                    if (phrase->cmd2_[16 * currentPhrase + pos] == I_CMD_MVEL) vel = (phrase->param2_[16 * currentPhrase + pos] & 0xFF) / 2;
-                    if (!late0) {
-                        SampleInstrument::SetChannelSync(channel, false);
-                        mixer_->StartInstrument(channel, instrument, note, newInstrument);
-                    }
-                    scheduleHits(channel, 0, currentPhrase, pos, instrument, note, vel, !late0);
-                } else if (note < 128) {
-                    SampleInstrument::SetChannelSync(channel, false); // trk2als
-                    mixer_->StartInstrument(channel, instrument, note,
-                                            newInstrument);
-                    int instrTable = instrument->GetTable();
-
-                    // If an instrument number has been specified && instrument
-                    // has table, we trigger the table.
-
-                    if ((instrTable != VAR_OFF) && (newInstrument)) {
-                        Table &table = th->GetTable(instrTable);
-                        bool automated = instrument->GetTableAutomation();
-                        tpb.Start(instrument, table, automated);
-                    } else {
-                        // if there was an instrument number, we stop the table
-                        if (newInstrument) {
-                            tpb.Stop();
-                        }
-                    }
-                } else {
-                    Trace::Error("Note outside range: %02x",
-                                 (unsigned int)note);
-                }
-            }
-        }
-        // trk2als: las otras voces del paso (acordes)
-        for (int v = 1; v < VOICE_COUNT; v++) {
-            int vi = Phrase::VIdx(v, currentPhrase, pos);
-            unsigned char vn = phrase->voiceNote_[vi];
-            if ((phrase->voiceFlags_[vi] & VF_KILL) && phrase->voiceNote_[vi] == 0xFF &&
-                lastTick_[channel][v] > 0) {
-                // trk2als: la nota tenía nudge: su final también va recorrido
-                TimedHit h;
-                h.at = sliceCount_ + lastTick_[channel][v];
-                h.delay = 0; h.voice = v; h.note = 0xFF; h.vel = -1; h.instr = 0;
-                timed_[channel].push_back(h);
-            } else if (phrase->voiceFlags_[vi] & VF_KILL) mixer_->StopVoice(channel, v);
-            if (vn == 0xFF) continue;
-            InstrumentBank *bank = viewData_->project_->GetInstrumentBank();
-            int owner = project_->GetTrackInstrument(channel);
-            I_Instrument *vinstr = (owner >= 0) ? bank->GetInstrument(owner)
-                                                : mixer_->GetLastInstrument(channel);
-            if (!vinstr) vinstr = bank->GetInstrument(0);
-            if (!vinstr) continue;
-            int chain = viewData_->currentPlayChain_[channel];
-            int chainPos = viewData_->chainPlayPos_[channel];
-            int vnote = vn + (signed char)viewData_->song_->chain_->transpose_[16 * chain + chainPos] +
-                        project_->GetTranspose();
-            if (vnote < 0 || vnote > 127) continue;
-            unsigned char vel = phrase->voiceVel_[vi];
-            int tv = phrase->timing_[Phrase::TIdx(v, currentPhrase, pos)];
-            bool late = firstLate(v, currentPhrase, pos);
-            if (!late)
-                mixer_->StartVoice(channel, vinstr, v, (unsigned char)vnote,
-                                   vel == VVEL_DEFAULT ? -1 : vel);
-            if (tv || late)
-                scheduleHits(channel, v, currentPhrase, pos, vinstr, (unsigned char)vnote,
-                             vel == VVEL_DEFAULT ? -1 : vel, !late);
-            lastTick_[channel][v] = ((tv & 0x0F) * 4 + phrase->Fine(v, currentPhrase, pos) + 2) / 4;
-        }
-        if ((note != 0xFF) || (instr != 0xFF)) {
-            I_Instrument *instrument = mixer_->GetInstrument(channel);
-            if (instrument) {
-                if (instrument->GetTableAutomation()) {
-                    TablePlayerChange tpc;
-					tpc.timeToLive_=timeToLive_[channel];
-                    tpb.ProcessStep(tpc);
-                    timeToLive_[channel]=tpc.timeToLive_;
-                }
-            }
-        }
-    }
-}
-
-int Player::getChannelHop(int channel, int pos) {
-
-    int phrase = viewData_->currentPlayPhrase_[channel];
-    if (isAudio(channel) || phrase == 0xFF || phrase == CLIP_PHRASE) return -1;
-
-    Phrase *song_phrase = viewData_->song_->phrase_;
-    FourCC cc[] = {song_phrase->cmd1_[phrase * 16 + pos],
-		 song_phrase->cmd2_[phrase * 16 + pos]};
-    int param[] = {song_phrase->param1_[phrase * 16 + pos],
-		   song_phrase->param2_[phrase * 16 + pos]};
-
-    // First hop takes precedence.
-    for(int i = 0; i < 2; i++)
-      if (cc[i] == I_CMD_HOP) {
-	int arg = param[i] & 0xFF;
-	if (arg != 0xFF)
-	  return arg & 0xF;
-	else
-	  // 'Hop stop' deferred to command processing stage.
-	  return -1;
-      }
-    
-  return -1;
+    if (viewData_->currentPlayPhrase_[channel] == CLIP_PHRASE) playClipStep(channel);
 }
 
 /********************************************************
@@ -1137,21 +872,8 @@ void Player::moveToNextStep() {
                 if (viewData_->currentPlayPhrase_[i] != 0xFF) {
                     int pos = (viewData_->phrasePlayPos_[i]) + 1;
                     if (pos != 16) {
-                        int hop = getChannelHop(i, pos);
-                        if (hop >= 0) {
-                            // trk2als: en una pista de audio la "phrase" es un
-                            // compás del loop: hay que seguir al siguiente
-                            if (mode_ != PM_PHRASE || isAudio(i)) {
-                                moveToNextPhrase(i, hop);
-                            } else {
-                                updatePhrasePos(hop, i);
-                            }
-                        } else {
-                            updatePhrasePos(pos, i);
-                        }
-                    } else { // HOP.. something should be done so that if
-                             // next chain has a hop on pos zero, it is
-                             // effective
+                        updatePhrasePos(pos, i);
+                    } else {   // el siguiente compás del clip
                         if (mode_ != PM_PHRASE || isAudio(i)) {
                             moveToNextPhrase(i);
                         } else {
@@ -1413,73 +1135,7 @@ int Player::GetAudioPreBufferCount() {
  trk2als: nudge y subdivisiones
  ********************************************************/
 
-// cuántos pasos dura la nota de esta voz (hasta la siguiente o un KILL; si
-// llega al final de la phrase, sigue en la que viene en la chain)
-int Player::noteSpan(int channel, int voice, int phrase, int pos) {
-    Phrase *ph = viewData_->song_->phrase_;
-    int span = 1;
-    int p = phrase, q = pos + 1;
-    for (int guard = 0; guard < 32; guard++, q++, span++) {
-        if (q >= 16) {   // la siguiente fila de la chain
-            int chain = viewData_->currentPlayChain_[channel];
-            int cpos = viewData_->chainPlayPos_[channel] + 1;
-            if (chain == 0xFF || cpos >= 16) return span;
-            unsigned char np = chainStep(channel, (uchar)chain, cpos);
-            if (np == 0xFF || p != phrase) return span;
-            p = np;
-            q = 0;
-        }
-        int i = 16 * p + q;
-        bool ev;
-        if (voice == 0)
-            ev = ph->note_[i] != 0xFF || ph->cmd1_[i] == I_CMD_KILL || ph->cmd2_[i] == I_CMD_KILL;
-        else {
-            int vi = Phrase::VIdx(voice, p, q);
-            ev = ph->voiceNote_[vi] != 0xFF || (ph->voiceFlags_[vi] & VF_KILL);
-        }
-        if (ev) return span;
-    }
-    return span;
-}
-
-// los golpes de una nota: el primero después de su nudge y, si está
-// subdividida, los demás repartidos en lo que dura (al sexto de paso más la
-// fracción en muestras, para que caigan exactos)
-void Player::scheduleHits(int channel, int voice, int phrase, int pos, I_Instrument *instr,
-                          unsigned char note, int vel, bool skipFirst) {
-    Phrase *ph = viewData_->song_->phrase_;
-    double tick = ph->Tick(voice, phrase, pos) + ph->Fine(voice, phrase, pos) / 4.0;   // en sextos de paso
-    int n = ph->Ratchet(voice, phrase, pos);
-    if (tick > 5) tick = 5;
-    // lo que estaba pendiente en esta voz ya no va: llegó otra nota
-    std::vector<TimedHit> &q = timed_[channel];
-    for (size_t k = 0; k < q.size();) {
-        if (q[k].voice == voice) q.erase(q.begin() + k);
-        else k++;
-    }
-    double span = noteSpan(channel, voice, phrase, pos) * 6.0;   // en sextos de paso (la nota entera recorrida)
-    float sps = SyncMaster::GetInstance()->GetPlaySampleCount();
-    int ramp = (n > 1) ? ph->Ramp(voice, phrase, pos) : 0;
-    for (int k = skipFirst ? 1 : 0; k < n; k++) {
-        double at = tick + span * k / n;
-        TimedHit h;
-        int whole = int(at);
-        h.at = sliceCount_ + whole;
-        h.delay = int((at - whole) * sps);
-        h.voice = voice;
-        h.note = note;
-        h.vel = vel;
-        if (ramp) {   // rampa: los golpes crecen o se apagan
-            float amt = 0.2f * (ramp > 0 ? ramp : -ramp);
-            float f = ramp > 0 ? 1 - amt * (n - 1 - k) / (n - 1) : 1 - amt * k / (n - 1);
-            int v = int((vel >= 0 ? vel : 100) * f + 0.5f);
-            h.vel = v < 1 ? 1 : v;
-        }
-        h.instr = instr;
-        q.push_back(h);
-    }
-}
-
+// los golpes programados (nudge y subdivisiones) que ya tocan
 void Player::fireTimed() {
     for (int ch = 0; ch < SONG_CHANNEL_COUNT; ch++) {
         std::vector<TimedHit> &q = timed_[ch];
@@ -1504,12 +1160,6 @@ void Player::fireTimed() {
             if (h.delay > 0) h.instr->SetStartDelay(ch, h.voice, h.delay);
         }
     }
-}
-
-bool Player::firstLate(int voice, int phrase, int pos) {
-    Phrase *ph = viewData_->song_->phrase_;
-    if (ph->Tick(voice, phrase, pos) != 0 || ph->Fine(voice, phrase, pos) != 0) return true;
-    return ph->Ratchet(voice, phrase, pos) > 1 && ph->Ramp(voice, phrase, pos) != 0;
 }
 
 /********************************************************
