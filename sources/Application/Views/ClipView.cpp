@@ -44,6 +44,7 @@ ClipView::ClipView(GUIWindow &w, ViewData *viewData) : View(w, viewData) {
     playStep_ = -1;
     copyStep_ = copyPitch_ = 0;
     marking_ = false;
+    dupDone_ = false;
     markLevel_ = 1;
     anchorStep_ = anchorPitch_ = 0;
     aPending_ = bPending_ = false;
@@ -1268,6 +1269,7 @@ void ClipView::handleButton(unsigned short mask, bool pressed) {
     Player *player = Player::GetInstance();
     if (v != EPBM_A) aPending_ = false;
     if (v != EPBM_B) bPending_ = false;
+    if (!marking_) dupDone_ = false;
 
     if (pasting_) {
         if (v == EPBM_B) {
@@ -1286,7 +1288,8 @@ void ClipView::handleButton(unsigned short mask, bool pressed) {
 
     if (mask & EPBM_SELECT) {
         if (v == EPBM_B) {   // Select, B: marcar; otra B: pasos completos; otra: todo el clip
-            if (!marking_) {
+            if (!marking_ || dupDone_) {   // después de duplicar, Select+B marca de nuevo
+                dupDone_ = false;
                 marking_ = true;
                 markLevel_ = 1;
                 anchorStep_ = cursorStep_;
@@ -1297,7 +1300,7 @@ void ClipView::handleButton(unsigned short mask, bool pressed) {
                 message(markLevel_ == 2 ? "Marcando pasos completos" : "Marcado todo el clip");
             }
         } else if (v == EPBM_A) {
-            if (marking_) duplicateSelection();   // Select, B, A
+            if (marking_) { duplicateSelection(); dupDone_ = true; }   // Select, B, A
             else if (clipboard_.empty()) message("Nada que pegar");
             else {                                // mantén A: se ve y se acomoda; al soltar, se pega
                 pasting_ = true;

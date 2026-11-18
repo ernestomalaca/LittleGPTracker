@@ -97,7 +97,7 @@ void EventDispatcher::Execute(FourCC id,float value) {
 		if (value>0.5) {
 			eventMask_|=(1<<mapping) ;
 		} else {
-			eventMask_^=(1<<mapping) ;
+			eventMask_&=~(1<<mapping) ;   // trk2als: soltar apaga (con ^ un "soltar" de más lo dejaba repitiendo solo)
 		}
 
 		// Dispatch event to window

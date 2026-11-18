@@ -112,6 +112,7 @@ class ClipView : public View {
     std::vector<Note> clipboard_;   // lo copiado o cortado
     int copyStep_, copyPitch_;      // dónde estaba el cursor al copiar
     bool marking_;
+    bool dupDone_;                  // se acaba de duplicar: Select+B empieza otra marca
     int markLevel_;                 // 1 libre, 2 pasos completos, 3 todo el clip
     int anchorStep_, anchorPitch_;
     bool aPending_, bPending_;      // A / B tocados solos (al soltar)
