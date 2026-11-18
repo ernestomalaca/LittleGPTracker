@@ -78,6 +78,8 @@ int SampleInstrument::lastMidiNote_[SI_VOICE_COUNT] ;   // trk2als: -1 en el con
 
 SampleInstrument::SampleInstrument() {
 	 memset(varCacheId_,0,sizeof(varCacheId_)) ;   // trk2als
+	 memset(autoOn_,0,sizeof(autoOn_)) ;
+	 memset(autoVal_,0,sizeof(autoVal_)) ;
 	 zoned_=false ;
 	 zonesPoolSize_=-1 ;
 	 lastNote_=-1 ;

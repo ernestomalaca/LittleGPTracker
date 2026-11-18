@@ -1,8 +1,10 @@
 #include "Clip.h"
 #include "Externals/TinyXML/tinyxml.h"
+#include "Foundation/Types/Types.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <algorithm>
 
 // trk2als: ver Clip.h
 
@@ -25,6 +27,105 @@ void ClipBank::Purge(const unsigned char *songData,int songSize) {
 	for (int k=0;k<songSize;k++) inSong[songData[k]]=true ;
 	for (int i=0;i<CLIP_COUNT;i++)
 		if (!inSong[i]) clip_[i].Clear() ;
+}
+
+// el FourCC como sus 4 letras ("SVOL"): el número cambia con la plataforma
+static void fourccStr(unsigned int v,char *out) {
+	unsigned int a=MAKE_FOURCC('A',0,0,0) ;
+	for (int i=0;i<4;i++) out[i]=(char)((a=='A')?(v>>(8*i)):(v>>(8*(3-i)))) ;
+	out[4]=0 ;
+}
+
+static unsigned int strFourcc(const char *s) {
+	if (strlen(s)!=4) return 0 ;
+	return MAKE_FOURCC(s[0],s[1],s[2],s[3]) ;
+}
+
+/************************************************************
+ automatización
+ ************************************************************/
+
+bool AutoLane::ValueAt(int pos,int &value) const {
+	if (points.empty()) return false ;
+	if (pos<=points[0].pos) { value=points[0].value ; return true ; }
+	// el último punto en o antes de pos
+	size_t i=0 ;
+	while (i+1<points.size() && points[i+1].pos<=pos) i++ ;
+	const AutoPoint &a=points[i] ;
+	if (!a.ramp || i+1>=points.size()) { value=a.value ; return true ; }
+	const AutoPoint &b=points[i+1] ;
+	int span=b.pos-a.pos ;
+	if (span<=0) { value=b.value ; return true ; }
+	// redondeo hacia el valor más cercano (también con negativos)
+	double v=a.value+double(b.value-a.value)*(pos-a.pos)/span ;
+	value=int(v<0?v-0.5:v+0.5) ;
+	return true ;
+}
+
+static bool byPos(const AutoPoint &a,const AutoPoint &b) { return a.pos<b.pos ; }
+
+void AutoLane::Sort() {
+	std::stable_sort(points.begin(),points.end(),byPos) ;
+	// dos puntos en la misma posición: gana el último
+	std::vector<AutoPoint> out ;
+	for (size_t i=0;i<points.size();i++) {
+		if (!out.empty() && out.back().pos==points[i].pos) out.back()=points[i] ;
+		else out.push_back(points[i]) ;
+	}
+	points=out ;
+}
+
+AutoLane *Clip::FindLane(unsigned int target,int pad) {
+	for (size_t i=0;i<lanes.size();i++)
+		if (lanes[i].target==target && lanes[i].pad==pad) return &lanes[i] ;
+	return 0 ;
+}
+
+AutoLane &Clip::GetLane(unsigned int target,int pad) {
+	if (AutoLane *l=FindLane(target,pad)) return *l ;
+	AutoLane l ;
+	l.target=target ;
+	l.pad=pad ;
+	lanes.push_back(l) ;
+	return lanes.back() ;
+}
+
+void Clip::RemoveLane(unsigned int target,int pad) {
+	for (size_t i=0;i<lanes.size();i++)
+		if (lanes[i].target==target && lanes[i].pad==pad) { lanes.erase(lanes.begin()+i) ; return ; }
+}
+
+void Clip::DuplicatePageLanes(int page) {
+	int f=page*CLIP_STEPS_PER_PAGE*CLIP_TICKS,t=f+CLIP_STEPS_PER_PAGE*CLIP_TICKS,d=t-f ;
+	for (size_t i=0;i<lanes.size();i++) {
+		std::vector<AutoPoint> &p=lanes[i].points ;
+		std::vector<AutoPoint> out ;
+		for (size_t k=0;k<p.size();k++) {
+			AutoPoint a=p[k] ;
+			if (a.pos>=t) a.pos+=d ;
+			out.push_back(a) ;
+			if (p[k].pos>=f && p[k].pos<t) out.push_back(AutoPoint(p[k].pos+d,p[k].value,p[k].ramp)) ;
+		}
+		p=out ;
+		lanes[i].Sort() ;
+	}
+}
+
+void Clip::DeletePageLanes(int page) {
+	int f=page*CLIP_STEPS_PER_PAGE*CLIP_TICKS,t=f+CLIP_STEPS_PER_PAGE*CLIP_TICKS,d=t-f ;
+	for (size_t i=0;i<lanes.size();) {
+		std::vector<AutoPoint> &p=lanes[i].points ;
+		std::vector<AutoPoint> out ;
+		for (size_t k=0;k<p.size();k++) {
+			if (p[k].pos>=f && p[k].pos<t) continue ;
+			AutoPoint a=p[k] ;
+			if (a.pos>=t) a.pos-=d ;
+			out.push_back(a) ;
+		}
+		p=out ;
+		if (p.empty()) lanes.erase(lanes.begin()+i) ;
+		else i++ ;
+	}
 }
 
 // <CLIPS><CLIP ID="03" PAGES="2" NAME=".." LOOPSTART="0" LOOPEND="1" NOTES="ssttllppvvrrmm..."/></CLIPS>
@@ -55,6 +156,24 @@ void ClipBank::Save(TiXmlNode *node) {
 			for (int j=0;j<7;j++) { sprintf(h,"%02X",b[j]) ; hex+=h ; }
 		}
 		e.SetAttribute("NOTES",hex.c_str()) ;
+		// <LANE TARGET="SVOL" PAD="-1" POINTS="pos,valor,rampa;..."/>
+		for (size_t l=0;l<c.lanes.size();l++) {
+			const AutoLane &lane=c.lanes[l] ;
+			if (lane.points.empty()) continue ;
+			TiXmlElement le("LANE") ;
+			char t[8] ;
+			fourccStr(lane.target,t) ;
+			le.SetAttribute("TARGET",t) ;
+			le.SetAttribute("PAD",lane.pad) ;
+			std::string pts ;
+			for (size_t k=0;k<lane.points.size();k++) {
+				char b[48] ;
+				sprintf(b,"%s%d,%d,%d",k?";":"",lane.points[k].pos,lane.points[k].value,lane.points[k].ramp?1:0) ;
+				pts+=b ;
+			}
+			le.SetAttribute("POINTS",pts.c_str()) ;
+			e.InsertEndChild(le) ;
+		}
 		clips.InsertEndChild(e) ;
 	}
 	node->InsertEndChild(clips) ;
@@ -82,6 +201,25 @@ void ClipBank::Restore(TiXmlElement *element) {
 		const char *lsa=e->Attribute("LOOPSTART"),*lea=e->Attribute("LOOPEND") ;
 		int ls=lsa?atoi(lsa):-1,le=lea?atoi(lea):-1 ;
 		if (ls>=0 && le>=ls && le<pages) { clip.loopStart=ls ; clip.loopEnd=le ; }
+		for (TiXmlElement *le=e->FirstChildElement("LANE");le;le=le->NextSiblingElement("LANE")) {
+			const char *t=le->Attribute("TARGET"),*pa=le->Attribute("PAD"),*pts=le->Attribute("POINTS") ;
+			if (!t || !pts) continue ;
+			AutoLane lane ;
+			lane.target=strFourcc(t) ;
+			if (!lane.target) continue ;
+			lane.pad=pa?atoi(pa):-1 ;
+			const char *p=pts ;
+			while (*p) {
+				int pos,val,r ;
+				if (sscanf(p,"%d,%d,%d",&pos,&val,&r)==3 && pos>=0 && pos<clip.Steps()*CLIP_TICKS)
+					lane.points.push_back(AutoPoint(pos,val,r!=0)) ;
+				const char *n=strchr(p,';') ;
+				if (!n) break ;
+				p=n+1 ;
+			}
+			lane.Sort() ;
+			if (!lane.points.empty()) clip.lanes.push_back(lane) ;
+		}
 		const char *hex=e->Attribute("NOTES") ;
 		if (!hex) continue ;
 		size_t len=strlen(hex) ;

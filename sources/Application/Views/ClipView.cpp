@@ -370,6 +370,7 @@ bool ClipView::duplicatePage(bool right) {
         }
     }
     c.notes = out;
+    c.DuplicatePageLanes(page);   // la automatización también
     c.pages++;
     int at = right ? page + 1 : page;
     // el loop se recorre con lo que se movió
@@ -418,6 +419,7 @@ void ClipView::deletePageAnswer(bool yes) {
         out.push_back(cn);
     }
     c.notes = out;
+    c.DeletePageLanes(page);
     c.pages = n - 1;
     int s, e;
     if (song->GetClipLoop(chain, s, e)) {

@@ -35,20 +35,53 @@ struct ClipNote {
 	}
 } ;
 
+// trk2als: automatización (como las envolventes de un clip en la Session de
+// Live). Cada lane mueve un parámetro del instrumento de la pista ('target',
+// el FourCC de su variable; 'pad' >= 0 = un pad del kit). Sus puntos van en
+// 1/24 de paso; antes del primero vale el primero y después del último, el
+// último. Con 'ramp' el valor llega deslizándose al punto siguiente.
+struct AutoPoint {
+	int pos ;      // en 1/24 de paso desde el inicio del clip
+	int value ;    // el valor tal cual de la variable
+	bool ramp ;    // de aquí al siguiente: rampa (si no, escalón)
+	AutoPoint():pos(0),value(0),ramp(false) {}
+	AutoPoint(int p,int v,bool r):pos(p),value(v),ramp(r) {}
+	bool operator==(const AutoPoint &o) const { return pos==o.pos && value==o.value && ramp==o.ramp ; }
+} ;
+
+struct AutoLane {
+	unsigned int target ;
+	int pad ;
+	std::vector<AutoPoint> points ;   // ordenados por pos
+	AutoLane():target(0),pad(-1) {}
+	bool operator==(const AutoLane &o) const { return target==o.target && pad==o.pad && points==o.points ; }
+	// el valor en esa posición (1/24 de paso); false si no hay puntos
+	bool ValueAt(int pos,int &value) const ;
+	void Sort() ;
+} ;
+
 class Clip {
 public:
 	Clip():pages(0),loopStart(-1),loopEnd(-1) {}
-	void Clear() { pages=0 ; notes.clear() ; name.clear() ; loopStart=loopEnd=-1 ; }
+	void Clear() { pages=0 ; notes.clear() ; lanes.clear() ; name.clear() ; loopStart=loopEnd=-1 ; }
 	bool IsEmpty() const { return pages==0 ; }
 	int Steps() const { return pages*CLIP_STEPS_PER_PAGE ; }
 	bool operator==(const Clip &o) const {
-		return pages==o.pages && notes==o.notes && loopStart==o.loopStart && loopEnd==o.loopEnd ;
+		return pages==o.pages && notes==o.notes && lanes==o.lanes &&
+		       loopStart==o.loopStart && loopEnd==o.loopEnd ;
 	}
 	bool operator!=(const Clip &o) const { return !(*this==o) ; }
 	int pages ;                    // 0 = clip vacío (sin crear)
 	std::vector<ClipNote> notes ;  // ordenadas por inicio
 	std::string name ;             // "woodblock 1"; vacío = sin nombre
 	int loopStart,loopEnd ;        // compases; -1 = sin loop (suena entero)
+	std::vector<AutoLane> lanes ;  // automatización
+	AutoLane *FindLane(unsigned int target,int pad) ;
+	AutoLane &GetLane(unsigned int target,int pad) ;   // la crea si no existe
+	void RemoveLane(unsigned int target,int pad) ;
+	// compases: duplicar uno (la copia entra después) o borrarlo
+	void DuplicatePageLanes(int page) ;
+	void DeletePageLanes(int page) ;
 } ;
 
 class ClipBank {

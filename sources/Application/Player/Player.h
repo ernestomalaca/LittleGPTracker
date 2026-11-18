@@ -186,6 +186,14 @@ protected:
 	void startClipNote(int channel, int voice, I_Instrument *instr, unsigned char note,
 	                   int vel, bool newInstrument) ;
 	unsigned long voiceEnd_[SONG_CHANNEL_COUNT][4] ;   // rebanada en que se libera cada voz
+	// trk2als: automatización (las lanes del clip)
+	void updateAutomation() ;
+	void clearAutomation(int channel) ;
+	class SampleInstrument *trackSampler(int channel) ;
+	int autoStep_[SONG_CHANNEL_COUNT] ;                 // el paso que suena
+	unsigned long autoStepSlice_[SONG_CHANNEL_COUNT] ;  // la rebanada en que empezó
+	class SampleInstrument *autoInstr_[SONG_CHANNEL_COUNT] ;
+	std::vector<unsigned int> autoApplied_[SONG_CHANNEL_COUNT] ;
 };
 
 #endif

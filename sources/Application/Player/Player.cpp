@@ -21,6 +21,11 @@ Player::Player() {
     metroStep_ = 0;
     sliceCount_ = 0;
     viewData_=0;
+    for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {   // trk2als
+        autoInstr_[i] = 0;
+        autoStep_[i] = 0;
+        autoStepSlice_[i] = 0;
+    }
 	mixer_=new PlayerMixer();
 
     lastSongPos_ = 0;
@@ -109,6 +114,8 @@ void Player::Start(PlayMode mode, bool forceSongMode) {
         timeToStart_[i]=0;
         timed_[i].clear();
         for (int v = 0; v < 4; v++) voiceEnd_[i][v] = 0;
+        autoStep_[i] = 0;
+        autoStepSlice_[i] = sliceCount_;
         audioStarted_[i] = false;
         SampleInstrument::SetChannelSync(i, isAudio(i));
 		TablePlayback &tpb=TablePlayback::GetTablePlayback(i);
@@ -194,6 +201,7 @@ void Player::Stop() {
         mixer_->ChokeChannel(i);   // trk2als: que no siga sonando el one-shot
         mixer_->StopChannel(i);
         timed_[i].clear();
+        clearAutomation(i);   // trk2als: el instrumento vuelve a su valor
     }
     MidiService::GetInstance()->OnPlayerStop();
     mixer_->OnPlayerStop();
@@ -580,6 +588,7 @@ void Player::Update(Observable &o,I_ObservableData *d) {
             }
         }
         fireTimed();   // trk2als: los golpes con nudge o subdivisiones
+        updateAutomation();   // trk2als: las lanes de los clips
         sliceCount_++;
 
         // trk2als: metrónomo, un click en cada tiempo (4 pasos)
@@ -1174,6 +1183,8 @@ void Player::playClipStep(int channel) {
     if (chain == 0xFF) return;
     Clip &clip = viewData_->song_->clips_->Get(chain);
     int step = viewData_->chainPlayPos_[channel] * 16 + viewData_->phrasePlayPos_[channel];
+    autoStep_[channel] = step;   // para la automatización (updateAutomation)
+    autoStepSlice_[channel] = sliceCount_;
     if (step == 0 || step == loopStart(channel, chain) * 16) {
         for (int v = 0; v < VOICE_COUNT; v++) voiceEnd_[channel][v] = 0;
     }
@@ -1278,5 +1289,62 @@ void Player::startClipNote(int channel, int voice, I_Instrument *instrument,
         tpb.Start(instrument, table, instrument->GetTableAutomation());
     } else if (newInstrument) {
         tpb.Stop();
+    }
+}
+
+/********************************************************
+ trk2als: automatización. En cada rebanada (1/6 de paso) cada lane del clip
+ que suena le dice al instrumento de la pista cuánto vale su parámetro. El
+ instrumento no cambia su valor guardado: al parar o al pasar a un clip sin
+ esa lane, vuelve a sonar como estaba ("no ha pasado nada").
+ ********************************************************/
+
+SampleInstrument *Player::trackSampler(int channel) {
+    int owner = project_->GetTrackInstrument(channel);
+    if (owner < 0) return 0;
+    I_Instrument *in = project_->GetInstrumentBank()->GetInstrument(owner);
+    if (!in || in->GetType() != IT_SAMPLE) return 0;
+    return (SampleInstrument *)in;
+}
+
+void Player::clearAutomation(int channel) {
+    if (autoInstr_[channel]) {
+        for (size_t k = 0; k < autoApplied_[channel].size(); k++)
+            autoInstr_[channel]->ClearAutomated(autoApplied_[channel][k]);
+    }
+    autoApplied_[channel].clear();
+    autoInstr_[channel] = 0;
+}
+
+void Player::updateAutomation() {
+    for (int ch = 0; ch < SONG_CHANNEL_COUNT; ch++) {
+        int chain = viewData_->currentPlayChain_[ch];
+        bool playing = mixer_->IsChannelPlaying(ch) && !isAudio(ch) && chain != 0xFF &&
+                       viewData_->currentPlayPhrase_[ch] == CLIP_PHRASE;
+        SampleInstrument *si = playing ? trackSampler(ch) : 0;
+        if (si != autoInstr_[ch]) clearAutomation(ch);
+        if (!si) continue;
+        autoInstr_[ch] = si;
+        Clip &clip = viewData_->song_->clips_->Get(chain);
+        int sub = int(sliceCount_ - autoStepSlice_[ch]);
+        if (sub < 0) sub = 0;
+        if (sub > 5) sub = 5;
+        int pos = autoStep_[ch] * CLIP_TICKS + sub * (CLIP_TICKS / 6);
+        std::vector<unsigned int> now;
+        for (size_t l = 0; l < clip.lanes.size(); l++) {
+            const AutoLane &lane = clip.lanes[l];
+            if (lane.pad >= 0) continue;   // los pads del kit: más adelante
+            int v;
+            if (!lane.ValueAt(pos, v)) continue;
+            si->SetAutomated(lane.target, v);
+            now.push_back(lane.target);
+        }
+        // lo que se aplicaba y este clip ya no automatiza vuelve a su valor
+        for (size_t k = 0; k < autoApplied_[ch].size(); k++) {
+            bool still = false;
+            for (size_t j = 0; j < now.size() && !still; j++) still = (now[j] == autoApplied_[ch][k]);
+            if (!still) si->ClearAutomated(autoApplied_[ch][k]);
+        }
+        autoApplied_[ch] = now;
     }
 }

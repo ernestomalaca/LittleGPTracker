@@ -194,6 +194,29 @@ public:
        // render; FindVariable recorre la lista, así que se recuerda dónde está
        // cada uno (las variables viven lo mismo que el instrumento)
        int GetSimpler(FourCC id) {
+           unsigned h=simplerSlot(id) ;
+           // trk2als: si el clip que suena lo automatiza, manda la automatización
+           return autoOn_[h]?autoVal_[h]:varCache_[h]->GetInt() ;
+       } ;
+       // trk2als: automatización. El valor de la variable no se toca: al
+       // quitarla vuelve a sonar lo que tiene el instrumento
+       void SetAutomated(FourCC id,int value) {
+           unsigned h=simplerSlot(id) ;
+           if (!varCache_[h]) return ;
+           autoVal_[h]=value ;
+           autoOn_[h]=true ;
+       }
+       bool GetAutomated(FourCC id,int &value) {
+           unsigned h=simplerSlot(id) ;
+           value=autoVal_[h] ;
+           return autoOn_[h] ;
+       }
+       void ClearAutomated(FourCC id) { autoOn_[simplerSlot(id)]=false ; }
+       void ClearAllAutomated() { for (int i=0;i<128;i++) autoOn_[i]=false ; }
+   private:
+       bool autoOn_[128] ;
+       int autoVal_[128] ;
+       unsigned simplerSlot(FourCC id) {
            unsigned h=((unsigned)id*2654435761u)>>25 ;   // 128 casillas
            while (varCacheId_[h]!=id) {
                if (varCacheId_[h]==0) {
@@ -203,8 +226,9 @@ public:
                }
                h=(h+1)&127 ;
            }
-           return varCache_[h]->GetInt() ;
-       } ;
+           return h ;
+       }
+   public:
        int GuessSimplerBpm() ;
        // trk2als: warp con el que arranca un sample nuevo en el Sampler
        // (DEFAULTWARP en config.xml: off, re-pitch, complex o auto). Deja el
