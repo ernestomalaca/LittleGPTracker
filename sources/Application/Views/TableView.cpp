@@ -666,7 +666,7 @@ void TableView::processNormalButtonMask(unsigned short mask) {
             if (mask & EPBM_R) {
                 if (mask & EPBM_UP) {
                     ViewType vt =
-                        (viewType_ == VT_TABLE ? VT_PHRASE : VT_INSTRUMENT);
+                        (viewType_ == VT_TABLE ? VT_CLIP : VT_INSTRUMENT);
                     ViewEvent ve(VET_SWITCH_VIEW, &vt);
                     SetChanged();
                     NotifyObservers(&ve);
@@ -760,7 +760,7 @@ void TableView::processSelectionButtonMask(unsigned short mask) {
 
             if (mask & EPBM_R) {
                 if (mask & EPBM_UP) {
-                    ViewType vt = VT_PHRASE;
+                    ViewType vt = VT_CLIP;
                     ViewEvent ve(VET_SWITCH_VIEW, &vt);
                     SetChanged();
                     NotifyObservers(&ve);

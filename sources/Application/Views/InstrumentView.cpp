@@ -1117,7 +1117,7 @@ void InstrumentView::processButtonMask(unsigned short mask,bool pressed) {
             if (mask & EPBM_R) {
                 if (mask & EPBM_LEFT) {
                     // trk2als: si vino de un loop de la song, regresa a la song
-                    ViewType vt = viewData_->instrumentFromSong_ ? VT_SONG : VT_PHRASE;
+                    ViewType vt = viewData_->instrumentFromSong_ ? VT_SONG : VT_CLIP;
                     viewData_->instrumentFromSong_ = false;
                     ViewEvent ve(VET_SWITCH_VIEW, &vt);
                     SetChanged();

@@ -3,6 +3,7 @@
 
 #include "Chain.h"
 #include "Phrase.h"
+#include "Clip.h"
 #include "Application/Persistency/Persistent.h"
 #include <string>
 
@@ -28,6 +29,7 @@ public:
 	unsigned char *data_ ;
 	Chain *chain_ ;
 	Phrase *phrase_ ;
+	ClipBank *clips_ ;   // trk2als: los clips MIDI propios
 
 	// trk2als: nombre de cada chain ("woodblock 1"); vacío = sin nombre
 	const std::string &GetChainName(int chain) { return chainName_[chain] ; }

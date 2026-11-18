@@ -9,6 +9,7 @@
 
 #include "BaseClasses/View.h"
 #include "ViewData.h"
+#include "Application/Model/Clip.h"
 #include <vector>
 
 class ClipView : public View {
@@ -34,7 +35,7 @@ class ClipView : public View {
     // modelo
     int pages();                    // filas de la chain con phrase (desde la 0)
     int total() { return pages() * 16; }
-    unsigned char *stepPtr(int g, int &phrase, int &pos);
+    Clip &clip();
     void readNotes(std::vector<Note> &out);
     void writeNotes(std::vector<Note> &notes);
     int noteAt(std::vector<Note> &notes, int step, int pitch);   // la que suena ahí
@@ -51,7 +52,7 @@ class ClipView : public View {
     // deshacer: una foto del clip antes de cada cambio
     struct Snap {
         int chain;
-        std::vector<unsigned char> data;
+        Clip clip;
     };
     void takeSnap(Snap &s);
     void restoreSnap(const Snap &s);

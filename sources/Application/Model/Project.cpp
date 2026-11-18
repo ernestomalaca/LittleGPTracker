@@ -480,6 +480,8 @@ void Project::Update(Observable &o,I_ObservableData *d) {
 
 void Project::Purge() {
 
+	song_->clips_->Purge(song_->data_,256*SONG_CHANNEL_COUNT) ;   // trk2als
+
 	song_->chain_->ClearAllocation() ;
 	song_->phrase_->ClearAllocation() ;
 

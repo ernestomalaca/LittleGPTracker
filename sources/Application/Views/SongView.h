@@ -56,7 +56,8 @@ class SongView : public View {
     bool aOpenPending_;  // A sobre un clip: al soltar (sin moverse) se abre
     bool bTap_;          // B tocada sola: al soltar quita mute y solo
     void openCell();     // abre la phrase (MIDI) o el clip (audio) de la celda
-    void createClip();   // celda vacía: clip nuevo (chain + phrase nuevas)
+    void createClip();   // celda vacía: clip nuevo de un compás
+    unsigned short newClipId();
                          //  so we don't allocate chains while
                          //  doing multiple A+ARROWS
 

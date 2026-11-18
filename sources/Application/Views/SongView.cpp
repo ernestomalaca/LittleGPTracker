@@ -164,10 +164,6 @@ void SongView::prepareClip(unsigned char clip) {
 unsigned char SongView::freeClip() {
     bool used[MAX_SAMPLEINSTRUMENT_COUNT] = {false};
     Song *song = viewData_->song_;
-    for (int i = 0; i < PHRASE_COUNT * 16; i++) {
-        unsigned char ins = song->phrase_->instr_[i];
-        if (ins < MAX_SAMPLEINSTRUMENT_COUNT) used[ins] = true;
-    }
     for (int row = 0; row < 256; row++) {
         for (int ch = 0; ch < SONG_CHANNEL_COUNT; ch++) {
             unsigned char c = song->data_[row * SONG_CHANNEL_COUNT + ch];
@@ -403,8 +399,6 @@ void SongView::openCell() {
     } else {
         viewData_->currentChain_ = *data;
         viewData_->chainRow_ = 0;
-        unsigned char phrase = viewData_->song_->chain_->data_[16 * (*data)];
-        if (phrase != 0xFF) viewData_->currentPhrase_ = phrase;
         vt = VT_CLIP;   // trk2als: el clip MIDI se abre en el piano roll
     }
     ViewEvent ve(VET_SWITCH_VIEW, &vt);
@@ -412,24 +406,26 @@ void SongView::openCell() {
     NotifyObservers(&ve);
 }
 
-// trk2als: celda vacía + A = un clip nuevo: chain nueva con una phrase nueva
+// trk2als: celda vacía + A = un clip nuevo (Model/Clip.h), de un compás
+unsigned short SongView::newClipId() {
+    Song *song = viewData_->song_;
+    unsigned short id = song->clips_->GetNext(song->data_, SONG_CHANNEL_COUNT * SONG_ROW_COUNT);
+    if (id == NO_MORE_CLIP) {
+        View::SetNotification("No quedan clips libres");
+        return id;
+    }
+    song->clips_->Get(id).Clear();
+    song->ClearChainLoop(id);
+    song->SetChainName(id, "");
+    return id;
+}
+
 void SongView::createClip() {
-    unsigned short chain = viewData_->song_->chain_->GetNext();
-    if (chain == NO_MORE_CHAIN) {
-        View::SetNotification("No quedan chains libres");
-        return;
-    }
-    setChain((unsigned char)chain);
-    viewData_->song_->chain_->SetUsed((unsigned char)chain);
-    nameNewChain((unsigned char)chain);
-    unsigned char *row0 = viewData_->song_->chain_->data_ + 16 * chain;
-    if (*row0 == 0xFF) {
-        unsigned short phrase = viewData_->song_->phrase_->GetNext();
-        if (phrase != NO_MORE_PHRASE) {
-            *row0 = (unsigned char)phrase;
-            viewData_->song_->phrase_->SetUsed((unsigned char)phrase);
-        }
-    }
+    unsigned short id = newClipId();
+    if (id == NO_MORE_CLIP) return;
+    viewData_->song_->clips_->Get(id).pages = 1;
+    setChain((unsigned char)id);
+    nameNewChain((unsigned char)id);
     isDirty_ = true;
 }
 
@@ -453,7 +449,6 @@ void SongView::pasteLast() {
     }
     if (*c == 0xFF) {
         *c = lastChain_;
-        viewData_->song_->chain_->SetUsed(*c);
         isDirty_ = true;
     } else {
         lastChain_ = *c;
@@ -475,33 +470,17 @@ void SongView::clonePosition() {
     if (current == 255)
         return;
 
-    unsigned short next = viewData_->song_->chain_->GetNext();
-    if (next == NO_MORE_CHAIN)
+    unsigned short next = newClipId();
+    if (next == NO_MORE_CLIP)
         return;
-
-    unsigned char *src = viewData_->song_->chain_->data_ + 16 * current;
-    unsigned char *dst = viewData_->song_->chain_->data_ + 16 * next;
-
-    for (int i = 0; i < 16; i++) {
-        *dst++ = *src++;
-    };
-
-    src = viewData_->song_->chain_->transpose_ + 16 * current;
-    dst = viewData_->song_->chain_->transpose_ + 16 * next;
-
-    for (int i = 0; i < 16; i++) {
-        *dst++ = *src++;
-    };
-    int ls, le;   // trk2als: el loop del clip también
+    // trk2als: como en Live, el clon es un clip independiente con sus notas,
+    // su largo y su loop
+    viewData_->song_->clips_->Copy(current, next);
+    int ls, le;
     if (viewData_->song_->GetChainLoop(current, ls, le))
         viewData_->song_->SetChainLoop(next, ls, le);
-    else
-        viewData_->song_->ClearChainLoop(next);
     setChain((unsigned char)next);
     nameNewChain((unsigned char)next);
-    // trk2als: como en Live, el clip clonado es independiente: sus propias
-    // phrases (antes compartía las del original y editar uno cambiaba el otro)
-    deepClonePosition();
     View::SetNotification("clip clonado");
     isDirty_ = true;
 };
@@ -513,80 +492,7 @@ void SongView::clonePosition() {
  ******************************************************/
 
 void SongView::deepClonePosition() {
-
-    if (isAudioColumn(viewData_->songX_))
-        return; // trk2als
-    Phrase *ph = viewData_->song_->phrase_;
-    Chain *ch = viewData_->song_->chain_;
-    unsigned char *pos = viewData_->GetCurrentSongPointer();
-    unsigned char curChainNum = *pos;
-
-    if (curChainNum == CHAIN_COUNT) {
-        View::SetNotification("no more chains!");
-        return;
-    }
-
-    unsigned char *srcChain = ch->data_ + 16 * curChainNum;
-    unsigned char *dstChain = ch->data_ + 16 * curChainNum;
-    unsigned short srcPhrases[16];
-    unsigned short dstPhrases[16];
-
-    // Init outside valid range
-    for (int i = 0; i < 16; i++) {
-        srcPhrases[i] = NO_MORE_CHAIN;
-        dstPhrases[i] = NO_MORE_CHAIN;
-    }
-
-    for (int i = 0; i < 16; i++) {
-        unsigned short srcPhraseNum = *srcChain;
-
-        // skip when "--"
-        if (srcPhraseNum == CHAIN_COUNT) {
-            srcChain++;
-            dstChain++;
-            continue;
-        }
-
-        unsigned short newPhraseNum = NO_MORE_CHAIN;
-
-        for (int j = 0; j < 16; j++) {
-            if (srcPhrases[j] == srcPhraseNum) {
-                newPhraseNum = dstPhrases[j];
-                break;
-            }
-        }
-
-        if (newPhraseNum == NO_MORE_CHAIN) {
-            newPhraseNum = ph->GetNext();
-            if (newPhraseNum == NO_MORE_PHRASE) {
-                View::SetNotification("no more phrases!");
-                return;
-            }
-            for (int k = 0; k < 16; k++) {
-                *(ph->note_ + 16 * newPhraseNum + k) =
-                    *(ph->note_ + 16 * srcPhraseNum + k);
-                *(ph->instr_ + 16 * newPhraseNum + k) =
-                    *(ph->instr_ + 16 * srcPhraseNum + k);
-                *(ph->cmd1_ + 16 * newPhraseNum + k) =
-                    *(ph->cmd1_ + 16 * srcPhraseNum + k);
-                *(ph->cmd2_ + 16 * newPhraseNum + k) =
-                    *(ph->cmd2_ + 16 * srcPhraseNum + k);
-                *(ph->param1_ + 16 * newPhraseNum + k) =
-                    *(ph->param1_ + 16 * srcPhraseNum + k);
-                *(ph->param2_ + 16 * newPhraseNum + k) =
-                    *(ph->param2_ + 16 * srcPhraseNum + k);
-            }
-            ph->CopyVoices(srcPhraseNum, newPhraseNum);   // trk2als: acordes, nudge, subdivisiones
-        }
-        srcPhrases[i] = srcPhraseNum;
-        dstPhrases[i] = newPhraseNum;
-        *dstChain = newPhraseNum;
-        srcChain++;
-        dstChain++;
-    }
-    View::SetNotification("deep clone");
-
-    setChain((unsigned char)curChainNum);
+    // trk2als: con los clips propios clonar ya es independiente
 }
 
 void SongView::extendSelection() {
@@ -1005,12 +911,7 @@ void SongView::ProcessButtonMask(unsigned short mask, bool pressed) {
 
     if (viewMode_ == VM_NEW) {
         if (mask == EPBM_A) {
-            unsigned short next = viewData_->song_->chain_->GetNext();
-            if (next != NO_MORE_CHAIN) {
-                setChain((unsigned char)next);
-                nameNewChain((unsigned char)next);
-                isDirty_ = true;
-            }
+            createClip();
             mask &= (0xFFFF - EPBM_A);
         }
     }
@@ -1146,9 +1047,10 @@ void SongView::processNormalButtonMask(unsigned int mask) {
                         SetChanged();
                         NotifyObservers(&ve);
                     } else if (*data != 0xFF) {
-                        ViewType vt = VT_CHAIN;
+                        ViewType vt = VT_CLIP;   // trk2als: ya no hay chains
                         ViewEvent ve(VET_SWITCH_VIEW, &vt);
                         viewData_->currentChain_ = *data;
+                        viewData_->chainRow_ = 0;
                         SetChanged();
                         NotifyObservers(&ve);
                     }
@@ -1222,7 +1124,6 @@ void SongView::processNormalButtonMask(unsigned int mask) {
     if ((!(mask & EPBM_A)) && updatingChain_) {
         unsigned char *c = viewData_->song_->data_ + updateX_ +
                            8 * (viewData_->songOffset_ + updateY_);
-        viewData_->song_->chain_->SetUsed(*c);
         updatingChain_ = false;
     }
 };
@@ -1458,9 +1359,10 @@ void SongView::processSelectionButtonMask(unsigned int mask) {
                         SetChanged();
                         NotifyObservers(&ve);
                     } else if (*data != 0xFF) {
-                        ViewType vt = VT_CHAIN;
+                        ViewType vt = VT_CLIP;   // trk2als: ya no hay chains
                         ViewEvent ve(VET_SWITCH_VIEW, &vt);
                         viewData_->currentChain_ = *data;
+                        viewData_->chainRow_ = 0;
                         SetChanged();
                         NotifyObservers(&ve);
                     }

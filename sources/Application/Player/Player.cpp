@@ -108,7 +108,7 @@ void Player::Start(PlayMode mode, bool forceSongMode) {
         timeToLive_[i] = 0;
         timeToStart_[i]=0;
         timed_[i].clear();
-        for (int v = 0; v < 4; v++) lastTick_[i][v] = 0;
+        for (int v = 0; v < 4; v++) { lastTick_[i][v] = 0; voiceEnd_[i][v] = 0; }
         audioStarted_[i] = false;
         SampleInstrument::SetChannelSync(i, isAudio(i));
 		TablePlayback &tpb=TablePlayback::GetTablePlayback(i);
@@ -400,6 +400,7 @@ bool Player::Clipped() { return mixer_->Clipped(); }
  ************************************************************/
 
 #define AUDIO_PHRASE 0xFE // phrase virtual de un canal de audio
+#define CLIP_PHRASE 0xFD  // trk2als: compás de un clip MIDI propio (Model/Clip.h)
 
 bool Player::isAudio(int channel) {
     return project_ && project_->IsAudioChannel(channel);
@@ -426,7 +427,9 @@ uchar Player::chainStep(int channel, uchar chain, int pos) {
     if (isAudio(channel)) {
         return (pos < audioBars(chain)) ? AUDIO_PHRASE : 0xFF;
     }
-    return viewData_->song_->chain_->data_[16 * chain + pos];
+    // trk2als: las pistas MIDI tocan sus clips propios; cada fila de la
+    // "chain" es un compás del clip
+    return (pos < viewData_->song_->clips_->Get(chain).pages) ? CLIP_PHRASE : 0xFF;
 }
 
 // Arranca el loop al entrar a la celda (o al empezar a tocar a media celda,
@@ -668,7 +671,7 @@ void Player::ProcessCommands() {
             // check if there's any phrase playing
 
             uchar phrase = viewData_->currentPlayPhrase_[i];
-            if (phrase != 0xFF && !isAudio(i)) {
+            if (phrase != 0xFF && phrase != CLIP_PHRASE && !isAudio(i)) {
                 if (gs->TriggerChannel(
                         i)) { // If groove says it is time to play
                     int pos=viewData_->phrasePlayPos_[i];
@@ -888,7 +891,7 @@ void Player::updatePhrasePos(int pos, int channel) {
     timeToStart_[channel] = 1;
 
     uchar phrase = viewData_->currentPlayPhrase_[channel];
-    if (isAudio(channel) || phrase == 0xFF) return; // sin comandos
+    if (isAudio(channel) || phrase == 0xFF || phrase == CLIP_PHRASE) return; // sin comandos
 
     // Check both param colum 1 & 2
 
@@ -909,6 +912,11 @@ void Player::playCursorPosition(int channel) {
 
     if (isAudio(channel)) {
         playAudioCell(channel);
+        return;
+    }
+
+    if (viewData_->currentPlayPhrase_[channel] == CLIP_PHRASE) {   // trk2als
+        playClipStep(channel);
         return;
     }
 
@@ -1065,7 +1073,7 @@ void Player::playCursorPosition(int channel) {
 int Player::getChannelHop(int channel, int pos) {
 
     int phrase = viewData_->currentPlayPhrase_[channel];
-    if (isAudio(channel) || phrase == 0xFF) return -1;
+    if (isAudio(channel) || phrase == 0xFF || phrase == CLIP_PHRASE) return -1;
 
     Phrase *song_phrase = viewData_->song_->phrase_;
     FourCC cc[] = {song_phrase->cmd1_[phrase * 16 + pos],
@@ -1502,4 +1510,123 @@ bool Player::firstLate(int voice, int phrase, int pos) {
     Phrase *ph = viewData_->song_->phrase_;
     if (ph->Tick(voice, phrase, pos) != 0 || ph->Fine(voice, phrase, pos) != 0) return true;
     return ph->Ratchet(voice, phrase, pos) > 1 && ph->Ramp(voice, phrase, pos) != 0;
+}
+
+/********************************************************
+ trk2als: el clip MIDI propio. En cada paso se programan las notas que
+ empiezan ahí: el primer golpe después de su nudge (1/24 de paso) y, si está
+ subdividida, los demás repartidos en lo que dura; al final, su corte. Cada
+ nota toma una de las 4 voces del canal (la libre o la que acaba antes).
+ ********************************************************/
+
+void Player::playClipStep(int channel) {
+    int chain = viewData_->currentPlayChain_[channel];
+    if (chain == 0xFF) return;
+    Clip &clip = viewData_->song_->clips_->Get(chain);
+    int step = viewData_->chainPlayPos_[channel] * 16 + viewData_->phrasePlayPos_[channel];
+    if (step == 0 || step == loopStart(channel, chain) * 16) {
+        for (int v = 0; v < VOICE_COUNT; v++) voiceEnd_[channel][v] = 0;
+    }
+
+    InstrumentBank *bank = project_->GetInstrumentBank();
+    int owner = project_->GetTrackInstrument(channel);
+    I_Instrument *instrument = (owner >= 0) ? bank->GetInstrument(owner)
+                                            : mixer_->GetLastInstrument(channel);
+    if (!instrument) instrument = bank->GetInstrument(0);
+    if (!instrument) return;
+    if (owner >= 0) {
+        instrumentOnChannel_[channel][0] = (owner / 16) > 9 ? 'A' - 10 + owner / 16 : '0' + owner / 16;
+        instrumentOnChannel_[channel][1] = (owner % 16) > 9 ? 'A' - 10 + owner % 16 : '0' + owner % 16;
+        instrumentOnChannel_[channel][2] = '\0';
+    }
+
+    float sps = SyncMaster::GetInstance()->GetPlaySampleCount();
+    std::vector<TimedHit> &q = timed_[channel];
+    bool any = false;
+    for (size_t k = 0; k < clip.notes.size(); k++) {
+        const ClipNote &n = clip.notes[k];
+        if (n.start != step) continue;
+        int note = n.pitch + project_->GetTranspose();
+        if (note < 0 || note > 127) continue;
+        double start = n.tick / 4.0;      // en sextos de paso (rebanadas)
+        double span = n.len * 6.0;
+        unsigned long startSlice = sliceCount_ + (unsigned long)start;
+        // la voz: la que ya terminó o, si no hay, la que acaba antes
+        int v = -1;
+        for (int i = 0; i < VOICE_COUNT && v < 0; i++)
+            if (voiceEnd_[channel][i] <= startSlice) v = i;
+        if (v < 0) {
+            v = 0;
+            for (int i = 1; i < VOICE_COUNT; i++)
+                if (voiceEnd_[channel][i] < voiceEnd_[channel][v]) v = i;
+        }
+        // lo pendiente de esa voz desde aquí ya no va
+        for (size_t j = 0; j < q.size();) {
+            if (q[j].voice == v && q[j].at >= startSlice) q.erase(q.begin() + j);
+            else j++;
+        }
+        bool newInstrument = (v == 0) && (mixer_->GetLastInstrument(channel) != instrument);
+        for (int h = 0; h < n.rat; h++) {
+            double at = start + span * h / n.rat;
+            int vel = n.vel;
+            if (n.rat > 1 && n.ramp) {   // rampa: los golpes crecen o se apagan
+                float amt = 0.2f * (n.ramp > 0 ? n.ramp : -n.ramp);
+                float f = n.ramp > 0 ? 1 - amt * (n.rat - 1 - h) / (n.rat - 1)
+                                     : 1 - amt * h / (n.rat - 1);
+                vel = int(n.vel * f + 0.5f);
+                if (vel < 1) vel = 1;
+            }
+            if (at == 0) {   // en la rejilla: ya
+                startClipNote(channel, v, instrument, (unsigned char)note, vel, newInstrument);
+                continue;
+            }
+            TimedHit t;
+            int whole = int(at);
+            t.at = sliceCount_ + whole;
+            t.delay = int((at - whole) * sps);
+            t.voice = v;
+            t.note = (unsigned char)note;
+            t.vel = vel;
+            t.instr = instrument;
+            q.push_back(t);
+        }
+        // el corte, recorrido con el nudge
+        TimedHit off;
+        off.at = sliceCount_ + (unsigned long)(start + span + 0.5);
+        off.delay = 0;
+        off.voice = v;
+        off.note = 0xFF;
+        off.vel = -1;
+        off.instr = 0;
+        q.push_back(off);
+        voiceEnd_[channel][v] = off.at;
+        any = true;
+    }
+    if (any && instrument->GetTableAutomation()) {
+        TablePlayback &tpb = TablePlayback::GetTablePlayback(channel);
+        TablePlayerChange tpc;
+        tpc.timeToLive_ = timeToLive_[channel];
+        tpb.ProcessStep(tpc);
+        timeToLive_[channel] = tpc.timeToLive_;
+    }
+}
+
+void Player::startClipNote(int channel, int voice, I_Instrument *instrument,
+                           unsigned char note, int vel, bool newInstrument) {
+    SampleInstrument::SetChannelSync(channel, false);
+    if (voice != 0) {
+        mixer_->StartVoice(channel, instrument, voice, note, vel);
+        return;
+    }
+    mixer_->StopInstrument(channel);
+    mixer_->StartInstrument(channel, instrument, note, newInstrument);
+    instrument->ProcessCommand(channel, I_CMD_MVEL, (ushort)(vel * 2));
+    TablePlayback &tpb = TablePlayback::GetTablePlayback(channel);
+    int instrTable = instrument->GetTable();
+    if (instrTable != VAR_OFF && newInstrument) {
+        Table &table = TableHolder::GetInstance()->GetTable(instrTable);
+        tpb.Start(instrument, table, instrument->GetTableAutomation());
+    } else if (newInstrument) {
+        tpb.Stop();
+    }
 }

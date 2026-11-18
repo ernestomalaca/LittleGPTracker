@@ -101,7 +101,7 @@ void GrooveView::ProcessButtonMask(unsigned short mask,bool pressed) {
 
           	if (mask&EPBM_R) {
 				if (mask&EPBM_DOWN) {
-					ViewType vt=VT_PHRASE;
+					ViewType vt=VT_CLIP;
 					ViewEvent ve(VET_SWITCH_VIEW,&vt) ;
 					SetChanged();
 					NotifyObservers(&ve) ;

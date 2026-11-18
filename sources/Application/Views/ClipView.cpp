@@ -64,68 +64,29 @@ ClipView::~ClipView() {}
  modelo
  ************************************************************/
 
+Clip &ClipView::clip() {
+    return viewData_->song_->clips_->Get(viewData_->currentChain_);
+}
+
 int ClipView::pages() {
-    unsigned char *row = viewData_->song_->chain_->data_ + 16 * viewData_->currentChain_;
-    int n = 0;
-    while (n < 16 && row[n] != 0xFF) n++;
-    return n;
+    return clip().pages;
 }
 
-unsigned char *ClipView::stepPtr(int g, int &phrase, int &pos) {
-    unsigned char *row = viewData_->song_->chain_->data_ + 16 * viewData_->currentChain_;
-    phrase = row[g / 16];
-    pos = g % 16;
-    return viewData_->song_->phrase_->note_ + 16 * phrase + pos;
-}
-
-// trk2als: polifonía. Cada pista tiene 4 voces: la 0 es la columna de notas
-// de la phrase (con KILL y MVEL en sus comandos) y las 1..3 son las capas
-// (nota, velocity y corte). Aquí se leen todas como una lista de notas.
+// trk2als: el clip guarda sus notas directo (ver Model/Clip.h)
 void ClipView::readNotes(std::vector<Note> &out) {
     out.clear();
-    Phrase *ph = viewData_->song_->phrase_;
-    int t = total();
-    for (int v = 0; v < VOICE_COUNT; v++) {
-        int open = -1;   // índice en 'out' de la nota que suena en esta voz
-        for (int g = 0; g < t; g++) {
-            int p, pos;
-            stepPtr(g, p, pos);
-            int i = 16 * p + pos;
-            unsigned char note;
-            bool kill;
-            int vel = 100, instr = 0xFF;
-            if (v == 0) {
-                note = ph->note_[i];
-                kill = (ph->cmd1_[i] == I_CMD_KILL) || (ph->cmd2_[i] == I_CMD_KILL);
-                instr = ph->instr_[i];
-                if (ph->cmd1_[i] == I_CMD_MVEL) vel = (ph->param1_[i] & 0xFF) / 2;
-                if (ph->cmd2_[i] == I_CMD_MVEL) vel = (ph->param2_[i] & 0xFF) / 2;
-            } else {
-                int vi = Phrase::VIdx(v, p, pos);
-                note = ph->voiceNote_[vi];
-                kill = (ph->voiceFlags_[vi] & VF_KILL) != 0;
-                if (ph->voiceVel_[vi] != VVEL_DEFAULT) vel = ph->voiceVel_[vi];
-            }
-            if ((kill || note != NO_NOTE) && open >= 0) {
-                out[open].len = g - out[open].start;
-                open = -1;
-            }
-            if (note != NO_NOTE) {
-                Note n;
-                n.start = g;
-                n.len = -1;
-                n.pitch = note;
-                n.instr = instr;
-                n.vel = vel < 1 ? 1 : vel;
-                n.tick = ph->Tick(v, p, pos) * 4 + ph->Fine(v, p, pos);
-                n.rat = ph->Ratchet(v, p, pos);
-                n.ramp = ph->Ramp(v, p, pos);
-                if (n.tick > 23) n.tick = 23;
-                out.push_back(n);
-                open = int(out.size()) - 1;
-            }
-        }
-        if (open >= 0) out[open].len = t - out[open].start;
+    Clip &c = clip();
+    for (size_t k = 0; k < c.notes.size(); k++) {
+        const ClipNote &cn = c.notes[k];
+        Note n;
+        n.start = cn.start;
+        n.len = cn.len;
+        n.pitch = cn.pitch;
+        n.vel = cn.vel;
+        n.tick = cn.tick;
+        n.rat = cn.rat;
+        n.ramp = cn.ramp;
+        out.push_back(n);
     }
     std::stable_sort(out.begin(), out.end(), byStart);
 }
@@ -155,8 +116,8 @@ void ClipView::writeNotes(std::vector<Note> &notes) {
         }
         if (ok[i].len < 1) ok[i].len = 1;
     }
-    // repartir en las 4 voces: la primera libre; si no hay, la que termina
-    // antes se corta (máximo 4 notas a la vez)
+    // máximo 4 notas a la vez (las voces de la pista): si no cabe, la que
+    // termina antes se corta
     std::vector<int> voiceOf(ok.size(), 0);
     int voiceNote[VOICE_COUNT];
     for (int v = 0; v < VOICE_COUNT; v++) voiceNote[v] = -1;
@@ -182,74 +143,19 @@ void ClipView::writeNotes(std::vector<Note> &notes) {
         voiceOf[i] = pick;
         voiceNote[pick] = int(i);
     }
-    Phrase *ph = viewData_->song_->phrase_;
-    // borrar notas, KILL y MVEL del clip (los demás comandos se quedan) y las capas
-    for (int g = 0; g < t; g++) {
-        int p, pos;
-        stepPtr(g, p, pos);
-        int i = 16 * p + pos;
-        ph->note_[i] = NO_NOTE;
-        ph->instr_[i] = 0xFF;
-        if (ph->cmd1_[i] == I_CMD_KILL || ph->cmd1_[i] == I_CMD_MVEL) {
-            ph->cmd1_[i] = I_CMD_NONE;
-            ph->param1_[i] = 0;
-        }
-        if (ph->cmd2_[i] == I_CMD_KILL || ph->cmd2_[i] == I_CMD_MVEL) {
-            ph->cmd2_[i] = I_CMD_NONE;
-            ph->param2_[i] = 0;
-        }
-        for (int v = 1; v < VOICE_COUNT; v++) {
-            int vi = Phrase::VIdx(v, p, pos);
-            ph->voiceNote_[vi] = NO_NOTE;
-            ph->voiceVel_[vi] = VVEL_DEFAULT;
-            ph->voiceFlags_[vi] = 0;
-        }
-        for (int v = 0; v < VOICE_COUNT; v++) {
-            ph->timing_[Phrase::TIdx(v, p, pos)] = 0;
-            ph->ramp_[Phrase::TIdx(v, p, pos)] = 0;
-            ph->fine_[Phrase::TIdx(v, p, pos)] = 0;
-        }
-    }
+    Clip &c = clip();
+    c.notes.clear();
     for (size_t k = 0; k < ok.size(); k++) {
         const Note &n = ok[k];
-        int v = voiceOf[k];
-        int p, pos;
-        stepPtr(n.start, p, pos);
-        int i = 16 * p + pos;
-        // dónde empieza la siguiente nota de esta voz
-        int next = t;
-        for (size_t m = k + 1; m < ok.size(); m++)
-            if (voiceOf[m] == v) { next = ok[m].start; break; }
-        int end = n.start + n.len;
-        if (n.tick > 0 || n.rat > 1)
-            ph->timing_[Phrase::TIdx(v, p, pos)] =
-                (unsigned char)(((n.tick / 4) & 0x0F) | (((n.rat - 1) & 7) << 4));
-        ph->fine_[Phrase::TIdx(v, p, pos)] = (unsigned char)(n.tick % 4);
-        if (n.rat > 1 && n.ramp) ph->ramp_[Phrase::TIdx(v, p, pos)] = (unsigned char)(signed char)n.ramp;
-        if (v == 0) {
-            ph->note_[i] = (unsigned char)n.pitch;
-            ph->instr_[i] = (unsigned char)n.instr;
-            if (n.vel != 100) {
-                ushort vv = (ushort)(n.vel * 2);
-                if (ph->cmd1_[i] == I_CMD_NONE) { ph->cmd1_[i] = I_CMD_MVEL; ph->param1_[i] = vv; }
-                else if (ph->cmd2_[i] == I_CMD_NONE) { ph->cmd2_[i] = I_CMD_MVEL; ph->param2_[i] = vv; }
-            }
-            if (end < next) {
-                stepPtr(end, p, pos);
-                int j = 16 * p + pos;
-                // con nudge el final también se recorre: KILL 0t = corta t sextos después
-                if (ph->cmd1_[j] == I_CMD_NONE) { ph->cmd1_[j] = I_CMD_KILL; ph->param1_[j] = (n.tick + 2) / 4; }
-                else if (ph->cmd2_[j] == I_CMD_NONE) { ph->cmd2_[j] = I_CMD_KILL; ph->param2_[j] = (n.tick + 2) / 4; }
-            }
-        } else {
-            int vi = Phrase::VIdx(v, p, pos);
-            ph->voiceNote_[vi] = (unsigned char)n.pitch;
-            ph->voiceVel_[vi] = (n.vel == 100) ? VVEL_DEFAULT : (unsigned char)n.vel;
-            if (end < next) {
-                stepPtr(end, p, pos);
-                ph->voiceFlags_[Phrase::VIdx(v, p, pos)] |= VF_KILL;
-            }
-        }
+        ClipNote cn;
+        cn.start = n.start;
+        cn.tick = n.tick < 0 ? 0 : (n.tick > CLIP_TICKS - 1 ? CLIP_TICKS - 1 : n.tick);
+        cn.len = n.len;
+        cn.pitch = n.pitch;
+        cn.vel = n.vel < 1 ? 1 : (n.vel > 127 ? 127 : n.vel);
+        cn.rat = n.rat < 1 ? 1 : (n.rat > 8 ? 8 : n.rat);
+        cn.ramp = cn.rat > 1 ? n.ramp : 0;
+        c.notes.push_back(cn);
     }
     notes = ok;
 }
@@ -272,30 +178,12 @@ int ClipView::noteStarting(std::vector<Note> &notes, int step, int pitch) {
 }
 
 bool ClipView::addPage() {
-    int n = pages();
-    if (n >= 16) {
-        View::SetNotification("El clip ya tiene 16 paginas");
+    Clip &c = clip();
+    if (c.pages >= CLIP_MAX_PAGES) {
+        View::SetNotification("El clip ya tiene 16 compases");
         return false;
     }
-    unsigned short phrase = viewData_->song_->phrase_->GetNext();
-    if (phrase == NO_MORE_PHRASE) {
-        View::SetNotification("No quedan phrases libres");
-        return false;
-    }
-    Phrase *ph = viewData_->song_->phrase_;
-    ph->SetUsed((unsigned char)phrase);
-    for (int s = 0; s < 16; s++) {
-        int i = 16 * phrase + s;
-        ph->note_[i] = NO_NOTE;
-        ph->instr_[i] = 0xFF;
-        ph->cmd1_[i] = ph->cmd2_[i] = I_CMD_NONE;
-        ph->param1_[i] = ph->param2_[i] = 0;
-    }
-    ph->ClearVoices(phrase);
-    unsigned char *row = viewData_->song_->chain_->data_ + 16 * viewData_->currentChain_;
-    row[n] = (unsigned char)phrase;
-    viewData_->song_->chain_->transpose_[16 * viewData_->currentChain_ + n] = 0;
-    viewData_->song_->chain_->SetUsed((unsigned char)viewData_->currentChain_);
+    c.pages++;
     return true;
 }
 
@@ -458,32 +346,32 @@ void ClipView::loopButton(bool left) {
 bool ClipView::duplicatePage(bool right) {
     int n = pages();
     if (n == 0) return false;
-    if (n >= 16) { message("El clip ya tiene 16 compases"); return false; }
+    if (n >= CLIP_MAX_PAGES) { message("El clip ya tiene 16 compases"); return false; }
     int page = cursorStep_ / 16;
     Song *song = viewData_->song_;
     int chain = viewData_->currentChain_;
-    unsigned char *row = song->chain_->data_ + 16 * chain;
-    unsigned char *tr = song->chain_->transpose_ + 16 * chain;
-    unsigned short np = song->phrase_->GetNext();
-    if (np == NO_MORE_PHRASE) { message("No quedan phrases libres"); return false; }
-    Phrase *ph = song->phrase_;
-    ph->SetUsed((unsigned char)np);
-    int src = 16 * row[page], dst = 16 * np;
-    memcpy(ph->note_ + dst, ph->note_ + src, 16);
-    memcpy(ph->instr_ + dst, ph->instr_ + src, 16);
-    memcpy(ph->cmd1_ + dst, ph->cmd1_ + src, 16 * sizeof(FourCC));
-    memcpy(ph->cmd2_ + dst, ph->cmd2_ + src, 16 * sizeof(FourCC));
-    memcpy(ph->param1_ + dst, ph->param1_ + src, 16 * sizeof(ushort));
-    memcpy(ph->param2_ + dst, ph->param2_ + src, 16 * sizeof(ushort));
-    ph->CopyVoices(row[page], np);
-    // la copia entra después (derecha) o en su lugar, empujando el original (izquierda)
-    int at = right ? page + 1 : page;
-    for (int r = n; r > at; r--) {
-        row[r] = row[r - 1];
-        tr[r] = tr[r - 1];
+    Clip &c = clip();
+    // la copia entra después (derecha) o en su lugar, empujando el original
+    // (izquierda); en los dos casos lo que sigue se recorre un compás
+    int from = page * 16, to = from + 16;
+    std::vector<ClipNote> out;
+    for (size_t k = 0; k < c.notes.size(); k++) {
+        ClipNote cn = c.notes[k];
+        if (cn.start >= to) cn.start += 16;
+        out.push_back(cn);
+        if (cn.start >= from && cn.start < to) {
+            ClipNote cp = c.notes[k];
+            cp.start += 16;
+            if (cp.start + cp.len > to + 16) cp.len = to + 16 - cp.start;
+            out.push_back(cp);
+            // el original no invade la copia
+            if (out[out.size() - 2].start + out[out.size() - 2].len > to)
+                out[out.size() - 2].len = to - out[out.size() - 2].start;
+        }
     }
-    row[at] = (unsigned char)np;
-    tr[at] = tr[right ? page : page + 1];
+    c.notes = out;
+    c.pages++;
+    int at = right ? page + 1 : page;
     // el loop se recorre con lo que se movió
     int s, e;
     if (song->GetChainLoop(chain, s, e)) {
@@ -519,14 +407,18 @@ void ClipView::deletePageAnswer(bool yes) {
     int page = cursorStep_ / 16;
     Song *song = viewData_->song_;
     int chain = viewData_->currentChain_;
-    unsigned char *row = song->chain_->data_ + 16 * chain;
-    unsigned char *tr = song->chain_->transpose_ + 16 * chain;
-    for (int r = page; r < n - 1; r++) {
-        row[r] = row[r + 1];
-        tr[r] = tr[r + 1];
+    Clip &c = clip();
+    int from = page * 16, to = from + 16;
+    std::vector<ClipNote> out;
+    for (size_t k = 0; k < c.notes.size(); k++) {
+        ClipNote cn = c.notes[k];
+        if (cn.start >= from && cn.start < to) continue;
+        if (cn.start < from && cn.start + cn.len > from) cn.len = from - cn.start;
+        if (cn.start >= to) cn.start -= 16;
+        out.push_back(cn);
     }
-    row[n - 1] = 0xFF;
-    tr[n - 1] = 0;
+    c.notes = out;
+    c.pages = n - 1;
     int s, e;
     if (song->GetChainLoop(chain, s, e)) {
         if (page < s) { s--; e--; }
@@ -546,69 +438,11 @@ void ClipView::deletePageAnswer(bool yes) {
 
 void ClipView::takeSnap(Snap &s) {
     s.chain = viewData_->currentChain_;
-    s.data.clear();
-    Chain *ch = viewData_->song_->chain_;
-    Phrase *ph = viewData_->song_->phrase_;
-    unsigned char *row = ch->data_ + 16 * s.chain;
-    unsigned char *tr = ch->transpose_ + 16 * s.chain;
-    s.data.insert(s.data.end(), row, row + 16);
-    s.data.insert(s.data.end(), tr, tr + 16);
-    for (int r = 0; r < 16 && row[r] != 0xFF; r++) {
-        int i = 16 * row[r];
-        s.data.insert(s.data.end(), ph->note_ + i, ph->note_ + i + 16);
-        s.data.insert(s.data.end(), ph->instr_ + i, ph->instr_ + i + 16);
-        const unsigned char *c1 = (const unsigned char *)(ph->cmd1_ + i);
-        const unsigned char *c2 = (const unsigned char *)(ph->cmd2_ + i);
-        const unsigned char *p1 = (const unsigned char *)(ph->param1_ + i);
-        const unsigned char *p2 = (const unsigned char *)(ph->param2_ + i);
-        s.data.insert(s.data.end(), c1, c1 + 16 * sizeof(FourCC));
-        s.data.insert(s.data.end(), c2, c2 + 16 * sizeof(FourCC));
-        s.data.insert(s.data.end(), p1, p1 + 16 * sizeof(ushort));
-        s.data.insert(s.data.end(), p2, p2 + 16 * sizeof(ushort));
-        for (int v = 1; v < VOICE_COUNT; v++) {   // las capas de voces
-            int vi = Phrase::VIdx(v, row[r], 0);
-            s.data.insert(s.data.end(), ph->voiceNote_ + vi, ph->voiceNote_ + vi + 16);
-            s.data.insert(s.data.end(), ph->voiceVel_ + vi, ph->voiceVel_ + vi + 16);
-            s.data.insert(s.data.end(), ph->voiceFlags_ + vi, ph->voiceFlags_ + vi + 16);
-        }
-        for (int v = 0; v < VOICE_COUNT; v++) {   // nudge y subdivisiones
-            int ti = Phrase::TIdx(v, row[r], 0);
-            s.data.insert(s.data.end(), ph->timing_ + ti, ph->timing_ + ti + 16);
-            s.data.insert(s.data.end(), ph->ramp_ + ti, ph->ramp_ + ti + 16);
-            s.data.insert(s.data.end(), ph->fine_ + ti, ph->fine_ + ti + 16);
-        }
-    }
+    s.clip = clip();
 }
 
 void ClipView::restoreSnap(const Snap &s) {
-    Chain *ch = viewData_->song_->chain_;
-    Phrase *ph = viewData_->song_->phrase_;
-    unsigned char *row = ch->data_ + 16 * s.chain;
-    unsigned char *tr = ch->transpose_ + 16 * s.chain;
-    const unsigned char *d = &s.data[0];
-    memcpy(row, d, 16);
-    memcpy(tr, d + 16, 16);
-    d += 32;
-    for (int r = 0; r < 16 && row[r] != 0xFF; r++) {
-        int i = 16 * row[r];
-        memcpy(ph->note_ + i, d, 16); d += 16;
-        memcpy(ph->instr_ + i, d, 16); d += 16;
-        memcpy(ph->cmd1_ + i, d, 16 * sizeof(FourCC)); d += 16 * sizeof(FourCC);
-        memcpy(ph->cmd2_ + i, d, 16 * sizeof(FourCC)); d += 16 * sizeof(FourCC);
-        memcpy(ph->param1_ + i, d, 16 * sizeof(ushort)); d += 16 * sizeof(ushort);
-        memcpy(ph->param2_ + i, d, 16 * sizeof(ushort)); d += 16 * sizeof(ushort);
-        for (int v = 1; v < VOICE_COUNT; v++) {
-            int vi = Phrase::VIdx(v, row[r], 0);
-            memcpy(ph->voiceNote_ + vi, d, 16); d += 16;
-            memcpy(ph->voiceVel_ + vi, d, 16); d += 16;
-            memcpy(ph->voiceFlags_ + vi, d, 16); d += 16;
-        }
-        for (int v = 0; v < VOICE_COUNT; v++) {
-            memcpy(ph->timing_ + Phrase::TIdx(v, row[r], 0), d, 16); d += 16;
-            memcpy(ph->ramp_ + Phrase::TIdx(v, row[r], 0), d, 16); d += 16;
-            memcpy(ph->fine_ + Phrase::TIdx(v, row[r], 0), d, 16); d += 16;
-        }
-    }
+    viewData_->song_->clips_->Get(s.chain) = s.clip;
     if (cursorStep_ >= total() && total() > 0) cursorStep_ = total() - 1;
 }
 
@@ -1074,11 +908,8 @@ void ClipView::audition(int step) {
         player->PreviewNote(viewData_->songX_, k, cursorPitch_);
         return;
     }
-    int p, pos;
-    stepPtr(step, p, pos);
-    viewData_->currentPhrase_ = p;
     viewData_->chainRow_ = step / 16;
-    viewData_->phraseCurPos_ = pos;
+    viewData_->phraseCurPos_ = step % 16;
     if (player->IsRunning()) player->Stop();
     player->OnStartButton(PM_AUDITION, viewData_->songX_, false, viewData_->chainRow_);
     auditioning_ = true;
@@ -1231,7 +1062,7 @@ void ClipView::ProcessButtonMask(unsigned short mask, bool pressed) {
     handleButton(mask, pressed);
     Snap after;
     takeSnap(after);
-    if (before.chain == after.chain && before.data != after.data) {
+    if (before.chain == after.chain && before.clip != after.clip) {
         undo_.push_back(before);
         if (undo_.size() > 64) undo_.erase(undo_.begin());
         redo_.clear();
@@ -1319,13 +1150,6 @@ void ClipView::handleButton(unsigned short mask, bool pressed) {
             if (owner >= 0) viewData_->currentInstrument_ = owner;
             viewData_->instrumentFromSong_ = false;
             switchView(VT_INSTRUMENT);
-        } else if (v == EPBM_DOWN && pages() > 0) {   // la phrase de esta página, a la antigua
-            marking_ = false;
-            int p, pos;
-            stepPtr(cursorStep_, p, pos);
-            viewData_->currentPhrase_ = p;
-            viewData_->chainRow_ = cursorStep_ / 16;
-            switchView(VT_PHRASE);
         }
         isDirty_ = true;
         return;

@@ -16,6 +16,7 @@ Song::Song():Persistent("SONG") {
 	
 	chain_=new Chain() ;   // Allocate chain datas
 	phrase_=new Phrase() ; // Allocate phrase datas
+	clips_=new ClipBank() ;   // trk2als
 	memset(loopStart_,0xFF,sizeof(loopStart_)) ;
 	memset(loopEnd_,0xFF,sizeof(loopEnd_)) ;
 } ;
@@ -24,6 +25,7 @@ Song::~Song() {
 	if (data_!=NULL) SYS_FREE (data_) ;
 	delete chain_ ;
 	delete phrase_ ;
+	delete clips_ ;
 } ;
 
 void Song::SaveContent(TiXmlNode *node) {
@@ -88,6 +90,7 @@ void Song::SaveContent(TiXmlNode *node) {
 		loops.InsertEndChild(l) ;
 	}
 	node->InsertEndChild(loops) ;
+	clips_->Save(node) ;   // trk2als
 
 } ;
 
@@ -134,6 +137,7 @@ void Song::RestoreContent(TiXmlElement *element) {
 		if (!strcmp("NTIMING",value)) restoreHexBuffer(current,phrase_->timing_) ;
 		if (!strcmp("NRAMP",value)) restoreHexBuffer(current,phrase_->ramp_) ;
 		if (!strcmp("NFINE",value)) restoreHexBuffer(current,phrase_->fine_) ;
+		if (!strcmp("CLIPS",value)) clips_->Restore(current) ;   // trk2als
 		if (!strcmp("CHAINLOOPS",value)) {   // trk2als
 			for (TiXmlElement *l=current->FirstChildElement("LOOP");l;l=l->NextSiblingElement("LOOP")) {
 				const char *id=l->Attribute("ID") ;

@@ -187,7 +187,12 @@ protected:
 	                  unsigned char note, int vel, bool skipFirst) ;
 	void fireTimed() ;
 	bool firstLate(int voice, int phrase, int pos) ;   // el primer golpe no va en el paso
-	int lastTick_[SONG_CHANNEL_COUNT][4] ;             // nudge de la nota que suena en cada voz
+	int lastTick_[SONG_CHANNEL_COUNT][4] ;
+	// trk2als: el clip MIDI propio
+	void playClipStep(int channel) ;
+	void startClipNote(int channel, int voice, I_Instrument *instr, unsigned char note,
+	                   int vel, bool newInstrument) ;
+	unsigned long voiceEnd_[SONG_CHANNEL_COUNT][4] ;   // rebanada en que se libera cada voz             // nudge de la nota que suena en cada voz
 };
 
 #endif
