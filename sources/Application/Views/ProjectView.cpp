@@ -15,6 +15,7 @@
 #include "System/System/System.h"
 #include "Application/Model/Config.h"
 #include <cstdlib>
+#include <cstring>
 #include <string>
 
 #define ACTION_PURGE            MAKE_FOURCC('P','U','R','G')
@@ -114,51 +115,66 @@ ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
 	// trk2als: dos columnas de tarjetas (ver DrawView). Los renglones de las
 	// dos columnas coinciden para que ↑↓ se quede en su columna.
 	const int L = 2, R = 23;
+	const char *F;
+	style_ = 1;
+	if (const char *ps = Config::GetInstance()->GetValue("PROJECTSTYLE")) style_ = atoi(ps);
+	if (style_ < 1 || style_ > 4) style_ = 1;
+	labelCount_ = 0;
 	GUIPoint position(L, 4);
 
 	Variable *v=project_->FindVariable(VAR_TEMPO) ;
+    F = fmt(position._x, position._y, "Tempo", "%d   ", position._x);
     UITempoField *f = new UITempoField(ACTION_TEMPO_CHANGED, position, *v,
-                                       "Tempo: %d   ", 60, 400, 1, 10);
+                                       F, 60, 400, 1, 10);
     T_SimpleList<UIField>::Insert(f) ;
 	f->AddObserver(*this) ;
 	tempoField_=f ;
 
     v = project_->FindVariable(VAR_MASTERVOL);
     position = GUIPoint(L, 5);
-    UIIntVarField *field =
-        new UIIntVarField(position, *v, "Volumen: %d", 10, 100, 1, 10);
+    F = fmt(position._x, position._y, "Volumen", "%d", position._x);
+    UIIntVarField *field = new UIIntVarField(position, *v, F, 10, 100, 1, 10);
     T_SimpleList<UIField>::Insert(field);
 
     v = project_->FindVariable(VAR_METRONOME);
     position = GUIPoint(L, 6);
-    field = new UIIntVarField(position, *v, "Metronomo: %s", 0, 1, 1, 1);
+    F = fmt(position._x, position._y, "Metronomo", "%s", position._x);
+    field = new UIIntVarField(position, *v, F, 0, 1, 1, 1);
     T_SimpleList<UIField>::Insert(field);
 
     v = project_->FindVariable(VAR_PREGAIN);
     position = GUIPoint(L, 10);
-    field = new UIIntVarField(position, *v, "Drive: %d", 10, 200, 1, 10);
+    F = fmt(position._x, position._y, "Drive", "%d", position._x);
+    field = new UIIntVarField(position, *v, F, 10, 200, 1, 10);
     T_SimpleList<UIField>::Insert(field);
 
     position = GUIPoint(L, 11);
     v = project_->FindVariable(VAR_SOFTCLIP);
-    field = new UIIntVarField(position, *v, "Tipo: %s", 0, 4, 1, 4);
+    F = fmt(position._x, position._y, "Tipo", "%s", position._x);
+    field = new UIIntVarField(position, *v, F, 0, 4, 1, 4);
     T_SimpleList<UIField>::Insert(field);
 
     v = project_->FindVariable(VAR_SOFTCLIP_GAIN);
     position = GUIPoint(L + 13, 11);
-    field = new UIIntVarField(position, *v, "%s", 0, 1, 1, 1);
+    if (style_ == 4) {   // en su renglón, con su etiqueta
+        position = GUIPoint(L, 13);
+        F = fmt(position._x, position._y, "Nivel", "%s", position._x);
+    }
+    field = new UIIntVarField(position, *v, style_ == 4 ? F : "%s", 0, 1, 1, 1);
     T_SimpleList<UIField>::Insert(field);
 
     position = GUIPoint(L, 12);
     v = project_->FindVariable(VAR_RENDER);
     NAssert(v);
-    field = new UIIntVarField(position, *v, "Render: %s", 0,
+    F = fmt(position._x, position._y, "Render", "%s", position._x);
+    field = new UIIntVarField(position, *v, F, 0,
                               project_->MAX_RENDER_MODE - 1, 1, 2);
     T_SimpleList<UIField>::Insert(field);
 
     v = project_->FindVariable(VAR_TRANSPOSE);
     position = GUIPoint(L, 16);
-    UIIntVarField *f2=new UIIntVarField(position,*v,"Transponer: %3.2d",-48,48,0x1,0xC) ;
+    F = fmt(position._x, position._y, "Transponer", "%3.2d", position._x);
+    UIIntVarField *f2=new UIIntVarField(position,*v,F,-48,48,0x1,0xC) ;
 	T_SimpleList<UIField>::Insert(f2) ;
 
     v = project_->FindVariable(VAR_SCALE);
@@ -166,20 +182,23 @@ ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
 		v->SetInt(0);
     }
     position = GUIPoint(L, 17);
+    F = fmt(position._x, position._y, "Escala", "%s", position._x);
     field =
-        new UIIntVarField(position, *v, "Escala: %s", 0, scaleCount - 1, 1, 10);
+        new UIIntVarField(position, *v, F, 0, scaleCount - 1, 1, 10);
     T_SimpleList<UIField>::Insert(field);
 
     v = project_->FindVariable(VAR_SCALEROOT);
     if (v->GetInt() < 0) v->SetInt(0);
     position = GUIPoint(L, 18);
-    field = new UIIntVarField(position, *v, "Raiz: %s", 0, 11, 1, 12);
+    F = fmt(position._x, position._y, "Raiz", "%s", position._x);
+    field = new UIIntVarField(position, *v, F, 0, 11, 1, 12);
     T_SimpleList<UIField>::Insert(field);
 
     // el piano roll solo con las notas de la escala (Fold de Live)
     v = project_->FindVariable(VAR_FOLD);
     position = GUIPoint(L, 19);
-    field = new UIIntVarField(position, *v, "Fold: %s", 0, 1, 1, 1);
+    F = fmt(position._x, position._y, "Fold", "%s", position._x);
+    field = new UIIntVarField(position, *v, F, 0, 1, 1, 1);
     T_SimpleList<UIField>::Insert(field);
 
     // derecha: archivo
@@ -218,7 +237,8 @@ ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
     v = project_->FindVariable(VAR_MIDIDEVICE);
     NAssert(v);
     position = GUIPoint(R, 16);
-    field = new UIIntVarField(position, *v, "MIDI: %s", 0,
+    F = fmt(position._x, position._y, "MIDI", "%s", position._x);
+    field = new UIIntVarField(position, *v, F, 0,
                               MidiService::GetInstance()->Size(), 1, 1);
     T_SimpleList<UIField>::Insert(field);
 
@@ -227,6 +247,26 @@ ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
     a1->AddObserver(*this);
     T_SimpleList<UIField>::Insert(a1);
 
+}
+
+// con el estilo 4 la etiqueta va aparte (tenue) y el campo es solo el valor,
+// alineado en su columna
+const char *ProjectView::fmt(int col, int row, const char *label, const char *value, long &x) {
+    static char bufs[16][32];
+    if (style_ != 4) {
+        char *b = bufs[labelCount_ < 16 ? labelCount_ : 15];
+        snprintf(b, 32, "%s: %s", label, value);
+        labelCount_++;
+        return b;
+    }
+    if (labelCount_ < 16) {
+        labels_[labelCount_].col = col;
+        labels_[labelCount_].row = row;
+        labels_[labelCount_].text = label;
+        labelCount_++;
+    }
+    x = col + (col < 20 ? 11 : 6);
+    return value;
 }
 
 ProjectView::~ProjectView() {
@@ -277,19 +317,39 @@ void ProjectView::DrawView() {
         GUIColor card = Mix(bg, fg, 7);
         GUIColor dim = Mix(bg, fg, 50);
         struct Card { int col, row0, row1, w; const char *name; };
-        static const Card cards[] = {
+        const Card cards[] = {
             {2, 3, 6, 19, "CANCION"},  {23, 3, 7, 16, "ARCHIVO"},
-            {2, 9, 12, 19, "SALIDA"},  {23, 9, 11, 16, "LIMPIEZA"},
+            {2, 9, style_ == 4 ? 13 : 12, 19, "SALIDA"},  {23, 9, 11, 16, "LIMPIEZA"},
             {2, 15, 19, 19, "ESCALA"}, {23, 15, 17, 16, "SISTEMA"},
         };
         for (size_t k = 0; k < sizeof(cards) / sizeof(cards[0]); k++) {
             const Card &c = cards[k];
             int x = c.col * 16 - 10, y = c.row0 * 16 - 4;
             int w = c.w * 16 + 18, h = (c.row1 - c.row0 + 1) * 16 + 12;
-            FillRect(x, y, w, h, card, 6);
-            FillRect(x + 10, y + 16, w - 20, 1, Mix(bg, fg, 16));
-            DrawText(c.col * 16, c.row0 * 16 + 1, c.name, hi, 0);
+            switch (style_) {
+            case 1:   // tarjetas
+                FillRect(x, y, w, h, card, 6);
+                FillRect(x + 10, y + 16, w - 20, 1, Mix(bg, fg, 16));
+                DrawText(c.col * 16, c.row0 * 16 + 1, c.name, hi, 0);
+                break;
+            case 2:   // separadores: el título y una línea que sigue
+                DrawText(c.col * 16, c.row0 * 16 + 1, c.name, hi, 0);
+                FillRect(c.col * 16 + 8 * (int)strlen(c.name) + 8, c.row0 * 16 + 7,
+                         w - 18 - 8 * (int)strlen(c.name) - 8, 1, Mix(bg, fg, 22));
+                break;
+            case 3:   // riel: una barrita de color a la izquierda
+                FillRect(x, y + 2, 3, h - 4, hi, 1);
+                DrawText(c.col * 16, c.row0 * 16 + 1, c.name, hi, 0);
+                break;
+            case 4:   // etiqueta / valor: separadores y renglones con guía
+                DrawText(c.col * 16, c.row0 * 16 + 1, c.name, hi, 0);
+                FillRect(c.col * 16, c.row0 * 16 + 15, w - 18, 1, Mix(bg, fg, 22));
+                break;
+            }
         }
+        if (style_ == 4)
+            for (int k = 0; k < labelCount_ && k < 16; k++)
+                DrawText(labels_[k].col * 16, labels_[k].row * 16 + 2, labels_[k].text, dim, 1);
         // abajo: la versión, chiquita
         char b[64];
         snprintf(b, sizeof(b), "Chancho 6 - build %s.%s.%s", PROJECT_NUMBER, PROJECT_RELEASE, BUILD_COUNT);

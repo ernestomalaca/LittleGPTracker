@@ -32,5 +32,11 @@ private:
   unsigned long lastTick_;
   unsigned long lastClock_;
   UIField *tempoField_;
+  // trk2als: el estilo de la pantalla (PROJECTSTYLE en config.xml, 1 a 4)
+  int style_;
+  struct Label { int col, row; const char *text; };
+  Label labels_[16];
+  int labelCount_;
+  const char *fmt(int col, int row, const char *label, const char *value, long &x);
 } ;
 #endif
