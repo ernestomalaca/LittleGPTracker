@@ -72,6 +72,13 @@ bool Player::Init(Project *project,ViewData *viewData) {
 }
 
 void Player::Reset() {
+    // trk2als: nada de lo que apunta al proyecto que se cierra sobrevive
+    for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
+        timed_[i].clear();
+        autoApplied_[i].clear();
+        autoInstr_[i] = 0;
+    }
+    autoRec_ = autoRecPending_ = countIn_ = false;
     viewData_ = 0;
     project_ = 0;
     mixer_->RemoveObserver(*this);

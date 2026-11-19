@@ -46,9 +46,13 @@ bool PlayerMixer::Init(Project *project) {
 
 void PlayerMixer::Close()  {
 
+	MixerService *lock=MixerService::GetInstance() ;
+	lock->Lock() ;   // trk2als: que el audio no esté a media mezcla
 	for (int i=0;i<SONG_CHANNEL_COUNT;i++) {
 		channel_[i]->Reset() ;
+		lastInstrument_[i]=0 ;   // eran del proyecto que se cierra
 	}
+	lock->Unlock() ;
 
 
 	MixerService *ms=MixerService::GetInstance() ;

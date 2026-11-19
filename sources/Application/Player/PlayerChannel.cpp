@@ -197,6 +197,9 @@ void PlayerChannel::Reset() {
     if (mixBus_) {
         mixBus_->Remove(*this) ;
     }
+    // trk2als: al cerrar el proyecto sus instrumentos se borran; una voz que
+    // seguía en su cola (release) no puede quedar apuntando a uno de ellos
+    instr_=0 ;
     muted_=false ;
   busIndex_=-1 ;
   hpfPrevInput_[0]=hpfPrevInput_[1]=i2fp(0);
