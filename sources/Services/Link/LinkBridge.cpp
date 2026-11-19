@@ -16,6 +16,29 @@ std::atomic<bool> g_on(false);
 ableton::link::HostTimeFilter<ableton::link::platform::Clock> g_filter;
 const double QUANTUM = 4.0;   // un compás de 4/4
 
+// la frecuencia real del audio: cuántas muestras se calculan por segundo del
+// reloj de Link, en una ventana de ~30 s (si la consola no va a la que
+// creemos, el tempo se iría corriendo)
+struct RatePoint { double samples; double micros; };
+RatePoint g_rate[32];
+int g_rateCount = 0, g_rateIdx = 0;
+double g_rateLastMicros = 0;
+std::atomic<double> g_sampleRate(0.0);
+std::atomic<double> g_aheadMs(0.0);
+
+void measureRate(double samples, double micros) {
+    if (micros - g_rateLastMicros < 1e6) return;   // un punto por segundo
+    g_rateLastMicros = micros;
+    g_rate[g_rateIdx] = RatePoint{samples, micros};
+    g_rateIdx = (g_rateIdx + 1) % 32;
+    if (g_rateCount < 32) g_rateCount++;
+    if (g_rateCount < 4) return;
+    const RatePoint &first = g_rate[g_rateCount < 32 ? 0 : g_rateIdx];
+    const RatePoint &last = g_rate[(g_rateIdx + 31) % 32];
+    double dt = (last.micros - first.micros) / 1e6;
+    if (dt > 2.5) g_sampleRate = (last.samples - first.samples) / dt;
+}
+
 ableton::Link &link() {
     if (!g_link) g_link.reset(new ableton::Link(120.0));
     return *g_link;
@@ -40,8 +63,11 @@ bool AudioState(double sampleTime, double aheadSec, double &beat, double &tempo,
     if (!g_on.load()) return false;
     ableton::Link &l = link();
     auto state = l.captureAudioSessionState();
-    auto t = g_filter.sampleTimeToHostTime(sampleTime) +
-             std::chrono::microseconds((long long)(aheadSec * 1e6));
+    auto now = l.clock().micros();
+    auto host = g_filter.sampleTimeToHostTime(sampleTime);
+    measureRate(sampleTime, (double)now.count());
+    g_aheadMs = (double)(host - now).count() / 1000.0;
+    auto t = host + std::chrono::microseconds((long long)(aheadSec * 1e6));
     beat = state.beatAtTime(t, QUANTUM);
     tempo = state.tempo();
     playing = state.isPlaying();
@@ -83,5 +109,8 @@ void SetPlaying(bool playing) {
     state.setIsPlaying(playing, l.clock().micros());
     l.commitAppSessionState(state);
 }
+
+double MeasuredSampleRate() { return g_sampleRate.load(); }
+double FilterAheadMs() { return g_aheadMs.load(); }
 
 }

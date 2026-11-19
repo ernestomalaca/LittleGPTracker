@@ -1487,6 +1487,11 @@ bool Player::linkSlice(SyncMaster *sync) {
         return true;
     sync->SetTempoExact((float)tempo);
     float base = sync->GetPlaySampleCount();
+    // si la consola no reproduce a la frecuencia que creemos, el largo de la
+    // rebanada se calcula con la que de verdad usa (medida contra Link)
+    double sr = Audio::GetInstance()->GetSampleRate();
+    double real = LinkBridge::MeasuredSampleRate();
+    if (sr > 0 && real > sr * 0.8 && real < sr * 1.25) base = (float)(base * real / sr);
     if (linkWait_) {
         if (beat < linkOrigin_ - 0.5 / 24.0) return false;
         linkWait_ = false;
@@ -1495,6 +1500,8 @@ bool Player::linkSlice(SyncMaster *sync) {
     }
     double err = (beat - linkOrigin_) - linkSlices_ / 24.0;   // + = vamos atrás
     if (err > 1.0 || err < -1.0) {   // saltó (alguien movió la sesión): se reengancha
+        if (getenv("TRK_LINKDBG"))
+            Trace::Log("LINK", "REENGANCHE: error %+.3f tiempos", err);
         linkOrigin_ = beat - linkSlices_ / 24.0;
         err = 0;
         linkInteg_ = 0;
@@ -1507,11 +1514,13 @@ bool Player::linkSlice(SyncMaster *sync) {
     if (c > 0.03) c = 0.03;
     if (c < -0.03) c = -0.03;
     sync->SetPlaySampleCount((float)(base * (1.0 - c)));
-    static int dbg = -1;   // TRK_LINKDBG=1: cómo va la fase, una vez por tiempo
+    static int dbg = -1;   // TRK_LINKDBG=1 ("Probar Link"): cómo va, una vez por tiempo
     if (dbg < 0) dbg = getenv("TRK_LINKDBG") ? 1 : 0;
     if (dbg && linkSlices_ % 24 == 0)
-        Trace::Log("LINK", "tempo %.2f beat %.3f local %.3f error %+.4f", tempo, beat - linkOrigin_,
-                   linkSlices_ / 24.0, err);
+        Trace::Log("LINK", "t=%.0f tempo=%.2f error=%+.4f corr=%+.4f integ=%+.5f sr=%.0f medido=%.0f "
+                   "adelanto=%.1fms latencia=%.1fms apps=%d",
+                   linkSlices_ / 24.0, tempo, err, c, linkInteg_, sr, real,
+                   LinkBridge::FilterAheadMs(), linkLatency() * 1000.0, LinkBridge::Peers());
     linkSlices_++;
     return true;
 }

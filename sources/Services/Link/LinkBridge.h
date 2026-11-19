@@ -22,6 +22,11 @@ namespace LinkBridge {
     // hilo de audio: avisa que empezamos a tocar en el compás 'atBeat'
     void AudioSetPlaying(bool playing, double aheadSec, double atBeat);
 
+    // la frecuencia de audio medida contra el reloj de Link (0 si aún no)
+    double MeasuredSampleRate();
+    // (diagnóstico) cuánto adelante del reloj va el audio calculado, en ms
+    double FilterAheadMs();
+
     // hilo de la interfaz
     double Tempo();
     void SetTempo(double bpm);
@@ -37,6 +42,8 @@ namespace LinkBridge {
     inline void EnableStartStop(bool) {}
     inline bool AudioState(double, double, double &, double &, bool &) { return false; }
     inline void AudioSetPlaying(bool, double, double) {}
+    inline double MeasuredSampleRate() { return 0; }
+    inline double FilterAheadMs() { return 0; }
     inline double Tempo() { return 0; }
     inline void SetTempo(double) {}
     inline bool IsPlaying() { return false; }
