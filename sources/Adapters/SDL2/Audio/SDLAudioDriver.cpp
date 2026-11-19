@@ -165,13 +165,18 @@ void SDLAudioDriver::OnChunkDone(Uint8 *stream, int len) {
 
         if (pool_[poolPlayPosition_].buffer_ == 0) {
             if (isPlaying_) underruns_++;   // trk2als: se anota (Link lo compensa)
-            // Use fragSize_ instead of len! miniBlank_ is only allocated to
-            // fragSize_. Using len causes a buffer over-read if SDL requests a
-            // larger chunk.
+            // trk2als: la consola se atrasó y no hay audio listo: suena un
+            // poco de silencio, pero NO se avanza ni se pide un bloque de más
+            // (antes sí, y cada tropiezo dejaba el audio un pedazo más atrasado
+            // para siempre, y luego desbordaba la fila). El bloque que falta
+            // sigue en camino y entra en cuanto esté
             SYS_MEMCPY(mainBuffer_ + bufferSize_ - bufferPos_, miniBlank_,
                        fragSize_);
             bufferSize_ = bufferSize_ - bufferPos_ + fragSize_;
             bufferPos_ = 0;
+            onAudioBufferTick();
+            MidiService::GetInstance()->Flush();
+            continue;
         } else {
 
             memcpy(mainBuffer_ + bufferSize_ - bufferPos_,

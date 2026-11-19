@@ -5,6 +5,7 @@ extern double g_renderedSamples;   // AudioOut.cpp
 #include "Services/Audio/AudioDriver.h"
 #include "Application/Model/Config.h"
 #include <math.h>
+#include <unistd.h>
 #include <fstream>
 #include "System/FileSystem/FileSystem.h"
 #include "Application/Views/BaseClasses/ViewEvent.h"
@@ -598,6 +599,13 @@ void Player::Update(Observable &o,I_ObservableData *d) {
 
     MidiService::GetInstance()->Trigger();
     project_->Trigger();
+
+	// trk2als: TRK_STALL=1 (pruebas): se traba 60 ms cada 300 rebanadas
+	{
+        static int stall = -1, n = 0;
+        if (stall < 0) stall = getenv("TRK_STALL") ? 1 : 0;
+        if (stall && ++n % 300 == 0) usleep(60000);
+    }
 
 	// trk2als: Link: el filtro de tiempo se alimenta siempre (al arrancar ya
 	// sabe a qué hora sale cada muestra)
