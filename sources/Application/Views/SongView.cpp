@@ -2392,6 +2392,8 @@ void SongView::drawBlockGrid() {
         int row = j + offset;
         bool hereRow = rowMode_ && j == viewData_->songY_;
         if (rowPlaying[j] || hereRow) FillRect(4, y, 32, h, rowPlaying[j] ? play : cur, 3);
+        // la escena suena y el cursor está en ella: marco blanco para no perderse
+        if (rowPlaying[j] && hereRow) FrameRect(4, y, 32, h, fg, 3, 3);
         char rl[4];
         snprintf(rl, sizeof(rl), "%02X", row);
         DrawText(12, y + (h - 12) / 2, rl, (rowPlaying[j] || hereRow) ? bg : dim, 0);
