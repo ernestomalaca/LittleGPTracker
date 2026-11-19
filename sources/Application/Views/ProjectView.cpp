@@ -111,118 +111,119 @@ ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
 
 	project_=data->project_ ;
 
-	GUIPoint position=GetAnchor() ;
-	
+	// trk2als: dos columnas de tarjetas (ver DrawView). Los renglones de las
+	// dos columnas coinciden para que ↑↓ se quede en su columna.
+	const int L = 2, R = 23;
+	GUIPoint position(L, 4);
+
 	Variable *v=project_->FindVariable(VAR_TEMPO) ;
     UITempoField *f = new UITempoField(ACTION_TEMPO_CHANGED, position, *v,
-                                       "Tempo: %d [%2.2x]  ", 60, 400, 1, 10);
+                                       "Tempo: %d   ", 60, 400, 1, 10);
     T_SimpleList<UIField>::Insert(f) ;
 	f->AddObserver(*this) ;
 	tempoField_=f ;
 
     v = project_->FindVariable(VAR_MASTERVOL);
-    position._y += 1;
+    position = GUIPoint(L, 5);
     UIIntVarField *field =
-        new UIIntVarField(position, *v, "Master: %d", 10, 100, 1, 10);
+        new UIIntVarField(position, *v, "Volumen: %d", 10, 100, 1, 10);
     T_SimpleList<UIField>::Insert(field);
 
-    v = project_->FindVariable(VAR_METRONOME);   // trk2als
-    position._y += 1;
-    field = new UIIntVarField(position, *v, "Metronome: %s", 0, 1, 1, 1);
+    v = project_->FindVariable(VAR_METRONOME);
+    position = GUIPoint(L, 6);
+    field = new UIIntVarField(position, *v, "Metronomo: %s", 0, 1, 1, 1);
     T_SimpleList<UIField>::Insert(field);
 
     v = project_->FindVariable(VAR_PREGAIN);
-    position._y += 2;
+    position = GUIPoint(L, 10);
     field = new UIIntVarField(position, *v, "Drive: %d", 10, 200, 1, 10);
     T_SimpleList<UIField>::Insert(field);
 
-    position._y += 1;
+    position = GUIPoint(L, 11);
     v = project_->FindVariable(VAR_SOFTCLIP);
-    field = new UIIntVarField(position, *v, "Type: %s", 0, 4, 1, 4);
+    field = new UIIntVarField(position, *v, "Tipo: %s", 0, 4, 1, 4);
     T_SimpleList<UIField>::Insert(field);
 
     v = project_->FindVariable(VAR_SOFTCLIP_GAIN);
-    position._x += 13;
+    position = GUIPoint(L + 13, 11);
     field = new UIIntVarField(position, *v, "%s", 0, 1, 1, 1);
     T_SimpleList<UIField>::Insert(field);
-    position._x -= 13;
 
-    v = project_->FindVariable(VAR_TRANSPOSE);
-    position._y += 2;
-    UIIntVarField *f2=new UIIntVarField(position,*v,"Transpose: %3.2d",-48,48,0x1,0xC) ;
-	T_SimpleList<UIField>::Insert(f2) ;
-
-    v = project_->FindVariable(VAR_SCALE);
-	// if scale name is not found, set the default chromatic scale
-	if (v->GetInt() < 0) {
-		v->SetInt(0);
-    }
-    position._y += 1;
-    field =
-        new UIIntVarField(position, *v, "Scale: %s", 0, scaleCount - 1, 1, 10);
-    T_SimpleList<UIField>::Insert(field);
-
-    // trk2als: la raíz, como en Live
-    v = project_->FindVariable(VAR_SCALEROOT);
-    if (v->GetInt() < 0) v->SetInt(0);
-    position._y += 1;
-    field = new UIIntVarField(position, *v, "Root: %s", 0, 11, 1, 12);
-    T_SimpleList<UIField>::Insert(field);
-
-    // trk2als: el piano roll solo con las notas de la escala (Fold de Live)
-    v = project_->FindVariable(VAR_FOLD);
-    position._y += 1;
-    field = new UIIntVarField(position, *v, "Fold: %s", 0, 1, 1, 1);
-    T_SimpleList<UIField>::Insert(field);
-
-    position._y += 2;
-    UIActionField *a1 =
-        new UIActionField("Compact Sequencer", ACTION_PURGE, position);
-    a1->AddObserver(*this);
-    T_SimpleList<UIField>::Insert(a1);
-
-    position._y += 1;
-    a1 = new UIActionField("Compact Instruments", ACTION_PURGE_INSTRUMENT,
-                           position);
-    a1->AddObserver(*this);
-    T_SimpleList<UIField>::Insert(a1);
-
-    position._y += 2;
-    a1 = new UIActionField("Load Song", ACTION_LOAD, position);
-    a1->AddObserver(*this);
-    T_SimpleList<UIField>::Insert(a1);
-
-    position._y += 1;
-    a1 = new UIActionField("Save Song", ACTION_SAVE, position);
-    a1->AddObserver(*this);
-    T_SimpleList<UIField>::Insert(a1);
-
-    position._y += 1;
-    a1 = new UIActionField("Save Song As", ACTION_SAVE_AS, position);
-    a1->AddObserver(*this);
-    T_SimpleList<UIField>::Insert(a1);
-
-    position._y += 1;
-    a1 = new UIActionField("Export Live Set", ACTION_EXPORT_LIVE, position);
-    a1->AddObserver(*this);
-    T_SimpleList<UIField>::Insert(a1);
-
-    v = project_->FindVariable(VAR_MIDIDEVICE);
-    NAssert(v);
-    position._y += 2;
-    field = new UIIntVarField(position, *v, "MIDI: %s", 0,
-                              MidiService::GetInstance()->Size(), 1, 1);
-    T_SimpleList<UIField>::Insert(field);
-
-    position._y += 2;
+    position = GUIPoint(L, 12);
     v = project_->FindVariable(VAR_RENDER);
     NAssert(v);
     field = new UIIntVarField(position, *v, "Render: %s", 0,
                               project_->MAX_RENDER_MODE - 1, 1, 2);
     T_SimpleList<UIField>::Insert(field);
 
-    position._y += 2;
-    a1 = new UIActionField("Exit", ACTION_QUIT, position);
+    v = project_->FindVariable(VAR_TRANSPOSE);
+    position = GUIPoint(L, 16);
+    UIIntVarField *f2=new UIIntVarField(position,*v,"Transponer: %3.2d",-48,48,0x1,0xC) ;
+	T_SimpleList<UIField>::Insert(f2) ;
+
+    v = project_->FindVariable(VAR_SCALE);
+	if (v->GetInt() < 0) {
+		v->SetInt(0);
+    }
+    position = GUIPoint(L, 17);
+    field =
+        new UIIntVarField(position, *v, "Escala: %s", 0, scaleCount - 1, 1, 10);
+    T_SimpleList<UIField>::Insert(field);
+
+    v = project_->FindVariable(VAR_SCALEROOT);
+    if (v->GetInt() < 0) v->SetInt(0);
+    position = GUIPoint(L, 18);
+    field = new UIIntVarField(position, *v, "Raiz: %s", 0, 11, 1, 12);
+    T_SimpleList<UIField>::Insert(field);
+
+    // el piano roll solo con las notas de la escala (Fold de Live)
+    v = project_->FindVariable(VAR_FOLD);
+    position = GUIPoint(L, 19);
+    field = new UIIntVarField(position, *v, "Fold: %s", 0, 1, 1, 1);
+    T_SimpleList<UIField>::Insert(field);
+
+    // derecha: archivo
+    position = GUIPoint(R, 4);
+    UIActionField *a1 = new UIActionField("Cargar", ACTION_LOAD, position);
+    a1->AddObserver(*this);
+    T_SimpleList<UIField>::Insert(a1);
+
+    position = GUIPoint(R, 5);
+    a1 = new UIActionField("Guardar", ACTION_SAVE, position);
+    a1->AddObserver(*this);
+    T_SimpleList<UIField>::Insert(a1);
+
+    position = GUIPoint(R, 6);
+    a1 = new UIActionField("Guardar como", ACTION_SAVE_AS, position);
+    a1->AddObserver(*this);
+    T_SimpleList<UIField>::Insert(a1);
+
+    position = GUIPoint(R, 7);
+    a1 = new UIActionField("Exportar a Live", ACTION_EXPORT_LIVE, position);
+    a1->AddObserver(*this);
+    T_SimpleList<UIField>::Insert(a1);
+
+    // limpieza
+    position = GUIPoint(R, 10);
+    a1 = new UIActionField("Compactar clips", ACTION_PURGE, position);
+    a1->AddObserver(*this);
+    T_SimpleList<UIField>::Insert(a1);
+
+    position = GUIPoint(R, 11);
+    a1 = new UIActionField("Compactar inst.", ACTION_PURGE_INSTRUMENT, position);
+    a1->AddObserver(*this);
+    T_SimpleList<UIField>::Insert(a1);
+
+    // sistema
+    v = project_->FindVariable(VAR_MIDIDEVICE);
+    NAssert(v);
+    position = GUIPoint(R, 16);
+    field = new UIIntVarField(position, *v, "MIDI: %s", 0,
+                              MidiService::GetInstance()->Size(), 1, 1);
+    T_SimpleList<UIField>::Insert(field);
+
+    position = GUIPoint(R, 17);
+    a1 = new UIActionField("Salir", ACTION_QUIT, position);
     a1->AddObserver(*this);
     T_SimpleList<UIField>::Insert(a1);
 
@@ -267,17 +268,41 @@ void ProjectView::DrawView() {
 
     Clear() ;
 
-	GUITextProperties props ;
-	GUIPoint pos=GetTitlePosition() ;
-
-// Draw title
-
-	char projectString[80] ;
-    sprintf(projectString, "Project (Build %s.%s.%s)", PROJECT_NUMBER,
-            PROJECT_RELEASE, BUILD_COUNT);
-
-    SetColor(CD_NORMAL);
-    DrawString(pos._x,pos._y,projectString,props) ;
+    // trk2als: la barra de arriba y las tarjetas (debajo del texto de los campos)
+    bool shapes = drawTopBar(-1, "PROYECTO");
+    if (shapes) {
+        GUIColor bg = ColorOf(CD_BACKGROUND);
+        GUIColor fg = ColorOf(CD_NORMAL);
+        GUIColor hi = ColorOf(CD_HILITE2);
+        GUIColor card = Mix(bg, fg, 7);
+        GUIColor dim = Mix(bg, fg, 50);
+        struct Card { int col, row0, row1, w; const char *name; };
+        static const Card cards[] = {
+            {2, 3, 6, 19, "CANCION"},  {23, 3, 7, 16, "ARCHIVO"},
+            {2, 9, 12, 19, "SALIDA"},  {23, 9, 11, 16, "LIMPIEZA"},
+            {2, 15, 19, 19, "ESCALA"}, {23, 15, 17, 16, "SISTEMA"},
+        };
+        for (size_t k = 0; k < sizeof(cards) / sizeof(cards[0]); k++) {
+            const Card &c = cards[k];
+            int x = c.col * 16 - 10, y = c.row0 * 16 - 4;
+            int w = c.w * 16 + 18, h = (c.row1 - c.row0 + 1) * 16 + 12;
+            FillRect(x, y, w, h, card, 6);
+            FillRect(x + 10, y + 16, w - 20, 1, Mix(bg, fg, 16));
+            DrawText(c.col * 16, c.row0 * 16 + 1, c.name, hi, 0);
+        }
+        // abajo: la versión, chiquita
+        char b[64];
+        snprintf(b, sizeof(b), "Chancho 6 - build %s.%s.%s", PROJECT_NUMBER, PROJECT_RELEASE, BUILD_COUNT);
+        DrawText(22, 452, b, dim, 0);
+    } else {
+        GUITextProperties props ;
+        GUIPoint pos=GetTitlePosition() ;
+        char projectString[80] ;
+        sprintf(projectString, "Project (Build %s.%s.%s)", PROJECT_NUMBER,
+                PROJECT_RELEASE, BUILD_COUNT);
+        SetColor(CD_NORMAL);
+        DrawString(pos._x,pos._y,projectString,props) ;
+    }
 
     FieldView::Redraw();
     drawMap();
