@@ -51,6 +51,9 @@ public:
 	// trk2als: automatización. Dónde va el clip de una pista en 1/24 de paso
 	// desde su inicio (-1 si no suena un clip) y si se está grabando
 	int ClipTickPos(int channel) ;
+	// trk2als: Ableton Link (lo llama la interfaz seguido)
+	void LinkPoll() ;
+	int LinkPeers() ;
 	int AudioBars(unsigned char clip) { return audioBars(clip) ; }   // trk2als
 	void SetAutoRec(bool on) { autoRec_ = on ; autoRecPending_ = false ; }
 	bool IsAutoRec() { return autoRec_ ; }
@@ -191,7 +194,7 @@ protected:
 		unsigned char note ;
 		int vel ;              // -1 = sin velocity propia
 		I_Instrument *instr ;
-	} ;
+} ;
 	std::vector<TimedHit> timed_[SONG_CHANNEL_COUNT] ;
 	unsigned long sliceCount_ ;
 	void fireTimed() ;
@@ -214,6 +217,16 @@ protected:
 	unsigned long autoStepSlice_[SONG_CHANNEL_COUNT] ;  // la rebanada en que empezó
 	class SampleInstrument *autoInstr_[SONG_CHANNEL_COUNT] ;
 	std::vector<unsigned int> autoApplied_[SONG_CHANNEL_COUNT] ;
+	// trk2als: Ableton Link
+	double linkLatency() ;
+	void linkStart() ;
+	bool linkSlice(class SyncMaster *sync) ;
+	bool linkWait_ ;
+	double linkOrigin_ ;
+	double linkInteg_ ;
+	unsigned long linkSlices_ ;
+	int linkLastTempo_ ;
+	bool linkStartStop_, linkSeenPlaying_, linkRemoteStart_, linkRemoteStop_ ;
 };
 
 #endif

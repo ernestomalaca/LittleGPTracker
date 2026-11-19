@@ -189,9 +189,9 @@ public:
     // trk2als: los atajos de la pantalla ("A:nota;X:largo"); ya no van en una
     // barra fija: se muestran en un recuadro si uno se queda quieto
     const std::string &GetHelpItems() { return helpItems_; }
+    static std::string projectName_;   // lo pone la Song al abrir el proyecto
 protected:
     std::string helpItems_;
-    static std::string projectName_;   // lo pone la Song al abrir el proyecto
     // al cambiar play/stop o el tempo se repinta sola (desde drawNotes)
     void refreshTopBar();
     int topTab_;

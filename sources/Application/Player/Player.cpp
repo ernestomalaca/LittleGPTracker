@@ -1,4 +1,8 @@
 #include "Player.h"
+#include "Services/Link/LinkBridge.h"
+#include "Services/Audio/Audio.h"
+#include "Application/Model/Config.h"
+#include <math.h>
 #include "Application/Views/BaseClasses/ViewEvent.h"
 #include "System/io/Status.h"
 #include "System/System/System.h"
@@ -18,6 +22,14 @@
 Player::Player() {
 
     isRunning_ = false;
+    project_ = 0;
+    viewData_ = 0;
+    linkWait_ = false;   // trk2als: Link
+    linkOrigin_ = 0;
+    linkInteg_ = 0;
+    linkSlices_ = 0;
+    linkLastTempo_ = -1;
+    linkStartStop_ = linkSeenPlaying_ = linkRemoteStart_ = linkRemoteStop_ = false;
     metroStep_ = 0;
     sliceCount_ = 0;
     autoRec_ = false;
@@ -144,6 +156,7 @@ void Player::Start(PlayMode mode, bool forceSongMode) {
     // Let's get started !
 
     SyncMaster::GetInstance()->Start();
+    linkStart();   // trk2als: con Link, esperar al siguiente compás de la sesión
 
     firstPlayCycle_ = true;
     mode_ = viewData_->playMode_;
@@ -229,6 +242,9 @@ void Player::Stop() {
 
     SyncMaster::GetInstance()->Stop();
     isRunning_ = false;
+    linkWait_ = false;
+    if (linkStartStop_ && !linkRemoteStop_) LinkBridge::SetPlaying(false);
+    linkRemoteStop_ = false;
     SetChanged();
 	PlayerEvent pe(PET_STOP);
 	NotifyObservers(&pe);
@@ -581,6 +597,14 @@ void Player::Update(Observable &o,I_ObservableData *d) {
 	if (isRunning_) {
         SyncMaster *sync = SyncMaster::GetInstance();
         sync->SetTempo(project_->GetTempo());
+
+        // trk2als: Ableton Link: esperar el compás y seguir la fase de la sesión
+        if (!linkSlice(sync)) {
+            PlayerEvent pe(PET_UPDATE, 0);
+            SetChanged();
+            NotifyObservers(&pe);
+            return;
+        }
 
         // trk2als: precuenta: 4 tiempos de metrónomo y en el uno arranca
         if (countIn_) {
@@ -1405,3 +1429,126 @@ int Player::ClipTickPos(int channel) {
     if (sub > 5) sub = 5;
     return autoStep_[channel] * CLIP_TICKS + sub * (CLIP_TICKS / 6);
 }
+
+/************************************************************
+ trk2als: Ableton Link
+ ************************************************************/
+
+// lo que tarda en oírse lo que se calcula ahora (segundos)
+double Player::linkLatency() {
+    static double lat = -1;
+    if (lat < 0) {
+        Config *c = Config::GetInstance();
+        const char *b = c->GetValue("AUDIOBUFFERSIZE");
+        const char *o = c->GetValue("LINKOFFSET");   // ms, para afinar a oído
+        int buf = b ? atoi(b) : 1024;
+        double sr = Audio::GetInstance()->GetSampleRate();
+        if (sr <= 0) sr = 44100;
+        lat = 3.0 * buf / sr + (o ? atof(o) / 1000.0 : 0.0);
+    }
+    return lat;
+}
+
+void Player::linkStart() {
+    linkWait_ = false;
+    linkSlices_ = 0;
+    linkInteg_ = 0;
+    double beat, tempo;
+    bool playing;
+    if (!LinkBridge::AudioState(linkLatency(), beat, tempo, playing)) return;
+    // el siguiente compás (si casi estamos en uno, ese mismo)
+    linkOrigin_ = ceil((beat - 0.02) / 4.0) * 4.0;
+    linkWait_ = true;
+    if (linkStartStop_ && !linkRemoteStart_) LinkBridge::SetPlaying(true);
+    linkRemoteStart_ = false;
+}
+
+// devuelve false mientras se espera el compás (la rebanada no avanza)
+bool Player::linkSlice(SyncMaster *sync) {
+    double beat, tempo;
+    bool playing;
+    if (!LinkBridge::AudioState(linkLatency(), beat, tempo, playing) || tempo <= 0) return true;
+    double sr = Audio::GetInstance()->GetSampleRate();
+    if (sr <= 0) sr = 44100;
+    double base = sr * 60.0 / (tempo * 24.0);   // una rebanada = 1/24 de tiempo
+    if (linkWait_) {
+        if (beat < linkOrigin_ - 0.5 / 24.0) {
+            sync->SetPlaySampleCount((float)base);
+            return false;
+        }
+        linkWait_ = false;
+        linkSlices_ = 0;
+    }
+    double err = (beat - linkOrigin_) - linkSlices_ / 24.0;   // + = vamos atrás
+    if (err > 2.0 || err < -2.0) {   // saltó (alguien movió la sesión): se reengancha
+        linkOrigin_ = beat - linkSlices_ / 24.0;
+        err = 0;
+        linkInteg_ = 0;
+    }
+    // proporcional + integral: el integral absorbe la diferencia de relojes
+    // (la tarjeta de sonido nunca va exacta) y el error vuelve a cero
+    linkInteg_ += 0.004 * err;
+    if (linkInteg_ > 0.05) linkInteg_ = 0.05;
+    if (linkInteg_ < -0.05) linkInteg_ = -0.05;
+    double c = 0.5 * err + linkInteg_;
+    if (c > 0.08) c = 0.08;
+    if (c < -0.08) c = -0.08;
+    sync->SetPlaySampleCount((float)(base * (1.0 - c)));
+    static int dbg = -1;   // TRK_LINKDBG=1: cómo va la fase, una vez por tiempo
+    if (dbg < 0) dbg = getenv("TRK_LINKDBG") ? 1 : 0;
+    if (dbg && linkSlices_ % 24 == 0)
+        Trace::Log("LINK", "tempo %.2f beat %.3f local %.3f error %+.4f", tempo, beat - linkOrigin_,
+                   linkSlices_ / 24.0, err);
+    linkSlices_++;
+    return true;
+}
+
+// hilo de la interfaz: prende/apaga según el proyecto, y pasa el tempo y el
+// play/stop en los dos sentidos
+void Player::LinkPoll() {
+    if (!project_) {   // sin proyecto (en la lista de proyectos): Link apagado
+        if (LinkBridge::Enabled()) LinkBridge::Enable(false);
+        return;
+    }
+    int mode = project_->FindVariable(VAR_LINK)->GetInt();
+    bool on = mode > 0;
+    if (on != LinkBridge::Enabled()) {
+        LinkBridge::Enable(on);
+        Trace::Log("LINK", on ? "prendido" : "apagado");
+        linkLastTempo_ = -1;
+        linkSeenPlaying_ = false;
+    }
+    linkStartStop_ = mode == 2;
+    if (!on) return;
+    LinkBridge::EnableStartStop(linkStartStop_);
+    int proj = project_->GetTempo();
+    double lt = LinkBridge::Tempo();
+    if (linkLastTempo_ < 0) {               // recién prendido: manda la sesión si ya hay alguien
+        if (LinkBridge::Peers() == 0) LinkBridge::SetTempo(proj);
+        linkLastTempo_ = proj;
+    } else if (proj != linkLastTempo_) {    // lo cambiaron aquí
+        LinkBridge::SetTempo(proj);
+        linkLastTempo_ = proj;
+    } else if (fabs(lt - proj) >= 0.5) {    // lo cambiaron allá
+        int t = (int)(lt + 0.5);
+        if (t < 60) t = 60;
+        if (t > 400) t = 400;
+        project_->FindVariable(VAR_TEMPO)->SetInt(t);
+        linkLastTempo_ = t;
+    }
+    if (linkStartStop_) {
+        bool lp = LinkBridge::IsPlaying();
+        if (lp != linkSeenPlaying_) {
+            linkSeenPlaying_ = lp;
+            if (lp && !isRunning_) {
+                linkRemoteStart_ = true;
+                OnSongStartButton(0, SONG_CHANNEL_COUNT - 1, false, false);
+            } else if (!lp && isRunning_) {
+                linkRemoteStop_ = true;
+                Stop();
+            }
+        }
+    }
+}
+
+int Player::LinkPeers() { return LinkBridge::Peers(); }

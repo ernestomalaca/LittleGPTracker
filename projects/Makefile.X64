@@ -11,6 +11,8 @@ DEFINES := \
         -DSDLAUDIO \
         -DRTMIDI \
         -DFFMPEG_ENABLED \
+        -DWEBSERVER \
+        -DABLETON_LINK \
         -D_FEAT_MIDI_LOCK
 
 ALSA_CFLAGS := $(shell pkg-config alsa --cflags)
@@ -28,7 +30,11 @@ OPT_FLAGS := -O2 -g
 INCLUDES := $(ALSA_CFLAGS) $(JACK_CFLAGS) $(SDL_CFLAGS) -I$(PWD)/../sources
 CFLAGS := $(OPT_FLAGS) $(DEFINES) $(INCLUDES) -Wall
 CXXFLAGS := $(CFLAGS) -std=gnu++03
-LIBS := $(ALSA_LIBS) $(JACK_LIBS) $(SDL_LIBS)
+LIBS := $(ALSA_LIBS) $(JACK_LIBS) $(SDL_LIBS) -lpthread
+# trk2als: Ableton Link (C++17, se compila aparte; ver Services/Link)
+LINK_DIR := $(PWD)/../sources/Externals/link
+LinkBridge.o: CXXFLAGS := $(filter-out -std=gnu++03,$(CXXFLAGS)) -std=c++17 -DLINK_PLATFORM_LINUX=1 -I$(LINK_DIR)/include -I$(LINK_DIR)/modules/asio-standalone/asio/include
+
 OUTPUT := ../lgpt
 EXTENSION := x64
 

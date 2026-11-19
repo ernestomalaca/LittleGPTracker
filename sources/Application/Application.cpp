@@ -1,4 +1,7 @@
 #include "Application/Application.h" 
+#ifdef WEBSERVER
+#include "Services/Web/WebServer.h"
+#endif
 #include "Application/AppWindow.h" 
 #include "UIFramework/Interfaces/I_GUIWindowFactory.h"
 #include "Application/Persistency/PersistencyService.h" 
@@ -117,6 +120,9 @@ bool Application::Init(GUICreateWindowParams &params) {
 	CommandDispatcher::GetInstance()->Init() ;
   initMidiInput();
 	ControlRoom::GetInstance()->LoadMapping("bin:mapping.xml") ;
+#ifdef WEBSERVER
+	WebServer::GetInstance()->Start() ;   // trk2als: chancho.local
+#endif
 	return true ;
 } ;
 

@@ -659,6 +659,8 @@ bool AppWindow::onEvent(GUIEvent &event) {
 };
 
 void AppWindow::onUpdate() {
+    // trk2als: Ableton Link (tempo y play/stop con la sesión)
+    if (Player::GetInstance()) Player::GetInstance()->LinkPoll();
     if (_loadAfterResume) {
         _loadAfterResume = false;
         _isDirty = true;

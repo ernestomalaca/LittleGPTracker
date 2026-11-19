@@ -1,4 +1,8 @@
 #include "ProjectView.h"
+#include "Application/Player/Player.h"
+#ifdef WEBSERVER
+#include "Services/Web/WebServer.h"
+#endif
 #include "Application/Mixer/MixerService.h"
 #include "Application/Model/ProjectDatas.h"
 #include "Application/Model/Scale.h"
@@ -148,12 +152,13 @@ ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
 
     // las fichas
     struct Chip { FourCC var; int x, y, min, max, xo, yo; };
-    const Chip chips[6] = {
-        {VAR_MASTERVOL, 1, 6, 10, 100, 1, 10}, {VAR_METRONOME, 13, 6, 0, 1, 1, 1},
-        {VAR_PREGAIN, 25, 6, 10, 200, 1, 10},  {VAR_SOFTCLIP, 1, 7, 0, 4, 1, 4},
-        {VAR_SOFTCLIP_GAIN, 13, 7, 0, 1, 1, 1}, {VAR_MIDIDEVICE, 25, 7, 0, 0, 1, 1},
+    const Chip chips[7] = {
+        {VAR_MASTERVOL, 1, 6, 10, 100, 1, 10}, {VAR_METRONOME, 10, 6, 0, 1, 1, 1},
+        {VAR_PREGAIN, 19, 6, 10, 200, 1, 10},  {VAR_SOFTCLIP, 28, 6, 0, 4, 1, 4},
+        {VAR_SOFTCLIP_GAIN, 1, 7, 0, 1, 1, 1}, {VAR_MIDIDEVICE, 10, 7, 0, 0, 1, 1},
+        {VAR_LINK, 19, 7, 0, 2, 1, 1},
     };
-    for (int k = 0; k < 6; k++) {
+    for (int k = 0; k < 7; k++) {
         v = project_->FindVariable(chips[k].var);
         NAssert(v);
         int mx = chips[k].var == VAR_MIDIDEVICE ? MidiService::GetInstance()->Size() : chips[k].max;
@@ -413,12 +418,13 @@ void ProjectView::drawBoard() {
     if (fS) DrawText(344, 172, "<> elegir   A+<> cambiar", dim, 0);
 
     // fichas
-    static const char *chipName[6] = {"VOLUMEN", "METRONOMO", "DRIVE", "TIPO", "NIVEL", "MIDI"};
-    for (int k = 0; k < 6; k++) {
-        int x = 24 + (k % 3) * 200, y = 212 + (k / 3) * 74;
+    static const char *chipName[7] = {"VOLUMEN", "METRONOMO", "DRIVE", "TIPO", "NIVEL", "MIDI", "ABLETON LINK"};
+    for (int k = 0; k < 7; k++) {
+        int x = 24 + (k % 4) * 150, y = 212 + (k / 4) * 74;
+        int cw = k == 6 ? 292 : 142;   // Link: ficha doble
         bool f = focus == chipField_[k];
-        FillRect(x, y, 192, 66, card, 6);
-        if (f) FrameRect(x, y, 192, 66, acc, 6, 3);
+        FillRect(x, y, cw, 66, card, 6);
+        if (f) FrameRect(x, y, cw, 66, acc, 6, 3);
         DrawText(x + 12, y + 9, chipName[k], acc, 0);
         Variable *v = &((UIIntVarField *)chipField_[k])->GetVariable();
         std::string val;
@@ -426,8 +432,15 @@ void ProjectView::drawBoard() {
         else val = v->GetString() ? v->GetString() : "--";
         if (val == "off") val = "no";
         if (val == "on") val = "si";
+        if (val == "on+play") val = "si + play";
+        if (k == 6 && v->GetInt() > 0) {   // Link: con cuántos está
+            int n = Player::GetInstance()->LinkPeers();
+            if (n == 0) snprintf(b, sizeof(b), "  buscando");
+            else snprintf(b, sizeof(b), "  %d %s", n, n == 1 ? "app" : "apps");
+            val += b;
+        }
         if (val.empty() || val == "(null)") val = "--";
-        if (val.size() > 10) val = val.substr(0, 10);
+        if (val.size() > (k == 6 ? 16u : 7u)) val = val.substr(0, k == 6 ? 16 : 7);
         DrawText(x + 12, y + 33, val.c_str(), fg, 1);
     }
 
@@ -444,4 +457,11 @@ void ProjectView::drawBoard() {
 
     snprintf(b, sizeof(b), "Chancho 6 - %s.%s.%s", PROJECT_NUMBER, PROJECT_RELEASE, BUILD_COUNT);
     DrawText(24, 452, b, Mix(bg, fg, 30), 0);
+#ifdef WEBSERVER
+    // chancho.local: dónde abrirlo desde la compu o el celular
+    std::string addr = WebServer::GetInstance()->Address();
+    if (!addr.empty()) {
+        DrawText(616 - 8 * (int)addr.size(), 452, addr.c_str(), acc, 0);
+    }
+#endif
 }

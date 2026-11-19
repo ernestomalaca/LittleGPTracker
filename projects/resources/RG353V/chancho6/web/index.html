@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chancho 6</title>
+<style>
+/* chancho.local: la página que sirve la consola. Sin internet: todo aquí. */
+:root {
+  --bg: #101018; --panel: #191924; --panel2: #20202d; --line: #2c2c3c;
+  --fg: #F0EEFA; --mute: #8a88a8; --acc: #8C9EFF; --acc2: #B8C3FF; --bad: #FF7A8A; --ok: #7FC98E;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 var(--sans); }
+.wrap { max-width: 980px; margin: 0 auto; padding: 20px max(16px, env(safe-area-inset-left)) 60px; display: flex; flex-direction: column; gap: 22px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
+header h1 { margin: 0; font: 800 26px var(--mono); letter-spacing: .08em; color: var(--acc); }
+header .now { color: var(--mute); font-family: var(--mono); font-size: 13px; }
+header .now b { color: var(--fg); font-weight: 600; }
+h2 { margin: 0; font: 700 12px var(--mono); letter-spacing: .14em; color: var(--acc); text-transform: uppercase; }
+.card { background: var(--panel); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.grow { flex: 1; min-width: 0; }
+button, .btn { font: 600 13px var(--sans); color: var(--fg); background: var(--panel2); border: 1px solid var(--line); border-radius: 7px; padding: 7px 12px; cursor: pointer; text-decoration: none; white-space: nowrap; }
+button:hover, .btn:hover { border-color: var(--acc); }
+button:focus-visible, .btn:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+button.main { background: var(--acc); color: var(--bg); border-color: var(--acc); }
+button.danger:hover { border-color: var(--bad); color: var(--bad); }
+button:disabled { opacity: .5; cursor: default; }
+.projects { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.proj { background: var(--panel2); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; border: 1px solid transparent; }
+.proj.open { border-color: var(--acc); }
+.proj .name { font: 700 16px var(--mono); letter-spacing: .04em; word-break: break-all; }
+.proj .meta { color: var(--mute); font-size: 12px; font-family: var(--mono); }
+.proj .tag { font: 700 10px var(--mono); color: var(--bg); background: var(--acc); border-radius: 4px; padding: 1px 6px; margin-left: 6px; vertical-align: middle; }
+.crumbs { font-family: var(--mono); font-size: 14px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.crumbs a { color: var(--acc2); text-decoration: none; cursor: pointer; }
+.crumbs span { color: var(--mute); }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+td { padding: 7px 6px; border-top: 1px solid var(--line); vertical-align: middle; }
+td.n { width: 100%; word-break: break-all; }
+td.s, td.d { color: var(--mute); font-family: var(--mono); font-size: 12px; white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
+td.a { white-space: nowrap; text-align: right; }
+td.a button { padding: 4px 9px; font-size: 12px; margin-left: 4px; }
+.fname { cursor: pointer; }
+.fname.dir { color: var(--acc2); font-weight: 600; }
+.ico { display: inline-block; width: 18px; color: var(--mute); }
+.drop { border: 2px dashed var(--line); border-radius: 10px; padding: 18px; text-align: center; color: var(--mute); transition: border-color .15s, background .15s; }
+.drop.over { border-color: var(--acc); background: rgba(140,158,255,.08); color: var(--fg); }
+.bar { height: 6px; background: var(--panel2); border-radius: 3px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: var(--acc); transition: width .1s; }
+.msg { font-family: var(--mono); font-size: 13px; color: var(--mute); min-height: 1.4em; }
+.msg.bad { color: var(--bad); } .msg.ok { color: var(--ok); }
+.empty { color: var(--mute); padding: 8px 0; }
+@media (max-width: 600px) { td.d { display: none; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>CHANCHO 6</h1>
+    <div class="now" id="now">conectando…</div>
+  </header>
+
+  <section class="card">
+    <div class="row"><h2 class="grow">Proyectos</h2><button id="newProj">Nuevo proyecto vacío</button></div>
+    <div class="projects" id="projects"><div class="empty">cargando…</div></div>
+  </section>
+
+  <section class="card" id="filesCard">
+    <div class="row"><h2 class="grow">Archivos</h2>
+      <button id="toLib">samplelib</button><button id="mkdir">Nueva carpeta</button><button id="refresh">Actualizar</button></div>
+    <div class="crumbs" id="crumbs"></div>
+    <div class="drop" id="drop">Arrastra aquí archivos o carpetas para subirlos a esta carpeta<br>
+      <span style="font-size:13px">o <label style="color:var(--acc2);cursor:pointer;text-decoration:underline">elige archivos<input type="file" id="pick" multiple hidden></label></span></div>
+    <div class="bar" id="bar" hidden><i id="barFill"></i></div>
+    <div class="msg" id="msg"></div>
+    <table><tbody id="list"></tbody></table>
+  </section>
+</div>
+<script>
+const $ = s => document.querySelector(s);
+let info = {}, cwd = "";
+
+function fmtSize(n) { return n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFixed(0) + " KB" : (n / 1048576).toFixed(1) + " MB"; }
+function fmtDate(t) { const d = new Date(t * 1000); return d.toLocaleDateString("es-MX", { day: "2-digit", month: "short" }) + " " + d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }); }
+function q(p) { return encodeURIComponent(p); }
+function say(t, kind) { const m = $("#msg"); m.textContent = t; m.className = "msg " + (kind || ""); }
+async function api(path, opts) { const r = await fetch(path, opts); if (!r.ok) throw new Error(await r.text()); return r.headers.get("content-type")?.includes("json") ? r.json() : r.text(); }
+function join(a, b) { return a ? a + "/" + b : b; }
+
+async function loadInfo() {
+  try {
+    info = await api("/api/info");
+    const host = info.port == 80 ? info.name + ".local" : info.name + ".local:" + info.port;
+    $("#now").innerHTML = (info.project ? "abierto: <b>" + info.project + "</b> · " : "") + host + " · " + info.ip;
+  } catch (e) { $("#now").textContent = "sin conexión con la consola"; }
+}
+
+async function loadProjects() {
+  const box = $("#projects");
+  try {
+    const r = await api("/api/ls");
+    const ps = r.entries.filter(e => e.dir && e.name.startsWith("lgpt_")).sort((a, b) => b.mtime - a.mtime);
+    box.innerHTML = "";
+    if (!ps.length) { box.innerHTML = '<div class="empty">Todavía no hay proyectos.</div>'; return; }
+    for (const p of ps) {
+      const nice = p.name.slice(5);
+      const open = info.project && info.project.toLowerCase() === nice.toLowerCase();
+      const el = document.createElement("div");
+      el.className = "proj" + (open ? " open" : "");
+      el.innerHTML = `<div class="name">${nice}${open ? '<span class="tag">ABIERTO</span>' : ""}</div>
+        <div class="meta">${fmtDate(p.mtime)}</div>
+        <div class="row"><button data-a="als" class="main">Exportar a Live</button><a class="btn" href="/api/zip?path=${q(p.name)}" download>Bajar zip</a>
+        <button data-a="files">Archivos</button><button data-a="del" class="danger" ${open ? "disabled title='Está abierto en la consola'" : ""}>Borrar</button></div>
+        <div class="msg" data-a="st"></div>`;
+      el.querySelector('[data-a="als"]').onclick = e => exportLive(p.name, nice, el.querySelector('[data-a="st"]'), e.target);
+      el.querySelector('[data-a="files"]').onclick = () => { go(p.name); $("#filesCard").scrollIntoView({ behavior: "smooth" }); };
+      el.querySelector('[data-a="del"]').onclick = async () => {
+        if (!confirm(`¿Borrar el proyecto ${nice} y todos sus samples? No se puede deshacer.`)) return;
+        await api("/api/delete?path=" + q(p.name), { method: "POST" }); loadProjects(); if (cwd.startsWith(p.name)) go("");
+      };
+      box.appendChild(el);
+    }
+  } catch (e) { box.innerHTML = '<div class="empty">No pude leer los proyectos.</div>'; }
+}
+
+async function go(path) {
+  cwd = path;
+  const c = $("#crumbs");
+  c.innerHTML = "";
+  const parts = path ? path.split("/") : [];
+  const root = document.createElement("a"); root.textContent = "chancho6"; root.onclick = () => go(""); c.appendChild(root);
+  parts.forEach((p, i) => { const s = document.createElement("span"); s.textContent = "/"; c.appendChild(s);
+    const a = document.createElement("a"); a.textContent = p; a.onclick = () => go(parts.slice(0, i + 1).join("/")); c.appendChild(a); });
+  const list = $("#list");
+  list.innerHTML = '<tr><td class="empty">cargando…</td></tr>';
+  let r;
+  try { r = await api("/api/ls?path=" + q(path)); } catch (e) { list.innerHTML = '<tr><td class="empty">No existe.</td></tr>'; return; }
+  list.innerHTML = "";
+  const es = r.entries.slice().sort((a, b) => (b.dir - a.dir) || a.name.localeCompare(b.name));
+  if (path) { const tr = document.createElement("tr"); tr.innerHTML = '<td class="n" colspan="4"><span class="fname dir"><span class="ico">↰</span>..</span></td>';
+    tr.querySelector(".fname").onclick = () => go(parts.slice(0, -1).join("/")); list.appendChild(tr); }
+  if (!es.length) list.insertAdjacentHTML("beforeend", '<tr><td class="empty" colspan="4">Carpeta vacía.</td></tr>');
+  for (const e of es) {
+    const full = join(path, e.name);
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td class="n"><span class="fname ${e.dir ? "dir" : ""}"><span class="ico">${e.dir ? "▸" : /\.wav$/i.test(e.name) ? "♪" : "·"}</span></span></td>
+      <td class="s">${e.dir ? "" : fmtSize(e.size)}</td><td class="d">${fmtDate(e.mtime)}</td>
+      <td class="a">${e.dir ? `<a class="btn" style="padding:4px 9px;font-size:12px" href="/api/zip?path=${q(full)}" download>zip</a>` : `<a class="btn" style="padding:4px 9px;font-size:12px" href="/api/get?dl=1&path=${q(full)}">bajar</a>`}
+      <button data-a="ren">renombrar</button><button data-a="del" class="danger">borrar</button></td>`;
+    tr.querySelector(".fname").append(e.name);
+    tr.querySelector(".fname").onclick = () => e.dir ? go(full) : (/\.wav$/i.test(e.name) ? play(full) : open("/api/get?path=" + q(full)));
+    tr.querySelector('[data-a="ren"]').onclick = async () => {
+      const n = prompt("Nuevo nombre", e.name); if (!n || n === e.name || n.includes("/")) return;
+      await api(`/api/rename?path=${q(full)}&to=${q(join(path, n))}`, { method: "POST" }); go(path);
+    };
+    tr.querySelector('[data-a="del"]').onclick = async () => {
+      if (!confirm(`¿Borrar ${e.name}${e.dir ? " y todo lo que tiene adentro" : ""}?`)) return;
+      await api("/api/delete?path=" + q(full), { method: "POST" }); go(path); loadProjects();
+    };
+    list.appendChild(tr);
+  }
+}
+
+// --- exportar a Live: el exportador de Python (trk2als) corre aquí mismo,
+// en el navegador, con Pyodide. La primera vez se baja Python (hace falta
+// internet en la compu); los samples vienen de la consola.
+let pyReady = null;
+function loadPy(st) {
+  if (pyReady) return pyReady;
+  pyReady = (async () => {
+    st("cargando Python (viene de la consola, tarda unos segundos)…");
+    // Python viene en la consola (web/pyodide); si no está, de internet
+    const load = src => new Promise((res, rej) => { const sc = document.createElement("script");
+      sc.src = src; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc); });
+    let base = "pyodide/";
+    try { await load(base + "pyodide.js"); }
+    catch (e) {
+      base = "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/";
+      try { await load(base + "pyodide.js"); } catch (e2) { throw new Error("no encuentro Python: falta web/pyodide en la consola y no hay internet"); }
+    }
+    const py = await loadPyodide({ indexURL: new URL(base, location.href).href });
+    py.FS.mkdirTree("/als");
+    for (const f of ["lgpt2als.py", "trk2als.py", "plantilla.als", "simpler_proto.xml", "sampler_proto.xml"]) {
+      const r = await fetch("als/" + f); if (!r.ok) throw new Error("falta web/als/" + f + " en la consola");
+      py.FS.writeFile("/als/" + f, new Uint8Array(await r.arrayBuffer()));
+    }
+    return py;
+  })();
+  pyReady.catch(() => { pyReady = null; });
+  return pyReady;
+}
+async function listTree(path, out) {
+  const r = await api("/api/ls?path=" + q(path));
+  for (const e of r.entries) { const full = join(path, e.name); if (e.dir) await listTree(full, out); else out.push({ path: full, size: e.size }); }
+  return out;
+}
+async function exportLive(dir, nice, stEl, btn) {
+  const st = (t, k) => { stEl.textContent = t; stEl.className = "msg " + (k || ""); };
+  btn.disabled = true;
+  try {
+    const py = await loadPy(st);
+    const files = (await listTree(dir, [])).filter(f => f.path.endsWith("lgptsav.dat") || /\.(wav|aif|aiff)$/i.test(f.path));
+    if (!files.some(f => f.path === dir + "/lgptsav.dat")) throw new Error("el proyecto no está guardado todavía (Guardar en la consola)");
+    try { py.FS.rmdir; py.runPython("import shutil,os\nfor d in ('/proj','/out'):\n    shutil.rmtree(d, ignore_errors=True)"); } catch (e) {}
+    let done = 0; const total = files.reduce((s, f) => s + f.size, 0) || 1;
+    for (const f of files) {
+      st(`trayendo de la consola ${Math.round(done / total * 100)}% · ${f.path.split("/").pop()}`);
+      const r = await fetch("/api/get?path=" + q(f.path)); if (!r.ok) throw new Error("no pude leer " + f.path);
+      const dst = "/proj/" + f.path; py.FS.mkdirTree(dst.slice(0, dst.lastIndexOf("/")));
+      py.FS.writeFile(dst, new Uint8Array(await r.arrayBuffer())); done += f.size;
+    }
+    st("convirtiendo…");
+    py.globals.set("SRC", "/proj/" + dir); py.globals.set("NAME", nice);
+    const log = py.runPython(`
+import sys, io, os, zipfile, contextlib
+if "/als" not in sys.path: sys.path.insert(0, "/als")
+import importlib, lgpt2als; importlib.reload(lgpt2als)
+out_dir = "/out/" + NAME + " Project"
+os.makedirs(out_dir, exist_ok=True)
+buf = io.StringIO()
+err = ""
+with contextlib.redirect_stdout(buf):
+    try:
+        lgpt2als.convert(SRC, "/als/plantilla.als", out_dir + "/" + NAME + ".als")
+    except SystemExit as e:
+        err = str(e)
+if not err:
+    with zipfile.ZipFile("/out/set.zip", "w", zipfile.ZIP_STORED) as z:
+        for root, dirs, files in os.walk(out_dir):
+            for f in files:
+                full = os.path.join(root, f)
+                z.write(full, os.path.relpath(full, "/out"))
+            if not files and not dirs:
+                z.writestr(os.path.relpath(root, "/out") + "/", "")
+(err, buf.getvalue())
+`).toJs();
+    const [err, out] = log;
+    if (err) throw new Error(err);
+    const data = py.FS.readFile("/out/set.zip");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([data], { type: "application/zip" }));
+    a.download = nice + " Project.zip"; document.body.appendChild(a); a.click(); a.remove();
+    const summary = out.split("\n").filter(l => /^ok|aviso|canal/.test(l.trim())).slice(0, 3).join(" · ");
+    st("Listo: descomprime el zip y abre " + nice + ".als en Live" + (summary ? " · " + summary.replace(/\/out\/[^:]*: /, "") : ""), "ok");
+  } catch (e) { st(e.message, "bad"); }
+  btn.disabled = false;
+}
+
+let audio;
+function play(path) { if (audio) audio.pause(); audio = new Audio("/api/get?path=" + q(path)); audio.play(); say("▶ " + path.split("/").pop()); }
+
+// --- subir: archivos sueltos o carpetas enteras
+async function walk(entry, base, out) {
+  if (entry.isFile) { const f = await new Promise((res, rej) => entry.file(res, rej)); out.push({ file: f, rel: join(base, f.name) }); return; }
+  if (entry.isDirectory) {
+    const reader = entry.createReader(); let batch;
+    do { batch = await new Promise((res, rej) => reader.readEntries(res, rej));
+      for (const e of batch) await walk(e, join(base, entry.name), out); } while (batch.length);
+  }
+}
+async function upload(items) {
+  if (!items.length) return;
+  const total = items.reduce((s, i) => s + i.file.size, 0); let done = 0;
+  $("#bar").hidden = false;
+  const openNow = info.project && cwd.toLowerCase().startsWith(("lgpt_" + info.project).toLowerCase());
+  for (let k = 0; k < items.length; k++) {
+    const it = items[k]; const dest = join(cwd, it.rel);
+    say(`subiendo ${k + 1} de ${items.length}: ${it.rel}`);
+    await new Promise((res, rej) => {
+      const x = new XMLHttpRequest(); x.open("POST", "/api/put?path=" + q(dest));
+      x.upload.onprogress = ev => { $("#barFill").style.width = ((done + ev.loaded) / total * 100) + "%"; };
+      x.onload = () => x.status == 200 ? res() : rej(new Error(x.responseText)); x.onerror = () => rej(new Error("se cortó la conexión"));
+      x.send(it.file);
+    }).catch(e => { say("Falló " + it.rel + ": " + e.message, "bad"); throw e; });
+    done += it.file.size;
+  }
+  $("#barFill").style.width = "100%";
+  say(`${items.length === 1 ? "Subido" : items.length + " archivos subidos"}${openNow ? " · el proyecto está abierto: recárgalo en la consola para verlos" : ""}`, "ok");
+  setTimeout(() => { $("#bar").hidden = true; $("#barFill").style.width = "0"; }, 1200);
+  go(cwd); loadProjects();
+}
+const drop = $("#drop");
+["dragenter", "dragover"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", async e => {
+  const out = [];
+  const entries = [...e.dataTransfer.items].map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+  if (entries.length) { for (const en of entries) await walk(en, "", out); }
+  else for (const f of e.dataTransfer.files) out.push({ file: f, rel: f.name });
+  upload(out).catch(() => {});
+});
+$("#pick").onchange = e => upload([...e.target.files].map(f => ({ file: f, rel: f.name }))).catch(() => {});
+$("#refresh").onclick = () => { loadInfo(); loadProjects(); go(cwd); };
+$("#toLib").onclick = () => go("samplelib");
+$("#mkdir").onclick = async () => { const n = prompt("Nombre de la carpeta"); if (!n || n.includes("/")) return; await api("/api/mkdir?path=" + q(join(cwd, n)), { method: "POST" }); go(cwd); };
+$("#newProj").onclick = async () => {
+  const n = prompt("Nombre del proyecto (letras y números)"); if (!n) return;
+  const clean = n.replace(/[^A-Za-z0-9_-]/g, ""); if (!clean) return;
+  await api("/api/mkdir?path=" + q("lgpt_" + clean + "/samples"), { method: "POST" }); loadProjects();
+};
+
+loadInfo().then(() => { loadProjects(); go(""); });
+setInterval(loadInfo, 10000);
+</script>
+</body>
+</html>

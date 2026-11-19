@@ -15,7 +15,9 @@ DEFINES := \
 	-DSDL2 \
 	-DSDLAUDIO \
 	-DDUMMYMIDI \
-	-DFFMPEG_ENABLED
+	-DFFMPEG_ENABLED \
+	-DWEBSERVER \
+	-DABLETON_LINK
 
 DEVKIT := /opt/rg35xx-plus-aarch64-SDL2-SDK-0.1.0/
 CROSS_COMPILE:=$(DEVKIT)bin/aarch64-none-linux-gnu-
@@ -32,6 +34,10 @@ INCLUDES = -Iinclude $(SDL_CFLAGS) -I$(DEVKIT)/$(TRIPLET)/include -I$(DEVKIT)/$(
 CFLAGS	:=	$(DEFINES) $(INCLUDES) $(OPT_FLAGS) -Wall  
 CXXFLAGS:=	$(CFLAGS) -std=gnu++03 
 LIBS	:= -static-libstdc++ -static-libgcc -Wl,-rpath-link,$(DEVKIT)/$(TRIPLET)/lib -Wl,-rpath-link,$(DEVKIT)/$(TRIPLET)/lib/pulseaudio $(SDL_LIBS) -lpthread
+
+# trk2als: Ableton Link (C++17, se compila aparte; ver Services/Link)
+LINK_DIR := $(PWD)/../sources/Externals/link
+LinkBridge.o: CXXFLAGS := $(filter-out -std=gnu++03,$(CXXFLAGS)) -std=c++17 -DLINK_PLATFORM_LINUX=1 -I$(LINK_DIR)/include -I$(LINK_DIR)/modules/asio-standalone/asio/include
 OUTPUT = ../chancho6-rg353v
 EXTENSION:= elf
 

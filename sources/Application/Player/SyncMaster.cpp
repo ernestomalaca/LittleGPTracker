@@ -27,6 +27,11 @@ void SyncMaster::SetTempo(int tempo) {
 	tickSampleCount_=60.0f*driverRate*2.0f/tempo_/8.0f/float(AUDIO_SLICES_PER_STEP)*tableRatio_  ;
 }  ;
 
+void SyncMaster::SetPlaySampleCount(float samples) {
+	playSampleCount_=samples ;
+	tickSampleCount_=samples*tableRatio_ ;
+}
+
 int SyncMaster::GetTempo() {
 	return tempo_ ;
 } ;

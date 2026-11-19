@@ -21,6 +21,7 @@
 #define VAR_FOLD 			MAKE_FOURCC('F', 'O', 'L', 'D')   // trk2als: piano roll solo con la escala
 #define VAR_RENDER MAKE_FOURCC('R', 'N', 'D', 'R')
 #define VAR_METRONOME MAKE_FOURCC('M', 'E', 'T', 'R') // trk2als: metrónomo off/on
+#define VAR_LINK MAKE_FOURCC('L', 'I', 'N', 'K') // trk2als: Ableton Link off/on/on+play
 // trk2als: cuantos de los 8 canales (contando desde el ultimo) son pistas de audio
 #define VAR_AUDIOTRACKS MAKE_FOURCC('A', 'U', 'D', 'T') // trk2als: solo para abrir proyectos viejos
 // trk2als: tipo de cada pista (TYP0..TYP7)

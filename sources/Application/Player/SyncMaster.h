@@ -12,6 +12,7 @@ public:
 	void Start() ;
 	void Stop() ;
 	void SetTempo(int tempo) ;
+	void SetPlaySampleCount(float samples) ;   // trk2als: Link ajusta cada rebanada
 	int GetTempo() ;
 	void NextSlice() ;
 	bool MajorSlice() ;
