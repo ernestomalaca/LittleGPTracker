@@ -17,8 +17,8 @@
 
 #define NO_NOTE 0xFF
 #define MAX_PITCH 119
-#define ROWS 24           // filas de notas a la vista (dos octavas)
-#define ROW_H 14
+#define ROWS 16           // trk2als: filas de notas a la vista (como los 16 pads del kit)
+#define ROW_H 21
 #define STEP_W 36
 #define GRID_X 56
 #define GRID_Y 54
@@ -1303,16 +1303,27 @@ void ClipView::DrawView() {
             sprintf(info, "pag %d/%d   paso %d   %s", page + 1, npages > 0 ? npages : 1,
                     cursorStep_ % 16 + 1, nn.c_str());
         }
+        // trk2als: en letra grande y corto: nota, velocity, largo (o página y paso)
+        if (cur >= 0) {
+            sprintf(info, "%s V%d L%d", noteName(notes[cur].pitch).c_str(), notes[cur].vel, notes[cur].len);
+            if (notes[cur].tick) sprintf(info + strlen(info), " +%d", notes[cur].tick);
+            if (notes[cur].rat > 1) sprintf(info + strlen(info), " x%d", notes[cur].rat);
+        } else {
+            sprintf(info, "%s P%d/%d S%d", nn.c_str(), page + 1, npages > 0 ? npages : 1,
+                    cursorStep_ % 16 + 1);
+        }
         if (!msg_.empty()) {   // el aviso de lo que acaba de pasar
             int w = 8 * int(msg_.size()) + 12;
-            FillRect(6, 31, w, 18, Mix(bg, hi2, 25), 4);
-            DrawText(12, 34, msg_.c_str(), hi2, 0);
+            FillRect(6, 34, w, 18, Mix(bg, hi2, 25), 4);
+            DrawText(12, 37, msg_.c_str(), hi2, 0);
         } else {
-            DrawText(10, 34, info, fg, 0);
-            if (scale > 0) {   // la escala, como en Live
+            DrawText(10, 36, info, fg, 1);
+            int used = 10 + 16 * int(strlen(info));
+            if (scale > 0) {   // la escala, como en Live (si cabe)
                 std::string sc = std::string(viewData_->project_->GetFold() ? "FOLD " : "") + scaleNotes[root] + " " + scaleNames[scale];
                 if (sc.size() > 18) sc = sc.substr(0, 18);
-                DrawText(466 - 8 * int(sc.size()), 34, sc.c_str(), hi, 0);
+                int sx = 466 - 8 * int(sc.size());
+                if (sx > used + 8) DrawText(sx, 38, sc.c_str(), hi, 0);
             }
         }
         // las páginas, a la derecha (y el loop debajo)
@@ -1362,9 +1373,9 @@ void ClipView::DrawView() {
             FillRect(8, y + 1, 44, RH - 2, key, 2);
             if (!pn.empty()) DrawText(10, y + (RH - 12) / 2, pn.substr(0, 5).c_str(), bg, 0);
         } else if (scale > 0 ? isRoot : pitch % 12 == 0)
-            DrawText(12, y + 1, noteName(pitch).c_str(), bg, 0);
+            DrawText(12, y + (RH - 12) / 2, noteName(pitch).c_str(), bg, 0);
         else if (pitch == cursorPitch_)   // la tecla del cursor dice qué nota es
-            DrawText(12, y + 1, noteName(pitch).c_str(), bg, 0);
+            DrawText(12, y + (RH - 12) / 2, noteName(pitch).c_str(), bg, 0);
     }
     for (int s = 0; s <= 16; s++) {
         GUIColor c = (s % 4 == 0) ? Mix(bg, fg, 28) : Mix(bg, fg, 13);
