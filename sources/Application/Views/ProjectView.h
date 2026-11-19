@@ -32,11 +32,11 @@ private:
   unsigned long lastTick_;
   unsigned long lastClock_;
   UIField *tempoField_;
-  // trk2als: el estilo de la pantalla (PROJECTSTYLE en config.xml, 1 a 4)
-  int style_;
-  struct Label { int col, row; const char *text; };
-  Label labels_[16];
-  int labelCount_;
-  const char *fmt(int col, int row, const char *label, const char *value, long &x);
+  // trk2als: el tablero
+  void drawBoard();
+  UIField *rootField_, *scaleField_, *transpField_, *foldField_;
+  UIField *chipField_[6];
+  UIField *btnField_[5];
+  const char *btnName_[5];
 } ;
 #endif

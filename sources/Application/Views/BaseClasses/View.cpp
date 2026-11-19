@@ -420,12 +420,13 @@ bool View::drawTopBar(int tab, const char *context) {
 	// el proyecto (8 letras)
 	std::string set=projectName_.empty()?"CHANCHO6":projectName_ ;
 	for (size_t i=0;i<set.size();i++) if (set[i]>='a' && set[i]<='z') set[i]=set[i]-'a'+'A' ;
-	if (set.size()>8) set=set.substr(0,8) ;
+	// trk2als: en el Proyecto (tab<0) va el nombre completo y sin pestañas
+	if (set.size()>(tab<0?26u:8u)) set=set.substr(0,tab<0?26:8) ;
 	DrawText(x,TY,set.c_str(),hi2,1) ;
 	x+=16*int(set.size())+12 ;
 	// pestañas de tres letras
 	static const char *tabs[4]={"SES","CLP","INS","MIX"} ;
-	for (int t=0;t<4;t++) {
+	for (int t=0;t<4 && tab>=0;t++) {
 		int w=16*3+8 ;
 		if (t==tab) {
 			FillRect(x,3,w,H-8,hi2,3) ;
