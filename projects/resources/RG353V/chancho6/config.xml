@@ -2,4 +2,5 @@
 	<AUTO_LOAD_LAST value="YES"/>
 	<SCREENMULT value="2"/>   <!-- 320x240 x2 = la pantalla de 640x480 -->
 	<AUDIOBUFFERSIZE value="512"/>
+	<CONSOLEFACTOR value="1"/>   <!-- aquí ya es la consola: el "rg" es la carga real -->
 </CONFIG>
