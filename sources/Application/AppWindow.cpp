@@ -76,6 +76,11 @@ AppWindow::AppWindow(I_GUIWindowImp &imp) : GUIWindow(imp) {
 
     // trk2als: pantalla de arranque
     {
+        const char *hi = Config::GetInstance()->GetValue("HELPIDLE");
+        _helpIdleMs = hi ? atoi(hi) : 3000;
+        _overlayOn = _overlayDirty = _helpShown = false;
+        _lastInput = System::GetInstance()->GetClock();
+        _swallow = 0;
         const char *sp = Config::GetInstance()->GetValue("SPLASH");
         int ms = sp ? atoi(sp) : 1800;
         _splashUntil = ms > 0 ? System::GetInstance()->GetClock() + ms : 0;
@@ -378,6 +383,23 @@ void AppWindow::Flush() {
             }
         }
     }
+    // trk2als: la ayuda va encima de todo (rejilla y figuras)
+    if (_overlayOn && (_overlayDirty || count > 0 || (shapesOn && _shapesDirty))) {
+        for (size_t i = 0; i < _overlay.size(); i++) {
+            Shape &sh = _overlay[i];
+            if (sh.type == 0) {
+                GUIRect r(sh.x, sh.y, sh.x + sh.w, sh.y + sh.h);
+                if (sh.thick > 0)
+                    GUIWindow::FrameRoundRect(r, sh.radius, sh.thick, sh.color);
+                else
+                    GUIWindow::FillRoundRect(r, sh.radius, sh.color);
+            } else {
+                GUIPoint p(sh.x, sh.y);
+                GUIWindow::BlendText(sh.text.c_str(), p, sh.color, sh.scale);
+            }
+        }
+        _overlayDirty = false;
+    }
     memcpy(_prevShapeCells, _shapeCells, sizeof(_shapeCells));
     _shapesDirty = false;
     _prevShapesOn = shapesOn;
@@ -549,6 +571,14 @@ bool AppWindow::onEvent(GUIEvent &event) {
     switch (event.GetType()) {
 
     case ET_PADBUTTONDOWN: {
+        _lastInput = System::GetInstance()->GetClock();
+        _helpShown = false;
+        if (_overlayOn) {   // trk2als: cierra la ayuda y nada más
+            hideHelp();
+            _swallow |= v;
+            _isDirty = true;
+            break;
+        }
         bool repeat = (_mask & v) != 0;
         _mask |= v;
         if (_currentView)
@@ -557,7 +587,11 @@ bool AppWindow::onEvent(GUIEvent &event) {
     }
 
     case ET_PADBUTTONUP:
-
+        _lastInput = System::GetInstance()->GetClock();
+        if (_swallow & v) {   // el que cerró la ayuda
+            _swallow &= ~v;
+            break;
+        }
         _mask &= (0xFFFF - v);
         if (_currentView)
             joyButton(v, false, false);
@@ -632,6 +666,15 @@ void AppWindow::onUpdate() {
                 System::GetInstance()->PostQuitMessage();
             }
         }
+    }
+
+    // trk2als: ayuda en reposo
+    if (!_overlayOn && !_helpShown && _helpIdleMs > 0 && _currentView &&
+        _currentView != _nullView && !_currentView->HasModal() && SupportsShapes() &&
+        !(Player::GetInstance() && Player::GetInstance()->IsRunning()) && _mask == 0 &&
+        System::GetInstance()->GetClock() - _lastInput > (unsigned long)_helpIdleMs &&
+        !_currentView->GetHelpItems().empty()) {
+        showHelp();
     }
 
     // Call AnimationUpdate periodically (~10-25Hz depending on frame rate)
@@ -1011,4 +1054,81 @@ void AppWindow::drawSplash() {
             }
         }
     }
+}
+
+/************************************************************
+ trk2als: ayuda en reposo (ver AppWindow.h)
+ ************************************************************/
+
+void AppWindow::showHelp() {
+    std::string all = _currentView->GetHelpItems();
+    std::vector<std::string> keys, whats;
+    size_t pos = 0, keyLen = 0;
+    while (pos < all.size() && keys.size() < 15) {
+        size_t end = all.find(';', pos);
+        if (end == std::string::npos) end = all.size();
+        std::string item = all.substr(pos, end - pos);
+        pos = end + 1;
+        if (item.empty()) continue;
+        size_t colon = item.find(':');
+        std::string k = colon == std::string::npos ? item : item.substr(0, colon);
+        std::string w = colon == std::string::npos ? "" : item.substr(colon + 1);
+        keys.push_back(k);
+        whats.push_back(w);
+        if (k.size() > keyLen) keyLen = k.size();
+    }
+    if (keys.empty()) return;
+    _helpShown = true;
+    GUIColor bg = GetColor(CD_BACKGROUND);
+    GUIColor fg = GetColor(CD_NORMAL);
+    GUIColor hi = GetColor(CD_HILITE1);
+    GUIColor hi2 = GetColor(CD_HILITE2);
+    GUIColor dim((bg._r * 45 + fg._r * 55) / 100, (bg._g * 45 + fg._g * 55) / 100,
+                 (bg._b * 45 + fg._b * 55) / 100);
+    GUIColor panel((bg._r * 88 + fg._r * 12) / 100, (bg._g * 88 + fg._g * 12) / 100,
+                   (bg._b * 88 + fg._b * 12) / 100);
+    const int X = 32, W = 640 - 2 * X, LINE = 24;
+    int h = 20 + 16 + 16 + int(keys.size()) * LINE + 8 + 12 + 16;
+    int Y = (480 - h) / 2;
+    if (Y < 36) Y = 36;
+    _overlay.clear();
+    Shape sh;
+    sh.type = 0; sh.thick = 0; sh.radius = 6;
+    sh.x = X; sh.y = Y; sh.w = W; sh.h = h; sh.color = panel;
+    _overlay.push_back(sh);
+    sh.thick = 3; sh.color = hi;
+    _overlay.push_back(sh);
+    Shape t;
+    t.type = 1; t.scale = 1;
+    t.x = X + 24; t.y = Y + 20; t.text = "AYUDA"; t.color = hi;
+    _overlay.push_back(t);
+    int kx = X + 24, wx = kx + 16 * int(keyLen) + 24;
+    for (size_t i = 0; i < keys.size(); i++) {
+        int y = Y + 20 + 16 + 16 + int(i) * LINE;
+        t.scale = 1;
+        t.x = kx; t.y = y; t.text = keys[i]; t.color = hi2;
+        _overlay.push_back(t);
+        std::string w = whats[i];
+        int room = (X + W - 16 - wx) / 16;
+        if (room > 0 && (int)w.size() > room) w = w.substr(0, room);
+        t.x = wx; t.text = w; t.color = fg;
+        _overlay.push_back(t);
+    }
+    t.scale = 0;
+    t.x = X + 24; t.y = Y + h - 24; t.text = "cualquier boton la cierra"; t.color = dim;
+    _overlay.push_back(t);
+    _overlayOn = true;
+    _overlayDirty = true;
+    Flush();
+}
+
+void AppWindow::hideHelp() {
+    _overlayOn = false;
+    _overlay.clear();
+    // todo lo que tapaba se vuelve a dibujar
+    memset(_preScreen, 0xFE, sizeof(_preScreen));
+    _shapesDirty = true;
+    GUIColor bg = GetColor(CD_BACKGROUND);
+    GUIRect all(0, 0, 640, 480);
+    GUIWindow::FillRoundRect(all, 0, bg);
 }

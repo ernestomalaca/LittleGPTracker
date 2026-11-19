@@ -399,84 +399,66 @@ bool View::drawTopBar(int tab, const char *context) {
 	if (miniLayout_ || !SupportsShapes()) { topTab_=-2 ; return false ; }
 	topTab_=tab ;
 	topCtx_=context?context:"" ;
+	// trk2als: barra de 32 px (dos renglones de la rejilla) con la letra
+	// grande: 16 px por letra, 40 letras a lo ancho
 	GUIColor bg=ColorOf(CD_BACKGROUND) ;
 	GUIColor fg=ColorOf(CD_NORMAL) ;
-	GUIColor hi=ColorOf(CD_HILITE1) ;
 	GUIColor hi2=ColorOf(CD_HILITE2) ;
 	GUIColor dim=Mix(bg,fg,55) ;
-	const int H=26 ;
-	FillRect(0,0,640,H,Mix(bg,fg,10)) ;
-	FillRect(0,H,640,1,Mix(bg,fg,20)) ;
-	int x=10 ;
-	// el set
-	std::string set=projectName_.empty()?"CHANCHO 6":projectName_ ;
+	const int H=32 ;
+	const int TY=8 ;   // renglón del texto
+	FillRect(0,0,640,H-2,Mix(bg,fg,10)) ;
+	FillRect(0,H-2,640,2,Mix(bg,fg,20)) ;
+	int x=8 ;
+	// el proyecto (8 letras)
+	std::string set=projectName_.empty()?"CHANCHO6":projectName_ ;
 	for (size_t i=0;i<set.size();i++) if (set[i]>='a' && set[i]<='z') set[i]=set[i]-'a'+'A' ;
-	if (set.size()>12) set=set.substr(0,12) ;
-	DrawText(x,7,set.c_str(),hi2,0) ;
-	x+=8*int(set.size())+14 ;
-	// pestañas
-	static const char *tabs[4]={"SES","CLIP","INST","MIX"} ;
+	if (set.size()>8) set=set.substr(0,8) ;
+	DrawText(x,TY,set.c_str(),hi2,1) ;
+	x+=16*int(set.size())+12 ;
+	// pestañas de tres letras
+	static const char *tabs[4]={"SES","CLP","INS","MIX"} ;
 	for (int t=0;t<4;t++) {
-		int w=8*int(strlen(tabs[t]))+10 ;
+		int w=16*3+8 ;
 		if (t==tab) {
-			FillRect(x,4,w,H-8,hi2,3) ;
-			DrawText(x+5,7,tabs[t],bg,0) ;
+			FillRect(x,3,w,H-8,hi2,3) ;
+			DrawText(x+4,TY,tabs[t],bg,1) ;
 		} else {
-			DrawText(x+5,7,tabs[t],dim,0) ;
+			DrawText(x+4,TY,tabs[t],dim,1) ;
 		}
-		x+=w+4 ;
+		x+=w+2 ;
 	}
-	x+=10 ;
+	x+=8 ;
 	// a la derecha: tempo y reproducción
 	Player *player=Player::GetInstance() ;
-	char right[32] ;
-	snprintf(right,sizeof(right),"%d BPM",viewData_->project_->GetTempo()) ;
-	int rx=640-10-8*int(strlen(right)) ;
+	char right[16] ;
+	snprintf(right,sizeof(right),"%d",viewData_->project_->GetTempo()) ;
+	int rx=640-8-16*int(strlen(right)) ;
 	bool running=player && player->IsRunning() ;
 	topRunning_=running ;
 	topTempo_=viewData_->project_->GetTempo() ;
-	int px=rx-22 ;
+	int px=rx-20 ;
 	if (running) {   // triángulo de play
-		for (int k=0;k<10;k++) FillRect(px+k,8+k/2,1,10-k,ColorOf(CD_PLAY)) ;
+		for (int k=0;k<12;k++) FillRect(px+k,9+k/2,1,13-k,ColorOf(CD_PLAY)) ;
 	} else {         // cuadrado de stop
-		FillRect(px,8,9,9,dim) ;
+		FillRect(px,10,11,11,dim) ;
 	}
-	DrawText(rx,7,right,dim,0) ;
-	// el contexto, en lo que queda
+	DrawText(rx,TY,right,fg,1) ;
+	// el contexto (p. ej. el kit), en letra chica en lo que queda
 	if (context && *context) {
-		int room=(px-10-x)/8 ;
+		int room=(px-8-x)/8 ;
 		std::string c=context ;
 		if (room>0 && (int)c.size()>room) c=c.substr(0,room) ;
-		if (room>0) DrawText(x,7,c.c_str(),fg,0) ;
+		if (room>0) DrawText(x,TY+2,c.c_str(),fg,0) ;
 	}
 	return true ;
 }
 
 bool View::drawHelpBar(const char *items) {
+	// trk2als: ya no se dibuja abajo; AppWindow la muestra como recuadro
+	// cuando uno se queda quieto (HELPIDLE en config.xml)
 	if (miniLayout_ || !SupportsShapes() || !items) return false ;
-	GUIColor bg=ColorOf(CD_BACKGROUND) ;
-	GUIColor fg=ColorOf(CD_NORMAL) ;
-	GUIColor dim=Mix(bg,fg,55) ;
-	const int Y=480-16 ;
-	FillRect(0,Y,640,16,Mix(bg,fg,10)) ;
-	FillRect(0,Y-1,640,1,Mix(bg,fg,20)) ;
-	int x=10 ;
-	std::string all=items ;
-	size_t pos=0 ;
-	while (pos<all.size()) {
-		size_t end=all.find(';',pos) ;
-		if (end==std::string::npos) end=all.size() ;
-		std::string item=all.substr(pos,end-pos) ;
-		pos=end+1 ;
-		size_t colon=item.find(':') ;
-		std::string key=(colon==std::string::npos)?item:item.substr(0,colon) ;
-		std::string what=(colon==std::string::npos)?"":item.substr(colon+1) ;
-		int w=8*int(key.size()+1+what.size()) ;
-		if (x+w>630) break ;
-		DrawText(x,Y+2,key.c_str(),fg,0) ;
-		DrawText(x+8*int(key.size()+1),Y+2,what.c_str(),dim,0) ;
-		x+=w+16 ;
-	}
+	helpItems_=items ;
 	return true ;
 }
 

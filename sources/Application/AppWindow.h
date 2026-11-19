@@ -125,6 +125,19 @@ class AppWindow : public GUIWindow, I_Observer, Status {
     unsigned long _splashUntil;
     bool _splashDrawn;
     void drawSplash();
+    // trk2als: ayuda en reposo. Si uno no toca nada HELPIDLE ms (config.xml,
+    // 3000 por omisión, 0 = nunca) con la música parada, aparece un recuadro
+    // con los atajos de la pantalla, encima de todo. El botón que lo cierra no
+    // hace nada más.
+    std::vector<Shape> _overlay;
+    bool _overlayOn;
+    bool _overlayDirty;
+    bool _helpShown;            // ya salió en este rato quieto
+    unsigned long _lastInput;
+    unsigned short _swallow;    // botones que cerraron la ayuda (se ignoran al soltar)
+    int _helpIdleMs;
+    void showHelp();
+    void hideHelp();
     bool _shapesDirty;          // las figuras cambiaron: redibujar sus celdas
     bool _prevShapesOn;
 
