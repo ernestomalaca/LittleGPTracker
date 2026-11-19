@@ -3,6 +3,8 @@
 #include "Services/Audio/Audio.h"
 #include "Application/Model/Config.h"
 #include <math.h>
+#include <fstream>
+#include "System/FileSystem/FileSystem.h"
 #include "Application/Views/BaseClasses/ViewEvent.h"
 #include "System/io/Status.h"
 #include "System/System/System.h"
@@ -1507,10 +1509,37 @@ bool Player::linkSlice(SyncMaster *sync) {
 
 // hilo de la interfaz: prende/apaga según el proyecto, y pasa el tempo y el
 // play/stop en los dos sentidos
+// el desfase de Link es de la consola (su audio y su red), no del proyecto:
+// se guarda en chancho6/linkoffset.txt y vale para todos los proyectos
+static int linkOffsetFile(bool write, int value) {
+    std::string path = Path("bin:linkoffset.txt").GetPath();
+    if (write) {
+        std::ofstream o(path.c_str());
+        o << value << "\n";
+        return value;
+    }
+    std::ifstream i(path.c_str());
+    int v = 0;
+    if (!(i >> v)) v = 0;
+    return v;
+}
+
 void Player::LinkPoll() {
     if (!project_) {   // sin proyecto (en la lista de proyectos): Link apagado
         if (LinkBridge::Enabled()) LinkBridge::Enable(false);
         return;
+    }
+    {
+        static Project *seen = 0;
+        static int saved = 0x7FFF;
+        if (saved == 0x7FFF) saved = linkOffsetFile(false, 0);
+        Variable *ofs = project_->FindVariable(VAR_LINKOFS);
+        if (project_ != seen) {          // proyecto recién abierto: el desfase guardado
+            seen = project_;
+            ofs->SetInt(saved);
+        } else if (ofs->GetInt() != saved) {   // lo cambiaron: se guarda
+            saved = linkOffsetFile(true, ofs->GetInt());
+        }
     }
     int mode = project_->FindVariable(VAR_LINK)->GetInt();
     bool on = mode > 0;
