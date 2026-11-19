@@ -1,5 +1,6 @@
 #include "Player.h"
 #include "Services/Link/LinkBridge.h"
+extern double g_renderedSamples;   // AudioOut.cpp
 #include "Services/Audio/Audio.h"
 #include "Application/Model/Config.h"
 #include <math.h>
@@ -595,6 +596,14 @@ void Player::Update(Observable &o,I_ObservableData *d) {
 
     MidiService::GetInstance()->Trigger();
     project_->Trigger();
+
+	// trk2als: Link: el filtro de tiempo se alimenta siempre (al arrancar ya
+	// sabe a qué hora sale cada muestra)
+	if (!isRunning_ && LinkBridge::Enabled()) {
+        double b, t;
+        bool p;
+        LinkBridge::AudioState(g_renderedSamples, linkLatency(), b, t, p);
+    }
 
 	if (isRunning_) {
         SyncMaster *sync = SyncMaster::GetInstance();
@@ -1459,7 +1468,7 @@ void Player::linkStart() {
     linkInteg_ = 0;
     double beat, tempo;
     bool playing;
-    if (!LinkBridge::AudioState(linkLatency(), beat, tempo, playing)) return;
+    if (!LinkBridge::AudioState(g_renderedSamples, linkLatency(), beat, tempo, playing)) return;
     // el siguiente compás (si casi estamos en uno, ese mismo)
     linkOrigin_ = ceil((beat - 0.02) / 4.0) * 4.0;
     linkWait_ = true;
@@ -1467,36 +1476,36 @@ void Player::linkStart() {
     linkRemoteStart_ = false;
 }
 
-// devuelve false mientras se espera el compás (la rebanada no avanza)
+// cada rebanada (1/24 de tiempo). El tempo exacto de la sesión va a todo
+// (instrumentos incluidos); la fase se corrige solo con el largo de la
+// rebanada, poquito a poco (máximo 3%), así no cambia cómo suena nada: solo
+// se recorre cuándo arrancan las notas. Devuelve false mientras espera el compás
 bool Player::linkSlice(SyncMaster *sync) {
     double beat, tempo;
     bool playing;
-    if (!LinkBridge::AudioState(linkLatency(), beat, tempo, playing) || tempo <= 0) return true;
-    double sr = Audio::GetInstance()->GetSampleRate();
-    if (sr <= 0) sr = 44100;
-    double base = sr * 60.0 / (tempo * 24.0);   // una rebanada = 1/24 de tiempo
+    if (!LinkBridge::AudioState(g_renderedSamples, linkLatency(), beat, tempo, playing) || tempo <= 0)
+        return true;
+    sync->SetTempoExact((float)tempo);
+    float base = sync->GetPlaySampleCount();
     if (linkWait_) {
-        if (beat < linkOrigin_ - 0.5 / 24.0) {
-            sync->SetPlaySampleCount((float)base);
-            return false;
-        }
+        if (beat < linkOrigin_ - 0.5 / 24.0) return false;
         linkWait_ = false;
         linkSlices_ = 0;
+        linkInteg_ = 0;
     }
     double err = (beat - linkOrigin_) - linkSlices_ / 24.0;   // + = vamos atrás
-    if (err > 2.0 || err < -2.0) {   // saltó (alguien movió la sesión): se reengancha
+    if (err > 1.0 || err < -1.0) {   // saltó (alguien movió la sesión): se reengancha
         linkOrigin_ = beat - linkSlices_ / 24.0;
         err = 0;
         linkInteg_ = 0;
     }
-    // proporcional + integral: el integral absorbe la diferencia de relojes
-    // (la tarjeta de sonido nunca va exacta) y el error vuelve a cero
-    linkInteg_ += 0.004 * err;
-    if (linkInteg_ > 0.05) linkInteg_ = 0.05;
-    if (linkInteg_ < -0.05) linkInteg_ = -0.05;
-    double c = 0.5 * err + linkInteg_;
-    if (c > 0.08) c = 0.08;
-    if (c < -0.08) c = -0.08;
+    // integral lento (la tarjeta de sonido y el reloj de Link no van exactos)
+    linkInteg_ += 0.002 * err;
+    if (linkInteg_ > 0.005) linkInteg_ = 0.005;
+    if (linkInteg_ < -0.005) linkInteg_ = -0.005;
+    double c = 0.35 * err + linkInteg_;
+    if (c > 0.03) c = 0.03;
+    if (c < -0.03) c = -0.03;
     sync->SetPlaySampleCount((float)(base * (1.0 - c)));
     static int dbg = -1;   // TRK_LINKDBG=1: cómo va la fase, una vez por tiempo
     if (dbg < 0) dbg = getenv("TRK_LINKDBG") ? 1 : 0;

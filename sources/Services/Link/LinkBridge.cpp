@@ -2,6 +2,7 @@
 
 #include "LinkBridge.h"
 #include <ableton/Link.hpp>
+#include <ableton/link/HostTimeFilter.hpp>
 #include <atomic>
 #include <chrono>
 #include <memory>
@@ -9,6 +10,10 @@
 namespace {
 std::unique_ptr<ableton::Link> g_link;
 std::atomic<bool> g_on(false);
+// a qué hora del reloj de Link corresponde cada muestra calculada: una
+// regresión sobre las últimas mediciones (quita los brincos de cuando el
+// audio calcula varios bloques seguidos)
+ableton::link::HostTimeFilter<ableton::link::platform::Clock> g_filter;
 const double QUANTUM = 4.0;   // un compás de 4/4
 
 ableton::Link &link() {
@@ -31,11 +36,12 @@ int Peers() { return g_on.load() ? (int)link().numPeers() : 0; }
 
 void EnableStartStop(bool on) { link().enableStartStopSync(on); }
 
-bool AudioState(double aheadSec, double &beat, double &tempo, bool &playing) {
+bool AudioState(double sampleTime, double aheadSec, double &beat, double &tempo, bool &playing) {
     if (!g_on.load()) return false;
     ableton::Link &l = link();
     auto state = l.captureAudioSessionState();
-    auto t = l.clock().micros() + std::chrono::microseconds((long long)(aheadSec * 1e6));
+    auto t = g_filter.sampleTimeToHostTime(sampleTime) +
+             std::chrono::microseconds((long long)(aheadSec * 1e6));
     beat = state.beatAtTime(t, QUANTUM);
     tempo = state.tempo();
     playing = state.isPlaying();

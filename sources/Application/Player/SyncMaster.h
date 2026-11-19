@@ -12,7 +12,11 @@ public:
 	void Start() ;
 	void Stop() ;
 	void SetTempo(int tempo) ;
-	void SetPlaySampleCount(float samples) ;   // trk2als: Link ajusta cada rebanada
+	// trk2als: Link. El tempo exacto de la sesión (lo que usan los loops y el
+	// warp) y, aparte, el largo de la rebanada que corrige la fase (solo
+	// mueve cuándo suenan las notas, no la velocidad del audio)
+	void SetTempoExact(float bpm) ;
+	void SetPlaySampleCount(float samples) ;
 	int GetTempo() ;
 	void NextSlice() ;
 	bool MajorSlice() ;

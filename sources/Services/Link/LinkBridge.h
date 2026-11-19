@@ -17,7 +17,8 @@ namespace LinkBridge {
     // hilo de audio: el tiempo (beats), el tempo y si la sesión está tocando,
     // para dentro de 'aheadSec' segundos (lo que tarda en oírse lo que se
     // calcula ahora). false si Link está apagado
-    bool AudioState(double aheadSec, double &beat, double &tempo, bool &playing);
+    // 'sampleTime': cuántas muestras se han calculado antes de esta rebanada
+    bool AudioState(double sampleTime, double aheadSec, double &beat, double &tempo, bool &playing);
     // hilo de audio: avisa que empezamos a tocar en el compás 'atBeat'
     void AudioSetPlaying(bool playing, double aheadSec, double atBeat);
 
@@ -34,7 +35,7 @@ namespace LinkBridge {
     inline bool Enabled() { return false; }
     inline int Peers() { return 0; }
     inline void EnableStartStop(bool) {}
-    inline bool AudioState(double, double &, double &, bool &) { return false; }
+    inline bool AudioState(double, double, double &, double &, bool &) { return false; }
     inline void AudioSetPlaying(bool, double, double) {}
     inline double Tempo() { return 0; }
     inline void SetTempo(double) {}
