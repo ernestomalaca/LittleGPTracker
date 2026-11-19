@@ -30,7 +30,14 @@ View::View(GUIWindow &w,ViewData *viewData):
 	   GUIRect rect=w.GetRect() ;
      miniLayout_=(rect.Width()<320);
 	   View::margin_=0 ;
-		songRowCount_ = miniLayout_ ? 16:22; // 22 is row display count among other things
+		// trk2als: la Session es una rejilla de bloques grandes de 8 escenas
+		// (SESSIONROWS en config.xml: 8 o 12)
+		{
+			const char *sr=Config::GetInstance()->GetValue("SESSIONROWS") ;
+			int rows=sr?atoi(sr):8 ;
+			if (rows!=12) rows=8 ;
+			songRowCount_ = miniLayout_ ? 16:rows;
+		}
 
 		const char *altRowStr = Config::GetInstance()->GetValue("ALTROWNUMBER");
 		if (altRowStr) {

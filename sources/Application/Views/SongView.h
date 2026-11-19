@@ -94,6 +94,15 @@ class SongView : public View {
     void prepareClip(unsigned char clip); // .pone el instrumento en looper sync
     unsigned char freeClip(); // .primer instrumento que no usa ninguna phrase ni pista de audio
 
+    // trk2als: la Session como rejilla de bloques (figuras)
+    bool blockGrid();                 // se dibuja así (plataformas con figuras)
+    void drawBlockGrid();
+    std::string blockState();         // lo que cambia al sonar (para redibujar)
+    void blockRedraw();
+    std::string lastBlockState_;
+    int blockVu_[8];
+    bool inBlockRedraw_;
+    unsigned long lastVuDraw_;
     int lastPlayedPosition_[8]; // .Last position played for song
                                 //  used for drawing purpose
 
