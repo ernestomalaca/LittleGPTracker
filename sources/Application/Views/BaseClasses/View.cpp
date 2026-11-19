@@ -23,6 +23,7 @@ View::View(GUIWindow &w,ViewData *viewData):
 	hasFocus_(false),
 	topTab_(-2),
 	topRunning_(false),
+	topLinks_(-1),
 	topTempo_(0)
 {
   if (!initPrivate_) 
@@ -267,6 +268,8 @@ void View::FrameRect(int x, int y, int w, int h, GUIColor c, int radius, int thi
 void View::DrawText(int x, int y, const char *txt, GUIColor c, int scale) {
 	((AppWindow &)w_).AddText(x, y, txt, c, scale);
 }
+GUIColor View::LinkGreen() { return GUIColor(0x3E, 0xCF, 0xAA); }   // el verde de Link
+
 GUIColor View::ColorOf(ColorDefinition cd) { return ((AppWindow &)w_).GetColor(cd); }
 GUIColor View::Mix(GUIColor a, GUIColor b, int t) {
 	// t en porcentaje: 0 = a, 100 = b
@@ -396,7 +399,8 @@ void View::refreshTopBar() {
 	if (topTab_<-1) return ;
 	Player *player=Player::GetInstance() ;
 	bool running=player && player->IsRunning() ;
-	if (running!=topRunning_ || viewData_->project_->GetTempo()!=topTempo_) {
+	int links=(player && player->LinkOn())?player->LinkPeers():-1 ;
+	if (running!=topRunning_ || viewData_->project_->GetTempo()!=topTempo_ || links!=topLinks_) {
 		std::string ctx=topCtx_ ;
 		drawTopBar(topTab_,ctx.c_str()) ;
 	}
@@ -452,6 +456,25 @@ bool View::drawTopBar(int tab, const char *context) {
 		FillRect(px,10,11,11,dim) ;
 	}
 	DrawText(rx,TY,right,fg,1) ;
+	// trk2als: Ableton Link: "1 LINK" en verde cuando hay alguien; si está
+	// prendido y buscando, solo el contorno
+	topLinks_=-1 ;
+	if (player && player->LinkOn()) {
+		int n=player->LinkPeers() ;
+		topLinks_=n ;
+		char lk[16] ;
+		if (n>0) snprintf(lk,sizeof(lk),"%d LINK%s",n,n==1?"":"S") ;
+		else snprintf(lk,sizeof(lk),"LINK") ;
+		int lw=8*int(strlen(lk))+14 ;
+		px-=lw+10 ;
+		if (n>0) {
+			FillRect(px,6,lw,19,LinkGreen(),4) ;
+			DrawText(px+7,TY+2,lk,bg,0) ;
+		} else {
+			FrameRect(px,6,lw,19,Mix(bg,LinkGreen(),55),4,2) ;
+			DrawText(px+7,TY+2,lk,Mix(bg,LinkGreen(),70),0) ;
+		}
+	}
 	// el contexto (p. ej. el kit), en letra chica en lo que queda
 	if (context && *context) {
 		int room=(px-8-x)/8 ;

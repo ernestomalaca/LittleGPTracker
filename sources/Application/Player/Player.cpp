@@ -1437,7 +1437,9 @@ int Player::ClipTickPos(int channel) {
 // lo que tarda en oírse lo que se calcula ahora (segundos)
 double Player::linkLatency() {
     static double lat = -1;
-    if (lat < 0) {
+    double ofs = project_ ? project_->FindVariable(VAR_LINKOFS)->GetInt() / 1000.0 : 0.0;
+    if (lat >= 0) return lat + ofs;
+    {
         Config *c = Config::GetInstance();
         const char *b = c->GetValue("AUDIOBUFFERSIZE");
         const char *o = c->GetValue("LINKOFFSET");   // ms, para afinar a oído
@@ -1446,7 +1448,7 @@ double Player::linkLatency() {
         if (sr <= 0) sr = 44100;
         lat = 3.0 * buf / sr + (o ? atof(o) / 1000.0 : 0.0);
     }
-    return lat;
+    return lat + ofs;
 }
 
 void Player::linkStart() {
@@ -1552,3 +1554,4 @@ void Player::LinkPoll() {
 }
 
 int Player::LinkPeers() { return LinkBridge::Peers(); }
+bool Player::LinkOn() { return LinkBridge::Enabled(); }

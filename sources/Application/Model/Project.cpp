@@ -38,6 +38,7 @@ tempoNudge_(0)
     this->Insert(new Variable("metronome", VAR_METRONOME, metroStates, 2, 0));
     static const char *linkStates[3] = {"off", "on", "on+play"};
     this->Insert(new Variable("link", VAR_LINK, linkStates, 3, 0));
+    this->Insert(new Variable("linkoffset", VAR_LINKOFS, (int)0, 0));
     Variable *pregain =
         new Variable("pregain", VAR_PREGAIN, 100, 200);
     this->Insert(pregain);

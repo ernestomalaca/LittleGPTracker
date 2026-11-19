@@ -35,7 +35,7 @@ private:
   // trk2als: el tablero
   void drawBoard();
   UIField *rootField_, *scaleField_, *transpField_, *foldField_;
-  UIField *chipField_[7];
+  UIField *chipField_[8];
   UIField *btnField_[5];
   const char *btnName_[5];
 } ;

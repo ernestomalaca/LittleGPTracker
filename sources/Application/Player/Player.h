@@ -54,6 +54,7 @@ public:
 	// trk2als: Ableton Link (lo llama la interfaz seguido)
 	void LinkPoll() ;
 	int LinkPeers() ;
+	bool LinkOn() ;
 	int AudioBars(unsigned char clip) { return audioBars(clip) ; }   // trk2als
 	void SetAutoRec(bool on) { autoRec_ = on ; autoRecPending_ = false ; }
 	bool IsAutoRec() { return autoRec_ ; }

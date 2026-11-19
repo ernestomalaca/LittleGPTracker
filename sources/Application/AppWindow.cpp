@@ -660,7 +660,17 @@ bool AppWindow::onEvent(GUIEvent &event) {
 
 void AppWindow::onUpdate() {
     // trk2als: Ableton Link (tempo y play/stop con la sesión)
-    if (Player::GetInstance()) Player::GetInstance()->LinkPoll();
+    if (Player::GetInstance()) {
+        Player *pl = Player::GetInstance();
+        pl->LinkPoll();
+        // si cambian los links conectados, se repinta (la barra y la ficha)
+        static int lastLinks = -2;
+        int links = pl->LinkOn() ? pl->LinkPeers() : -1;
+        if (links != lastLinks) {
+            lastLinks = links;
+            if (_currentView && _currentView != _nullView) SetDirty();
+        }
+    }
     if (_loadAfterResume) {
         _loadAfterResume = false;
         _isDirty = true;

@@ -152,13 +152,13 @@ ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
 
     // las fichas
     struct Chip { FourCC var; int x, y, min, max, xo, yo; };
-    const Chip chips[7] = {
+    const Chip chips[8] = {
         {VAR_MASTERVOL, 1, 6, 10, 100, 1, 10}, {VAR_METRONOME, 10, 6, 0, 1, 1, 1},
         {VAR_PREGAIN, 19, 6, 10, 200, 1, 10},  {VAR_SOFTCLIP, 28, 6, 0, 4, 1, 4},
         {VAR_SOFTCLIP_GAIN, 1, 7, 0, 1, 1, 1}, {VAR_MIDIDEVICE, 10, 7, 0, 0, 1, 1},
-        {VAR_LINK, 19, 7, 0, 2, 1, 1},
+        {VAR_LINK, 19, 7, 0, 2, 1, 1},     {VAR_LINKOFS, 28, 7, -250, 250, 5, 25},
     };
-    for (int k = 0; k < 7; k++) {
+    for (int k = 0; k < 8; k++) {
         v = project_->FindVariable(chips[k].var);
         NAssert(v);
         int mx = chips[k].var == VAR_MIDIDEVICE ? MidiService::GetInstance()->Size() : chips[k].max;
@@ -418,14 +418,19 @@ void ProjectView::drawBoard() {
     if (fS) DrawText(344, 172, "<> elegir   A+<> cambiar", dim, 0);
 
     // fichas
-    static const char *chipName[7] = {"VOLUMEN", "METRONOMO", "DRIVE", "TIPO", "NIVEL", "MIDI", "ABLETON LINK"};
-    for (int k = 0; k < 7; k++) {
+    static const char *chipName[8] = {"VOLUMEN", "METRONOMO", "DRIVE", "TIPO", "NIVEL", "MIDI", "LINK", "DESFASE"};
+    for (int k = 0; k < 8; k++) {
         int x = 24 + (k % 4) * 150, y = 212 + (k / 4) * 74;
-        int cw = k == 6 ? 292 : 142;   // Link: ficha doble
+        int cw = 142;
         bool f = focus == chipField_[k];
-        FillRect(x, y, cw, 66, card, 6);
-        if (f) FrameRect(x, y, cw, 66, acc, 6, 3);
-        DrawText(x + 12, y + 9, chipName[k], acc, 0);
+        Variable *cv = &((UIIntVarField *)chipField_[k])->GetVariable();
+        // Link conectado: la ficha se prende en el verde de Link
+        int peers = (k == 6 && cv->GetInt() > 0) ? Player::GetInstance()->LinkPeers() : 0;
+        bool lit = peers > 0;
+        GUIColor ink = lit ? bg : fg;
+        FillRect(x, y, cw, 66, lit ? LinkGreen() : card, 6);
+        if (f) FrameRect(x, y, cw, 66, lit ? fg : acc, 6, 3);
+        DrawText(x + 12, y + 9, chipName[k], lit ? bg : acc, 0);
         Variable *v = &((UIIntVarField *)chipField_[k])->GetVariable();
         std::string val;
         if (v->GetType() == Variable::INT) { snprintf(b, sizeof(b), "%d", v->GetInt()); val = b; }
@@ -433,15 +438,20 @@ void ProjectView::drawBoard() {
         if (val == "off") val = "no";
         if (val == "on") val = "si";
         if (val == "on+play") val = "si + play";
-        if (k == 6 && v->GetInt() > 0) {   // Link: con cuántos está
-            int n = Player::GetInstance()->LinkPeers();
-            if (n == 0) snprintf(b, sizeof(b), "  buscando");
-            else snprintf(b, sizeof(b), "  %d %s", n, n == 1 ? "app" : "apps");
-            val += b;
+        if (k == 6 && v->GetInt() > 0) {   // Link: cuántos links hay
+            if (peers > 0) snprintf(b, sizeof(b), "%d LINK%s", peers, peers == 1 ? "" : "S");
+            else snprintf(b, sizeof(b), "...");
+            DrawText(x + cw - 12 - 8 * (int)strlen(b), y + 9, b, lit ? bg : dim, 0);
+            if (val == "si + play") val = "si+play";
+        }
+        if (k == 7) {   // desfase en ms; + si Chancho suena atrasado
+            snprintf(b, sizeof(b), "%+d ms", v->GetInt());
+            val = b;
+            if (f) DrawText(x + 90, y + 13, "+ atrasa", dim, 0);
         }
         if (val.empty() || val == "(null)") val = "--";
-        if (val.size() > (k == 6 ? 16u : 7u)) val = val.substr(0, k == 6 ? 16 : 7);
-        DrawText(x + 12, y + 33, val.c_str(), fg, 1);
+        if (val.size() > 7u) val = val.substr(0, 7);
+        DrawText(x + 12, y + 33, val.c_str(), ink, 1);
     }
 
     // botones
