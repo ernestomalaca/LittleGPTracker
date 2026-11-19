@@ -3,4 +3,21 @@
 	<SCREENMULT value="2"/>   <!-- 320x240 x2 = la pantalla de 640x480 -->
 	<AUDIOBUFFERSIZE value="512"/>
 	<CONSOLEFACTOR value="1"/>   <!-- aquí ya es la consola: el "rg" es la carga real -->
+
+    <!-- tema Lavanda (los colores también se pueden cambiar aquí) -->
+    <BACKGROUND   value = "101018" />
+    <FOREGROUND   value = "F0EEFA" />
+    <BORDER       value = "8C9EFF" />
+    <HICOLOR1     value = "B8C3FF" />
+    <HICOLOR2     value = "8C9EFF" />
+    <SONGVIEW_FE  value = "60607E" />
+    <SONGVIEW_00  value = "3C3C52" />
+    <CURSORCOLOR  value = "8C9EFF" />
+    <PLAYCOLOR    value = "8C9EFF" />
+    <MUTECOLOR    value = "FF7A8A" />
+    <ROWCOLOR1    value = "60607E" />
+    <ROWCOLOR2    value = "8C9EFF" />
+    <MAJORBEAT    value = "B8C3FF" />
+    <COL_TITLE    value = "8A88A8" />
+    <TRACKCOLORS  value = "E6C07A,E8A07E,8FA0F0,B7A4F0,E28DB8,7FC98E,74C2C8,B2D58A" />
 </CONFIG>
