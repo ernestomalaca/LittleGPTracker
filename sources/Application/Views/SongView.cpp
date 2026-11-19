@@ -1081,6 +1081,11 @@ bool SongView::InterceptButton(unsigned short phys, unsigned short v, bool press
         return false;
     }
 
+    if (v == EPBM_START) {   // tocar / parar: suelta la marca y sigue como siempre
+        sesPasting_ = false;
+        endMark();
+        return false;
+    }
     if (sel && (v == EPBM_L || v == EPBM_R)) {   // deshacer / rehacer
         sesPasting_ = false;
         endMark();
@@ -2292,11 +2297,32 @@ std::string SongView::blockState() {
     return st;
 }
 
-static const unsigned char trackColors[8][3] = {
+static unsigned char trackColors[8][3] = {
     {0xE0, 0xB2, 0x4A}, {0xE8, 0x95, 0x5A}, {0x7B, 0x8C, 0xFF}, {0xA6, 0x8C, 0xFF},
     {0xE4, 0x6F, 0xA8}, {0x5C, 0xC4, 0x6A}, {0x4F, 0xC1, 0xC9}, {0x9B, 0xD3, 0x6A}};
 
+// trk2als: los colores de las pistas se pueden cambiar en config.xml:
+// <TRACKCOLORS value="E0B24A,E8955A,..."/> (hasta 8, en hex)
+static void loadTrackColors() {
+    static bool done = false;
+    if (done) return;
+    done = true;
+    const char *v = Config::GetInstance()->GetValue("TRACKCOLORS");
+    if (!v) return;
+    for (int i = 0; i < 8 && *v; i++) {
+        unsigned int c;
+        if (sscanf(v, "%6x", &c) != 1) break;
+        trackColors[i][0] = (c >> 16) & 0xFF;
+        trackColors[i][1] = (c >> 8) & 0xFF;
+        trackColors[i][2] = c & 0xFF;
+        const char *comma = strchr(v, ',');
+        if (!comma) break;
+        v = comma + 1;
+    }
+}
+
 void SongView::drawBlockGrid() {
+    loadTrackColors();
     Player *player = Player::GetInstance();
     Project *project = viewData_->project_;
     lastBlockState_ = blockState();
@@ -2412,7 +2438,13 @@ void SongView::drawBlockGrid() {
                               player->GetQueuePosition(i) == row &&
                               player->GetLiveIndicator(i)[0] != ' ';
             // marco claro pegado al borde (fino, no toca el texto del clip)
-            if (playingHere) FrameRect(x, y, w, h, muted ? dim : fg, 3, 3);
+            if (playingHere) {
+                FrameRect(x, y, w, h, muted ? dim : fg, 3, 3);
+                // y el botoncito de play en la esquina
+                GUIColor pc = empty ? fg : bg;
+                int tx = x + w - 15, ty = y + 6;
+                for (int k = 0; k < 9; k++) FillRect(tx + k, ty + k / 2, 1, 10 - (k / 2) * 2, pc);
+            }
             else if (queuedHere) FrameRect(x, y, w, h, hi1, 3, 3);
             // la línea de abajo: cuánto lleva el loop (lo blanco es lo que falta)
             if (playingHere && !empty) {
@@ -2421,8 +2453,8 @@ void SongView::drawBlockGrid() {
                 if (fr >= 0) {
                     int lw = w - 10;
                     int done = lw * fr / 1000;
-                    FillRect(x + 5, y + h - 7, lw, 3, Mix(tc, bg, 45));
-                    if (lw - done > 0) FillRect(x + 5 + done, y + h - 7, lw - done, 3, muted ? dim : fg);
+                    // la barrita oscura es lo que falta: se va acortando
+                    if (lw - done > 0) FillRect(x + 5 + done, y + h - 7, lw - done, 3, Mix(tc, bg, 45));
                 }
             }
             // pegando: dónde quedaría

@@ -1125,13 +1125,15 @@ void AppWindow::showHelp() {
     _overlay.clear();
     Shape sh;
     sh.type = 0; sh.thick = 0; sh.radius = 6;
-    sh.x = X; sh.y = Y; sh.w = W; sh.h = h; sh.color = panel;
+    // trk2als: la ventana clásica: fondo oscuro, borde blanco, atajos y
+    // título en el color de acento, la descripción en blanco
+    sh.x = X; sh.y = Y; sh.w = W; sh.h = h; sh.color = bg;
     _overlay.push_back(sh);
-    sh.thick = 3; sh.color = hi;
+    sh.thick = 3; sh.color = fg;
     _overlay.push_back(sh);
     Shape t;
     t.type = 1; t.scale = 1;
-    t.x = X + 24; t.y = Y + 20; t.text = "AYUDA"; t.color = hi;
+    t.x = X + 24; t.y = Y + 20; t.text = "AYUDA"; t.color = hi2;
     _overlay.push_back(t);
     int kx = X + 24, wx = kx + 16 * int(keyLen) + 24;
     for (size_t i = 0; i < keys.size(); i++) {
