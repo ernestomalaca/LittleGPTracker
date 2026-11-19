@@ -2001,10 +2001,7 @@ void SongView::drawBlockGrid() {
         FillRect(x, HY, COLW - GAP, 3, tc);
         GUIColor ncol = here ? bg : (player->IsChannelMuted(i) ? dim : fg);
         DrawText(x + 5, HY + 5, trackKind(project, i), ncol, 1);
-        char num[4];
-        snprintf(num, sizeof(num), "%d", i + 1);
         if (player->IsChannelMuted(i)) DrawText(x + COLW - GAP - 12, HY + 7, "M", ColorOf(CD_MUTE), 0);
-        else DrawText(x + COLW - GAP - 12, HY + 7, num, here ? bg : dim, 0);
     }
 
     // escenas y celdas
@@ -2056,8 +2053,7 @@ void SongView::drawBlockGrid() {
                     DrawText(x + 5, y + h - 15, name.c_str(), bg, 0);
                 }
             }
-            // lo que suena: un triángulo de play en la esquina (no tapa nada);
-            // lo que está en cola (Live), el mismo triángulo parpadeando
+            // lo que suena: marco blanco; lo que está en cola (Live): marco que parpadea
             bool playingHere = player->IsRunning() && player->IsChannelPlaying(i) &&
                                viewData_->currentPlayChain_[i] != 0xFF &&
                                viewData_->songPlayPos_[i] == row;
@@ -2065,11 +2061,9 @@ void SongView::drawBlockGrid() {
                               player->GetQueueingMode(i) != QM_NONE &&
                               player->GetQueuePosition(i) == row &&
                               player->GetLiveIndicator(i)[0] != ' ';
-            if (playingHere || queuedHere) {
-                GUIColor pc = empty ? (queuedHere ? hi1 : fg) : (queuedHere ? fg : bg);
-                int tx = x + w - 14, ty = y + 5;
-                for (int k = 0; k < 9; k++) FillRect(tx + k, ty + k / 2, 1, 10 - (k / 2) * 2, pc);
-            }
+            // marco claro pegado al borde (fino, no toca el texto del clip)
+            if (playingHere) FrameRect(x, y, w, h, muted ? dim : fg, 3, 3);
+            else if (queuedHere) FrameRect(x, y, w, h, hi1, 3, 3);
             // selección y cursor
             bool sel = clipboard_.active_ && i >= selRect.Left() && i <= selRect.Right() &&
                        row >= selRect.Top() && row <= selRect.Bottom();
