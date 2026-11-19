@@ -88,6 +88,15 @@ void EventDispatcher::Execute(FourCC id,float value) {
 			case TRIG_EVENT_Y:
 				mapping=EPBT_Y;
 				break ;
+			case TRIG_EVENT_L2:
+				mapping=EPBT_L2;
+				break ;
+			case TRIG_EVENT_R2:
+				mapping=EPBT_R2;
+				break ;
+			case TRIG_EVENT_HELP:
+				mapping=EPBT_HELP;
+				break ;
 			default:
 				return ;
 		}

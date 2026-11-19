@@ -209,12 +209,13 @@ protected:
     uint8_t prevLeftVU_[8]; // inertia tracking for VU (8 channels)
     uint8_t prevRightVU_[8];
 
-  private:
-    unsigned short mask_;
-    bool locked_;
+  protected:   // trk2als: la Session muestra el aviso abajo
     uint32_t notificationTime_;
     uint16_t NOTIFICATION_TIMEOUT;
     std::string displayNotification_;
+  private:
+    unsigned short mask_;
+    bool locked_;
     int notiDistY_;
     static bool initPrivate_;
     ModalView *modalView_;

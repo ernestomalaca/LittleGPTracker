@@ -37,6 +37,9 @@ EPBT_A,
 EPBT_R, 
 EPBT_START, 
 EPBT_SELECT,
+EPBT_L2=10,  // trk2als: L2, R2 y el botón del frente (ayuda)
+EPBT_R2=11,
+EPBT_HELP=14,
 EPBT_X=12,   // trk2als: X e Y del gamepad (como en Joy2Live)
 EPBT_Y=13
 } ;

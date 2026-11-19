@@ -73,6 +73,7 @@ SongView::SongView(GUIWindow &w, ViewData *viewData, const char *song)
     for (int i = 0; i < 8; i++) blockVu_[i] = 0;   // trk2als
     inBlockRedraw_ = false;
     lastVuDraw_ = 0;
+    NOTIFICATION_TIMEOUT = 1800;   // el aviso de abajo se lee con calma
     vuBarHeightsL_[0] = 0;
     vuBarHeightsR_[0] = 0;
     clipboard_.active_ = false;
@@ -465,26 +466,38 @@ void SongView::pasteLast() {
 
 void SongView::clonePosition() {
 
-    if (isAudioColumn(viewData_->songX_))
-        return; // trk2als: un loop no tiene chain que clonar
-
+    // trk2als: como Duplicar en la Session de Live: la copia aparece en la
+    // primera celda libre debajo y el cursor se va a ella. En una pista de
+    // audio se repite el mismo loop.
     unsigned char *pos = viewData_->GetCurrentSongPointer();
     unsigned char current = *pos;
     if (current == 255)
         return;
-
-    unsigned short next = newClipId();
-    if (next == NO_MORE_CLIP)
+    int col = viewData_->songX_;
+    int row = viewData_->songY_ + viewData_->songOffset_;
+    int target = -1;
+    for (int r = row + 1; r < SONG_ROW_COUNT && target < 0; r++)
+        if (viewData_->song_->data_[col + SONG_CHANNEL_COUNT * r] == 0xFF) target = r;
+    if (target < 0) {
+        View::SetNotification("no hay lugar abajo");
         return;
-    // trk2als: como en Live, el clon es un clip independiente con sus notas,
-    // su largo y su loop
-    viewData_->song_->clips_->Copy(current, next);
-    int ls, le;
-    if (viewData_->song_->GetClipLoop(current, ls, le))
-        viewData_->song_->SetClipLoop(next, ls, le);
-    setChain((unsigned char)next);
-    nameNewChain((unsigned char)next);
-    View::SetNotification("clip clonado");
+    }
+    unsigned char value = current;
+    if (!isAudioColumn(col)) {
+        unsigned short next = newClipId();
+        if (next == NO_MORE_CLIP)
+            return;
+        // el clon es un clip independiente con sus notas, su largo y su loop
+        viewData_->song_->clips_->Copy(current, next);
+        int ls, le;
+        if (viewData_->song_->GetClipLoop(current, ls, le))
+            viewData_->song_->SetClipLoop(next, ls, le);
+        value = (unsigned char)next;
+    }
+    viewData_->song_->data_[col + SONG_CHANNEL_COUNT * target] = value;
+    updateCursor(0, target - row);
+    if (!isAudioColumn(col)) nameNewChain(value);
+    View::SetNotification("clip duplicado abajo");
     isDirty_ = true;
 };
 
@@ -863,8 +876,7 @@ void SongView::ProcessButtonMask(unsigned short mask, bool pressed) {
         }
         if (bTap_ && !(mask & EPBM_B)) {
             bTap_ = false;
-            unMuteAll();
-            UIController::GetInstance()->SwitchSoloMode(0, SONG_CHANNEL_COUNT - 1, false);
+            unMuteAll();   // trk2als: quita mutes y solos (sin restaurar nada)
             if (viewMode_ == VM_SOLOON || viewMode_ == VM_MUTEON) viewMode_ = VM_NORMAL;
             isDirty_ = true;
             return;
@@ -1487,6 +1499,7 @@ void SongView::AnimationUpdate() {
             int v = h >= blockVu_[i] ? h : blockVu_[i] - 1;   // cae despacio
             if (v != blockVu_[i]) { blockVu_[i] = v; changed = true; }
         }
+        if (!changed && blockState() != lastBlockState_) changed = true;   // p.ej. venció el aviso
         if (changed) blockRedraw();
         return;
     }
@@ -1501,7 +1514,7 @@ void SongView::AnimationUpdate() {
 void SongView::DrawView() {
 
     Clear();
-    View::EnableNotification();
+    if (!blockGrid()) View::EnableNotification();   // trk2als: con bloques va abajo
 
     GUITextProperties props;
     GUIPoint pos = GetTitlePosition();
@@ -1877,6 +1890,25 @@ bool SongView::blockGrid() {
     return !View::miniLayout_ && SupportsShapes();
 }
 
+// el aviso de lo que acaba de pasar (dura NOTIFICATION_TIMEOUT)
+bool SongView::noticeOn() {
+    return !displayNotification_.empty() &&
+           (SDL_GetTicks() - notificationTime_) <= NOTIFICATION_TIMEOUT;
+}
+
+// la etiqueta de la pista: KIT, SMP (sampler), INS (multicapa), AUD (audio)
+static const char *trackKind(Project *project, int i) {
+    if (project->GetTrackType(i) == TT_AUDIO) return "AUD";
+    int owner = project->GetTrackInstrument(i);
+    I_Instrument *in = owner >= 0 ? project->GetInstrumentBank()->GetInstrument(owner) : 0;
+    if (!in) return "MID";
+    if (in->GetType() != IT_SAMPLE) return "MID";
+    SampleInstrument *si = (SampleInstrument *)in;
+    if (si->IsKit()) return "KIT";
+    if (si->IsZoned() && si->ZoneCount() > 1) return "INS";
+    return "SMP";
+}
+
 void SongView::blockRedraw() {
     if (inBlockRedraw_ || HasModal()) return;
     inBlockRedraw_ = true;
@@ -1905,7 +1937,7 @@ std::string SongView::blockState() {
     char lt[24];
     loadText(lt);
     int t = player->IsRunning() ? int(player->GetPlayTime()) : -1;
-    snprintf(b, sizeof(b), "%s|%d|%d", lt, t, player->Clipped() ? 1 : 0);
+    snprintf(b, sizeof(b), "%s|%d|%d|%d", lt, t, player->Clipped() ? 1 : 0, noticeOn() ? 1 : 0);
     st += b;
     return st;
 }
@@ -1967,11 +1999,12 @@ void SongView::drawBlockGrid() {
         GUIColor tc(trackColors[i][0], trackColors[i][1], trackColors[i][2]);
         FillRect(x, HY, COLW - GAP, HH, here ? cur : panel, 3);
         FillRect(x, HY, COLW - GAP, 3, tc);
-        char nm[4];
-        snprintf(nm, sizeof(nm), "%c%d", project->GetTrackType(i) == TT_AUDIO ? 'A' : 'M', i + 1);
         GUIColor ncol = here ? bg : (player->IsChannelMuted(i) ? dim : fg);
-        DrawText(x + 6, HY + 5, nm, ncol, 1);
-        if (player->IsChannelMuted(i)) DrawText(x + COLW - GAP - 14, HY + 7, "M", ColorOf(CD_MUTE), 0);
+        DrawText(x + 5, HY + 5, trackKind(project, i), ncol, 1);
+        char num[4];
+        snprintf(num, sizeof(num), "%d", i + 1);
+        if (player->IsChannelMuted(i)) DrawText(x + COLW - GAP - 12, HY + 7, "M", ColorOf(CD_MUTE), 0);
+        else DrawText(x + COLW - GAP - 12, HY + 7, num, here ? bg : dim, 0);
     }
 
     // escenas y celdas
@@ -2023,17 +2056,19 @@ void SongView::drawBlockGrid() {
                     DrawText(x + 5, y + h - 15, name.c_str(), bg, 0);
                 }
             }
-            // lo que suena
-            if (player->IsRunning() && player->IsChannelPlaying(i) &&
-                viewData_->currentPlayChain_[i] != 0xFF &&
-                viewData_->songPlayPos_[i] == row) {
-                FrameRect(x + 2, y + 2, w - 4, h - 4, muted ? dim : fg, 2, 3);
-            }
-            // en cola (Live): parpadea
-            if (player->GetSequencerMode() == SM_LIVE && player->IsRunning() &&
-                player->GetQueueingMode(i) != QM_NONE && player->GetQueuePosition(i) == row &&
-                player->GetLiveIndicator(i)[0] != ' ') {
-                FrameRect(x + 2, y + 2, w - 4, h - 4, hi1, 2, 3);
+            // lo que suena: un triángulo de play en la esquina (no tapa nada);
+            // lo que está en cola (Live), el mismo triángulo parpadeando
+            bool playingHere = player->IsRunning() && player->IsChannelPlaying(i) &&
+                               viewData_->currentPlayChain_[i] != 0xFF &&
+                               viewData_->songPlayPos_[i] == row;
+            bool queuedHere = player->GetSequencerMode() == SM_LIVE && player->IsRunning() &&
+                              player->GetQueueingMode(i) != QM_NONE &&
+                              player->GetQueuePosition(i) == row &&
+                              player->GetLiveIndicator(i)[0] != ' ';
+            if (playingHere || queuedHere) {
+                GUIColor pc = empty ? (queuedHere ? hi1 : fg) : (queuedHere ? fg : bg);
+                int tx = x + w - 14, ty = y + 5;
+                for (int k = 0; k < 9; k++) FillRect(tx + k, ty + k / 2, 1, 10 - (k / 2) * 2, pc);
             }
             // selección y cursor
             bool sel = clipboard_.active_ && i >= selRect.Left() && i <= selRect.Right() &&
@@ -2043,6 +2078,16 @@ void SongView::drawBlockGrid() {
             if (sel) FrameRect(x - 2, y - 2, w + 4, h + 4, hi2, 4, 3);
             if (here) FrameRect(x - 3, y - 3, w + 6, h + 6, cur, 5, 3);
         }
+    }
+
+    // abajo: el aviso de lo que acaba de pasar, en lugar de los medidores
+    if (noticeOn()) {
+        FillRect(X0, VY, 600 - GAP, VH, Mix(bg, hi2, 22), 4);
+        std::string m = displayNotification_;
+        size_t nl = m.find('\n');
+        if (nl != std::string::npos) m = m.substr(0, nl) + " " + m.substr(nl + 1);
+        if (m.size() > 36) m = m.substr(0, 36);
+        DrawText(X0 + 10, VY + 8, m.c_str(), hi2, 1);
     }
 
     // abajo: carga y tiempo, y un medidor por pista
@@ -2057,7 +2102,7 @@ void SongView::drawBlockGrid() {
         snprintf(tb, sizeof(tb), "%d:%02d", t / 60, t % 60);
         DrawText(4, VY + 18, tb, dim, 0);
     }
-    for (int i = 0; i < SONG_CHANNEL_COUNT && i < trackCount; i++) {
+    for (int i = 0; i < SONG_CHANNEL_COUNT && i < trackCount && !noticeOn(); i++) {
         int x = X0 + i * COLW;
         int w = COLW - GAP;
         FillRect(x, VY, w, VH, panel, 3);

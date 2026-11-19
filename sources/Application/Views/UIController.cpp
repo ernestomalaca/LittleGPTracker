@@ -3,6 +3,8 @@
 #include "Application/Player/Player.h"
 
 UIController::UIController() {
+	// trk2als: sin esto, "quitar el solo" restauraba basura y muteaba todo
+	for (int i=0;i<SONG_CHANNEL_COUNT;i++) soloMask_[i]=false ;
 } ;
 
 UIController *UIController::GetInstance() {
@@ -27,6 +29,7 @@ void UIController::UnMuteAll() {
 	Player *player=Player::GetInstance() ;
 	for (int i=0;i<SONG_CHANNEL_COUNT;i++) {
 			player->SetChannelMute(i,false) ;
+			soloMask_[i]=false ;   // trk2als: y se olvida el solo
 	} ;
 } ;
 

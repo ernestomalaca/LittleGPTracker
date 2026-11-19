@@ -99,6 +99,7 @@ class SongView : public View {
     void drawBlockGrid();
     std::string blockState();         // lo que cambia al sonar (para redibujar)
     void blockRedraw();
+    bool noticeOn();
     std::string lastBlockState_;
     int blockVu_[8];
     bool inBlockRedraw_;

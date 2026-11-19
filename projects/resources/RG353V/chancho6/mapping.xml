@@ -23,4 +23,9 @@
 
 	<MAP src="but:0:4" dst="/event/lshoulder" />
 	<MAP src="but:0:5" dst="/event/rshoulder" />
+
+	<!-- L2 + R2 juntos, o el botón del frente: prenden y apagan la ayuda -->
+	<MAP src="but:0:6" dst="/event/l2" />
+	<MAP src="but:0:7" dst="/event/r2" />
+	<MAP src="but:0:12" dst="/event/help" />
 </MAPPINGS>

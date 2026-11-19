@@ -77,10 +77,11 @@ AppWindow::AppWindow(I_GUIWindowImp &imp) : GUIWindow(imp) {
     // trk2als: pantalla de arranque
     {
         const char *hi = Config::GetInstance()->GetValue("HELPIDLE");
-        _helpIdleMs = hi ? atoi(hi) : 3000;
+        _helpIdleMs = hi ? atoi(hi) : 0;   // trk2als: la ayuda va con L2+R2 (HELPIDLE para la de reposo)
         _overlayOn = _overlayDirty = _helpShown = false;
         _lastInput = System::GetInstance()->GetClock();
         _swallow = 0;
+        _helpMask = 0;
         const char *sp = Config::GetInstance()->GetValue("SPLASH");
         int ms = sp ? atoi(sp) : 1800;
         _splashUntil = ms > 0 ? System::GetInstance()->GetClock() + ms : 0;
@@ -572,6 +573,20 @@ bool AppWindow::onEvent(GUIEvent &event) {
 
     case ET_PADBUTTONDOWN: {
         _lastInput = System::GetInstance()->GetClock();
+        // trk2als: L2+R2 juntos o el botón del frente prenden y apagan la
+        // ayuda; esos botones no llegan a las pantallas
+        if (v & ((1 << EPBT_L2) | (1 << EPBT_R2) | (1 << EPBT_HELP))) {
+            bool again = (_helpMask & v) != 0;
+            _helpMask |= v;
+            bool combo = (_helpMask & (1 << EPBT_L2)) && (_helpMask & (1 << EPBT_R2));
+            if (!again && (combo || (v & (1 << EPBT_HELP)))) {
+                if (_overlayOn) hideHelp();
+                else if (_currentView && _currentView != _nullView && !_currentView->HasModal() &&
+                         SupportsShapes() && !_currentView->GetHelpItems().empty()) showHelp();
+                _isDirty = true;
+            }
+            break;
+        }
         _helpShown = false;
         if (_overlayOn) {   // trk2als: cierra la ayuda y nada más
             hideHelp();
@@ -588,6 +603,10 @@ bool AppWindow::onEvent(GUIEvent &event) {
 
     case ET_PADBUTTONUP:
         _lastInput = System::GetInstance()->GetClock();
+        if (v & ((1 << EPBT_L2) | (1 << EPBT_R2) | (1 << EPBT_HELP))) {
+            _helpMask &= ~v;
+            break;
+        }
         if (_swallow & v) {   // el que cerró la ayuda
             _swallow &= ~v;
             break;
@@ -1115,7 +1134,7 @@ void AppWindow::showHelp() {
         _overlay.push_back(t);
     }
     t.scale = 0;
-    t.x = X + 24; t.y = Y + h - 24; t.text = "cualquier boton la cierra"; t.color = dim;
+    t.x = X + 24; t.y = Y + h - 24; t.text = "L2+R2 o cualquier boton la cierra"; t.color = dim;
     _overlay.push_back(t);
     _overlayOn = true;
     _overlayDirty = true;

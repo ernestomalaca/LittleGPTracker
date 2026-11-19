@@ -136,6 +136,7 @@ class AppWindow : public GUIWindow, I_Observer, Status {
     unsigned long _lastInput;
     unsigned short _swallow;    // botones que cerraron la ayuda (se ignoran al soltar)
     int _helpIdleMs;
+    unsigned short _helpMask;   // L2 / R2 / ayuda apretados
     void showHelp();
     void hideHelp();
     bool _shapesDirty;          // las figuras cambiaron: redibujar sus celdas

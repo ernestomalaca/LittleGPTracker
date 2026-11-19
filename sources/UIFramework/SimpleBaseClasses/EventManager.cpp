@@ -54,6 +54,9 @@ void EventManager::InstallMappings() {
 	mapConfigKey(APP_BUTTON_SELECT,"KEY_SELECT") ;
 	mapConfigKey(APP_BUTTON_X,"KEY_X") ;
 	mapConfigKey(APP_BUTTON_Y,"KEY_Y") ;
+	mapConfigKey(APP_BUTTON_L2,"KEY_L2") ;
+	mapConfigKey(APP_BUTTON_R2,"KEY_R2") ;
+	mapConfigKey(APP_BUTTON_HELP,"KEY_HELP") ;
 	mapConfigKey(APP_BUTTON_VOLINC,"KEY_VOLINC") ;
 	mapConfigKey(APP_BUTTON_VOLDEC,"KEY_VOLDEC") ;
 	
@@ -71,6 +74,9 @@ void EventManager::InstallMappings() {
 	cr->Attach(URL_EVENT_SELECT,mapping_[APP_BUTTON_SELECT].c_str()) ;
 	cr->Attach(URL_EVENT_X,mapping_[APP_BUTTON_X].c_str()) ;
 	cr->Attach(URL_EVENT_Y,mapping_[APP_BUTTON_Y].c_str()) ;
+	cr->Attach(URL_EVENT_L2,mapping_[APP_BUTTON_L2].c_str()) ;
+	cr->Attach(URL_EVENT_R2,mapping_[APP_BUTTON_R2].c_str()) ;
+	cr->Attach(URL_EVENT_HELP,mapping_[APP_BUTTON_HELP].c_str()) ;
 	cr->Attach(URL_VOLUME_INCREASE,mapping_[APP_BUTTON_VOLINC].c_str()) ;
 	cr->Attach(URL_VOLUME_DECREASE,mapping_[APP_BUTTON_VOLDEC].c_str()) ;
 	
