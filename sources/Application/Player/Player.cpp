@@ -2,6 +2,7 @@
 #include "Services/Link/LinkBridge.h"
 extern double g_renderedSamples;   // AudioOut.cpp
 #include "Services/Audio/Audio.h"
+#include "Services/Audio/AudioDriver.h"
 #include "Application/Model/Config.h"
 #include <math.h>
 #include <fstream>
@@ -30,6 +31,7 @@ Player::Player() {
     linkWait_ = false;   // trk2als: Link
     linkOrigin_ = 0;
     linkInteg_ = 0;
+    linkQueue_ = -1;
     linkSlices_ = 0;
     linkLastTempo_ = -1;
     linkStartStop_ = linkSeenPlaying_ = linkRemoteStart_ = linkRemoteStop_ = false;
@@ -1447,19 +1449,28 @@ int Player::ClipTickPos(int channel) {
 
 // lo que tarda en oírse lo que se calcula ahora (segundos)
 double Player::linkLatency() {
-    static double lat = -1;
-    double ofs = project_ ? project_->FindVariable(VAR_LINKOFS)->GetInt() / 1000.0 : 0.0;
-    if (lat >= 0) return lat + ofs;
-    {
+    // lo que tarda en oírse lo que se calcula ahora: la fila del driver
+    // (medida, suavizada) + un bloque del dispositivo + el desfase a mano.
+    // La fila puede crecer sola (cuando la consola se atrasa y mete
+    // silencio), así que se mide en vez de suponerla
+    static double dev = -1;
+    double sr = Audio::GetInstance()->GetSampleRate();
+    if (sr <= 0) sr = 44100;
+    if (dev < 0) {
         Config *c = Config::GetInstance();
         const char *b = c->GetValue("AUDIOBUFFERSIZE");
-        const char *o = c->GetValue("LINKOFFSET");   // ms, para afinar a oído
+        const char *o = c->GetValue("LINKOFFSET");   // ms, por si hace falta en config
         int buf = b ? atoi(b) : 1024;
-        double sr = Audio::GetInstance()->GetSampleRate();
-        if (sr <= 0) sr = 44100;
-        lat = 3.0 * buf / sr + (o ? atof(o) / 1000.0 : 0.0);
+        dev = 1.0 * buf / sr + (o ? atof(o) / 1000.0 : 0.0);
     }
-    return lat + ofs;
+    AudioDriver *d = AudioDriver::Current();
+    if (d) {
+        double q = d->QueuedFrames();
+        if (linkQueue_ < 0) linkQueue_ = q;
+        linkQueue_ += 0.02 * (q - linkQueue_);
+    }
+    double ofs = project_ ? project_->FindVariable(VAR_LINKOFS)->GetInt() / 1000.0 : 0.0;
+    return (linkQueue_ > 0 ? linkQueue_ / sr : 0.0) + dev + ofs;
 }
 
 void Player::linkStart() {
@@ -1518,9 +1529,11 @@ bool Player::linkSlice(SyncMaster *sync) {
     if (dbg < 0) dbg = getenv("TRK_LINKDBG") ? 1 : 0;
     if (dbg && linkSlices_ % 24 == 0)
         Trace::Log("LINK", "t=%.0f tempo=%.2f error=%+.4f corr=%+.4f integ=%+.5f sr=%.0f medido=%.0f "
-                   "adelanto=%.1fms latencia=%.1fms apps=%d",
+                   "adelanto=%.1fms latencia=%.1fms fila=%d huecos=%d apps=%d",
                    linkSlices_ / 24.0, tempo, err, c, linkInteg_, sr, real,
-                   LinkBridge::FilterAheadMs(), linkLatency() * 1000.0, LinkBridge::Peers());
+                   LinkBridge::FilterAheadMs(), linkLatency() * 1000.0,
+                   AudioDriver::Current() ? AudioDriver::Current()->QueuedFrames() : -1,
+                   (int)AudioDriver::underruns_, LinkBridge::Peers());
     linkSlices_++;
     return true;
 }

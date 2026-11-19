@@ -225,6 +225,7 @@ protected:
 	bool linkWait_ ;
 	double linkOrigin_ ;
 	double linkInteg_ ;
+	double linkQueue_ ;   // la fila del driver, suavizada (cuadros)
 	unsigned long linkSlices_ ;
 	int linkLastTempo_ ;
 	bool linkStartStop_, linkSeenPlaying_, linkRemoteStart_, linkRemoteStop_ ;

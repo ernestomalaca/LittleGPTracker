@@ -50,6 +50,11 @@ public:
 	virtual int GetPlayedBufferPercentage()=0 ;   
  
 	virtual double GetStreamTime()=0 ; // in secs
+	// trk2als: cuántos cuadros esperan para sonar (la fila del driver):
+	// es lo que tarda en oírse lo que se calcula ahora
+	virtual int QueuedFrames() ;
+	static AudioDriver *Current() ;
+	static volatile int underruns_ ;   // veces que hubo que meter silencio
 
 	void AddBuffer(short *buffer,int size) ; // size in samples
 

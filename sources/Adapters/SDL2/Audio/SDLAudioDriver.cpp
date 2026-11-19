@@ -164,6 +164,7 @@ void SDLAudioDriver::OnChunkDone(Uint8 *stream, int len) {
         // then get next queued buffer and copy data from it
 
         if (pool_[poolPlayPosition_].buffer_ == 0) {
+            if (isPlaying_) underruns_++;   // trk2als: se anota (Link lo compensa)
             // Use fragSize_ instead of len! miniBlank_ is only allocated to
             // fragSize_. Using len causes a buffer over-read if SDL requests a
             // larger chunk.

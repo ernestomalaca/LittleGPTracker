@@ -4,7 +4,12 @@
 #include "System/Console/Trace.h"
 #include "System/Console/n_assert.h"
 
+// trk2als: la fila del driver (ver AudioDriver.h)
+static AudioDriver *currentDriver_=0 ;
+volatile int AudioDriver::underruns_=0 ;
+
 AudioDriver::AudioDriver(AudioSettings &settings) {
+  currentDriver_=this ;   // trk2als
 	settings_=settings ;
 }
 
@@ -72,6 +77,23 @@ void AudioDriver::AddBuffer(short *buffer,int samplecount) {
   pool_[poolQueuePosition_].size_=len ;
   poolQueuePosition_=(poolQueuePosition_+1)%SOUND_BUFFER_COUNT ;
 	hasData_=true ;
+}
+
+
+AudioDriver *AudioDriver::Current() { return currentDriver_ ; }
+
+int AudioDriver::QueuedFrames() {
+	int bytes=0 ;
+	int p=poolPlayPosition_ ;
+	for (int i=0;i<SOUND_BUFFER_COUNT;i++) {
+		char *b=pool_[p].buffer_ ;
+		if (!b) break ;
+		bytes+=pool_[p].size_ ;
+		p=(p+1)%SOUND_BUFFER_COUNT ;
+	}
+	int rest=bufferSize_-bufferPos_ ;
+	if (rest>0) bytes+=rest ;
+	return bytes/4 ;
 }
 
 void AudioDriver::OnNewBufferNeeded() {
