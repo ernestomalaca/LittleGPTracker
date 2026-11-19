@@ -159,7 +159,7 @@ class SongView : public View {
         Clip clip;
     };
     bool sesMarking_, sesPasting_;
-    bool sesBPending_, sesAPending_, sesAMoved_;
+    bool sesBPending_, sesAPending_, sesAMoved_, sesDupDone_;
     std::vector<SesCell> sesClip_;
     GUIRect markRect();
     void startMark();

@@ -75,7 +75,7 @@ SongView::SongView(GUIWindow &w, ViewData *viewData, const char *song)
     inBlockRedraw_ = false;
     lastVuDraw_ = 0;
     sesNowValid_ = false;
-    sesMarking_ = sesPasting_ = false;
+    sesMarking_ = sesPasting_ = sesDupDone_ = false;
     sesBPending_ = sesAPending_ = sesAMoved_ = false;
     NOTIFICATION_TIMEOUT = 1800;   // el aviso de abajo se lee con calma
     vuBarHeightsL_[0] = 0;
@@ -938,6 +938,7 @@ void SongView::startMark() {
     clipboard_.y_ = viewData_->songY_;
     clipboard_.offset_ = viewData_->songOffset_;
     sesMarking_ = true;
+    sesDupDone_ = false;
     sesBPending_ = sesAPending_ = sesAMoved_ = false;
     View::SetNotification("marcando: flechas para agrandar");
     isDirty_ = true;
@@ -1112,6 +1113,7 @@ bool SongView::InterceptButton(unsigned short phys, unsigned short v, bool press
         }
     } else {   // marcando
         if (pressed) {
+            if (v & arrows) sesDupDone_ = false;
             if (v != EPBM_B) sesBPending_ = false;
             if (v != EPBM_A) sesAPending_ = false;
             if (v & arrows) {
@@ -1122,7 +1124,10 @@ bool SongView::InterceptButton(unsigned short phys, unsigned short v, bool press
                     updateCursor(dx, dy);
                 }
             } else if (v == EPBM_B && !repeat) {
-                if (sel) {                               // otra vez Select, B: filas enteras
+                if (sel && sesDupDone_) {                // después de duplicar: sigue marcada la copia
+                    sesDupDone_ = false;
+                    View::SetNotification("marcando la copia");
+                } else if (sel) {                        // otra vez Select, B: filas enteras
                     clipboard_.x_ = 0;
                     int last = viewData_->project_->TrackCount() - 1;
                     updateCursor(last - viewData_->songX_, 0);
@@ -1134,6 +1139,7 @@ bool SongView::InterceptButton(unsigned short phys, unsigned short v, bool press
             } else if (v == EPBM_A && !repeat) {
                 if (sel) {
                     duplicateMark();
+                    sesDupDone_ = true;
                 } else if (phys & EPBM_B) {              // B + A: corta
                     copyMark(sesClip_);
                     GUIRect r = markRect();
