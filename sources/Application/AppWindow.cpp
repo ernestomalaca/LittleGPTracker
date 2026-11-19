@@ -755,6 +755,12 @@ void AppWindow::joyButton(unsigned short v, bool pressed, bool repeat) {
         _selectFirst = false;
         return;
     }
+    // trk2als: Select + L deshace, Select + R rehace (como en el clip)
+    if (_currentView == _songView && (phys & EPBM_SELECT) && !(phys & EPBM_B) &&
+        (v == EPBM_L || v == EPBM_R)) {
+        if (pressed && !repeat && _currentView->Undo(v == EPBM_R)) _isDirty = true;
+        return;
+    }
     const unsigned short arrows = EPBM_UP | EPBM_DOWN | EPBM_LEFT | EPBM_RIGHT;
     if (pressed && !repeat) {
         if (v == EPBM_SELECT && !(phys & EPBM_B)) _selectFirst = true;

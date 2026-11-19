@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 #include "BaseClasses/View.h"
+#include <map>
+#include "Application/Model/Clip.h"
 
 class SongView;
 
@@ -15,6 +17,7 @@ class SongView : public View {
 
     // View implementation
     virtual void ProcessButtonMask(unsigned short mask, bool pressed);
+    virtual bool Undo(bool redo);
     virtual void DrawView();
     virtual void AnimationUpdate();
     virtual void OnPlayerUpdate(PlayerEventType, unsigned int tick = 0);
@@ -134,6 +137,20 @@ class SongView : public View {
     uint8_t jumpLength_; // When jumping columns with B
     int vuBarHeightsL_[1]; // Master channel stereo VU meter
     int vuBarHeightsR_[1];
+  private:
+    // trk2als: deshacer en la Session: la rejilla y el contenido de los clips
+    // que estaban en ella (se toma una foto cada vez que la rejilla cambia)
+    struct SesSnap {
+        std::vector<unsigned char> grid;
+        std::map<int, Clip> clips;
+    };
+    void takeSesSnap(SesSnap &s);
+    void restoreSesSnap(const SesSnap &s);
+    void checkHistory();
+    void handleButtonMask(unsigned short mask, bool pressed);
+    SesSnap sesNow_;
+    bool sesNowValid_;
+    std::vector<SesSnap> sesUndo_, sesRedo_;
 };
 
 #endif

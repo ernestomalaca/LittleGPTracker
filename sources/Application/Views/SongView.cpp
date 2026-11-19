@@ -1,4 +1,5 @@
 #include "SongView.h"
+#include <cstring>
 #define SONG_COL_W 4   // trk2als: ancho de cada pista en la grilla
 #include "Application/Commands/ApplicationCommandDispatcher.h"
 #include "Application/Mixer/MixerService.h"
@@ -73,6 +74,7 @@ SongView::SongView(GUIWindow &w, ViewData *viewData, const char *song)
     for (int i = 0; i < 8; i++) blockVu_[i] = 0;   // trk2als
     inBlockRedraw_ = false;
     lastVuDraw_ = 0;
+    sesNowValid_ = false;
     NOTIFICATION_TIMEOUT = 1800;   // el aviso de abajo se lee con calma
     vuBarHeightsL_[0] = 0;
     vuBarHeightsR_[0] = 0;
@@ -541,6 +543,8 @@ void SongView::extendSelection() {
 
 void SongView::OnFocus() {
     clipboard_.active_ = false;
+    // trk2als: lo que cambió en otras pantallas (notas, nombres) entra a la foto
+    sesNowValid_ = false;
     checkScaleChange();   // trk2als
 };
 
@@ -850,6 +854,69 @@ void SongView::jumpToNextSection(int direction) {
  ******************************************************/
 
 void SongView::ProcessButtonMask(unsigned short mask, bool pressed) {
+    if (!sesNowValid_) { takeSesSnap(sesNow_); sesNowValid_ = true; }
+    handleButtonMask(mask, pressed);
+    checkHistory();
+}
+
+/************************************************************
+ trk2als: deshacer / rehacer en la Session
+ ************************************************************/
+
+void SongView::takeSesSnap(SesSnap &s) {
+    Song *song = viewData_->song_;
+    s.grid.assign(song->data_, song->data_ + SONG_CHANNEL_COUNT * SONG_ROW_COUNT);
+    s.clips.clear();
+    for (int c = 0; c < SONG_CHANNEL_COUNT; c++) {
+        if (isAudioColumn(c)) continue;
+        for (int r = 0; r < SONG_ROW_COUNT; r++) {
+            unsigned char d = song->data_[c + SONG_CHANNEL_COUNT * r];
+            if (d != 0xFF && !s.clips.count(d)) s.clips[d] = song->clips_->Get(d);
+        }
+    }
+}
+
+void SongView::restoreSesSnap(const SesSnap &s) {
+    Song *song = viewData_->song_;
+    memcpy(song->data_, &s.grid[0], s.grid.size());
+    for (std::map<int, Clip>::const_iterator it = s.clips.begin(); it != s.clips.end(); ++it)
+        song->clips_->Get(it->first) = it->second;
+}
+
+void SongView::checkHistory() {
+    Song *song = viewData_->song_;
+    if (!sesNowValid_ || sesNow_.grid.size() != SONG_CHANNEL_COUNT * SONG_ROW_COUNT) return;
+    if (memcmp(&sesNow_.grid[0], song->data_, sesNow_.grid.size()) == 0) return;
+    sesUndo_.push_back(sesNow_);
+    if (sesUndo_.size() > 48) sesUndo_.erase(sesUndo_.begin());
+    sesRedo_.clear();
+    takeSesSnap(sesNow_);
+}
+
+bool SongView::Undo(bool redo) {
+    std::vector<SesSnap> &from = redo ? sesRedo_ : sesUndo_;
+    std::vector<SesSnap> &to = redo ? sesUndo_ : sesRedo_;
+    if (from.empty()) {
+        View::SetNotification(redo ? "nada que rehacer" : "nada que deshacer");
+        return true;
+    }
+    MixerService::GetInstance()->Lock();
+    SesSnap now;
+    takeSesSnap(now);
+    to.push_back(now);
+    restoreSesSnap(from.back());
+    from.pop_back();
+    takeSesSnap(sesNow_);
+    sesNowValid_ = true;
+    MixerService::GetInstance()->Unlock();
+    clipboard_.active_ = false;
+    viewMode_ = VM_NORMAL;
+    View::SetNotification(redo ? "rehecho" : "deshecho");
+    isDirty_ = true;
+    return true;
+}
+
+void SongView::handleButtonMask(unsigned short mask, bool pressed) {
 
     // trk2als: Joy2Live: A tocada sobre un clip lo abre al soltarla; B tocada
     // sola quita los mute y solo fijos
@@ -1576,7 +1643,7 @@ void SongView::DrawView() {
             drawHelpBar("START:lanzar la fila;SEL+START:detener todo;>:a las pistas");
         else
             drawHelpBar(headerMode_ ? "A:menu de pista;<>:pista;v:a los clips"
-                                    : "A:poner/abrir;A+<>:elegir;B+A:borrar;SEL+<>:pantalla");
+                                    : "A:poner/abrir;A+<>:elegir;B+A:borrar;SEL+<>:pantalla;SEL+L:deshacer;SEL+R:rehacer");
         return;
     }
 
@@ -1723,7 +1790,7 @@ void SongView::DrawView() {
         drawHelpBar("START:lanzar la fila;SEL+START:detener todo;>:a las pistas");
     else
     drawHelpBar(headerMode_ ? "A:menu de pista;<>:pista;v:a los clips"
-                            : "A:poner/abrir;A+<>:elegir;B+A:borrar;SEL+<>:pantalla");
+                            : "A:poner/abrir;A+<>:elegir;B+A:borrar;SEL+<>:pantalla;SEL+L:deshacer;SEL+R:rehacer");
 };
 
 /******************************************************
