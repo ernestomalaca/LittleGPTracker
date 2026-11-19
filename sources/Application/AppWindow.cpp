@@ -22,21 +22,22 @@
 
 AppWindow *instance = 0;
 
-GUIColor AppWindow::backgroundColor_(0x1D, 0x0A, 0x1F);
-GUIColor AppWindow::normalColor_(0xF5, 0xEB, 0xFF);
-GUIColor AppWindow::borderColor_(0xFF, 0x00, 0x8C);
-GUIColor AppWindow::songviewfeColor_(0xA5, 0x5B, 0x8F);
-GUIColor AppWindow::songview00Color_(0x85, 0x3B, 0x6F);
-GUIColor AppWindow::highlightColor_(0xB7, 0x50, 0xD1);
-GUIColor AppWindow::highlight2Color_(0xDB, 0x33, 0xDB);
+// trk2als: tema Lavanda (se cambia en config.xml)
+GUIColor AppWindow::backgroundColor_(0x10, 0x10, 0x18);
+GUIColor AppWindow::normalColor_(0xF0, 0xEE, 0xFA);
+GUIColor AppWindow::borderColor_(0x8C, 0x9E, 0xFF);
+GUIColor AppWindow::songviewfeColor_(0x60, 0x60, 0x7E);
+GUIColor AppWindow::songview00Color_(0x3C, 0x3C, 0x52);
+GUIColor AppWindow::highlightColor_(0xB8, 0xC3, 0xFF);
+GUIColor AppWindow::highlight2Color_(0x8C, 0x9E, 0xFF);
 GUIColor AppWindow::consoleColor_(0x00, 0xFF, 0x00);
-GUIColor AppWindow::cursorColor_(0xFF, 0x00, 0x8C);
-GUIColor AppWindow::playColor_(0xFF, 0x00, 0x8C);
-GUIColor AppWindow::muteColor_(0xF5, 0xEB, 0xFF);
-GUIColor AppWindow::rownumberColor_(0xBA, 0x28, 0xF9);
-GUIColor AppWindow::rownumber2Color_(0xFF, 0x00, 0xFF);
-GUIColor AppWindow::majorbeatColor_(0xBA, 0x28, 0xF9);
-GUIColor AppWindow::columnTitleColor_(0xA5, 0x5B, 0x8F);
+GUIColor AppWindow::cursorColor_(0x8C, 0x9E, 0xFF);
+GUIColor AppWindow::playColor_(0x8C, 0x9E, 0xFF);
+GUIColor AppWindow::muteColor_(0xFF, 0x7A, 0x8A);
+GUIColor AppWindow::rownumberColor_(0x60, 0x60, 0x7E);
+GUIColor AppWindow::rownumber2Color_(0x8C, 0x9E, 0xFF);
+GUIColor AppWindow::majorbeatColor_(0xB8, 0xC3, 0xFF);
+GUIColor AppWindow::columnTitleColor_(0x8A, 0x88, 0xA8);
 
 int AppWindow::charWidth_ = 8;
 int AppWindow::charHeight_ = 8;
