@@ -1467,7 +1467,7 @@ double Player::linkLatency() {
     if (d) {
         double q = d->QueuedFrames();
         if (linkQueue_ < 0) linkQueue_ = q;
-        linkQueue_ += 0.02 * (q - linkQueue_);
+        linkQueue_ += 0.3 * (q - linkQueue_);   // apenas suavizada
     }
     double ofs = project_ ? project_->FindVariable(VAR_LINKOFS)->GetInt() / 1000.0 : 0.0;
     return (linkQueue_ > 0 ? linkQueue_ / sr : 0.0) + dev + ofs;

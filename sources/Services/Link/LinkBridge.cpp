@@ -10,10 +10,6 @@
 namespace {
 std::unique_ptr<ableton::Link> g_link;
 std::atomic<bool> g_on(false);
-// a qué hora del reloj de Link corresponde cada muestra calculada: una
-// regresión sobre las últimas mediciones (quita los brincos de cuando el
-// audio calcula varios bloques seguidos)
-ableton::link::HostTimeFilter<ableton::link::platform::Clock> g_filter;
 const double QUANTUM = 4.0;   // un compás de 4/4
 
 // la frecuencia real del audio: cuántas muestras se calculan por segundo del
@@ -63,11 +59,13 @@ bool AudioState(double sampleTime, double aheadSec, double &beat, double &tempo,
     if (!g_on.load()) return false;
     ableton::Link &l = link();
     auto state = l.captureAudioSessionState();
+    // cuándo se oye esta rebanada: ahora + lo que ya está en la fila del
+    // audio (aheadSec lo mide el reproductor). Sin promedios largos: la fila
+    // cambia con el tempo y un filtro lento se queda atrás
     auto now = l.clock().micros();
-    auto host = g_filter.sampleTimeToHostTime(sampleTime);
     measureRate(sampleTime, (double)now.count());
-    g_aheadMs = (double)(host - now).count() / 1000.0;
-    auto t = host + std::chrono::microseconds((long long)(aheadSec * 1e6));
+    g_aheadMs = aheadSec * 1000.0;
+    auto t = now + std::chrono::microseconds((long long)(aheadSec * 1e6));
     beat = state.beatAtTime(t, QUANTUM);
     tempo = state.tempo();
     playing = state.isPlaying();
