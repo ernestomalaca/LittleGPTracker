@@ -748,6 +748,12 @@ void AppWindow::joyButton(unsigned short v, bool pressed, bool repeat) {
         _currentView->ProcessButton(phys & ~EPBM_SELECT, pressed);
         return;
     }
+    if (_currentView->InterceptButton(phys, v, pressed, repeat)) {   // trk2als
+        _isDirty = true;
+        if (!pressed && v == EPBM_B) _bGesture = false;
+        if (!pressed && v == EPBM_SELECT) _selectFirst = false;
+        return;
+    }
     if (_currentView->WantsRawButtons()) {   // trk2als: el piano roll
         View::pressedButton_ = pressed ? v : 0;
         _currentView->ProcessButton(phys, pressed);

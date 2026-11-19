@@ -51,6 +51,7 @@ public:
 	// trk2als: automatización. Dónde va el clip de una pista en 1/24 de paso
 	// desde su inicio (-1 si no suena un clip) y si se está grabando
 	int ClipTickPos(int channel) ;
+	int AudioBars(unsigned char clip) { return audioBars(clip) ; }   // trk2als
 	void SetAutoRec(bool on) { autoRec_ = on ; autoRecPending_ = false ; }
 	bool IsAutoRec() { return autoRec_ ; }
 	// armar sonando: empieza a grabar en el siguiente uno del compás

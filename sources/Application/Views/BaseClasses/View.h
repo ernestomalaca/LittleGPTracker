@@ -113,6 +113,9 @@ class View : public Observable {
     virtual bool WantsRawButtons() { return false; }
     // trk2als: Select + L deshace y Select + R rehace (si la pantalla lo tiene)
     virtual bool Undo(bool redo) { return false; }
+    // trk2als: la pantalla toma los botones tal cual antes que el mapeo de LGPT
+    virtual bool InterceptButton(unsigned short phys, unsigned short v, bool pressed,
+                                 bool repeat) { return false; }
     // trk2als: si cambiaron la escala, ofrece pasar las notas (Fit to Scale)
     void checkScaleChange();
     void FitScaleAnswer(bool yes);

@@ -18,6 +18,8 @@ class SongView : public View {
     // View implementation
     virtual void ProcessButtonMask(unsigned short mask, bool pressed);
     virtual bool Undo(bool redo);
+    virtual bool InterceptButton(unsigned short phys, unsigned short v, bool pressed,
+                                 bool repeat);
     virtual void DrawView();
     virtual void AnimationUpdate();
     virtual void OnPlayerUpdate(PlayerEventType, unsigned int tick = 0);
@@ -76,7 +78,7 @@ class SongView : public View {
     void clampTrackCursor();
     GUIPoint gridAnchor();
     std::string cellName();
-    void nameNewChain(unsigned char chain);
+    void nameNewChain(unsigned char chain, int col = -1);
     void LoadTrackPreset(const std::string &name);
     int presetCh_;
     void pickAudio(int cell = -1);
@@ -148,6 +150,25 @@ class SongView : public View {
     void restoreSesSnap(const SesSnap &s);
     void checkHistory();
     void handleButtonMask(unsigned short mask, bool pressed);
+    // trk2als: edición como en el clip (Select,B marca; B copia; B+A corta;
+    // Select+A duplica o pega; A+flechas mueve)
+    struct SesCell {
+        int dx, dy;
+        bool audio;
+        unsigned char value;
+        Clip clip;
+    };
+    bool sesMarking_, sesPasting_;
+    bool sesBPending_, sesAPending_, sesAMoved_;
+    std::vector<SesCell> sesClip_;
+    GUIRect markRect();
+    void startMark();
+    void endMark();
+    void copyMark(std::vector<SesCell> &out);
+    int pasteCells(const std::vector<SesCell> &cells, int col, int row, int &skipped);
+    bool moveMark(int dx, int dy);
+    void duplicateMark();
+    int playFraction(int ch, int &total);   // cuánto lleva el loop (en 1/1000)
     SesSnap sesNow_;
     bool sesNowValid_;
     std::vector<SesSnap> sesUndo_, sesRedo_;
