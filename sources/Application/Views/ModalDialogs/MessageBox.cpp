@@ -156,16 +156,16 @@ void MessageBox::drawShapes() {
 	GUIColor acc=ColorOf(CD_HILITE2), dim=Mix(bg,fg,40) ;
 	int ty=y+PAD ;
 	for (size_t i=0;i<tl.size();i++) {
-		DrawText(x+PAD,ty,tl[i].c_str(),acc,1) ;
+		DrawText(x+(w-(int)tl[i].size()*16)/2,ty,tl[i].c_str(),acc,1) ;
 		ty+=LINE ;
 	}
 	if (!tl.empty()) ty+=8 ;
 	for (size_t i=0;i<lines.size();i++) {
-		DrawText(x+PAD,ty,lines[i].c_str(),fg,1) ;
+		DrawText(x+(w-(int)lines[i].size()*16)/2,ty,lines[i].c_str(),fg,1) ;
 		ty+=LINE ;
 	}
-	// los botones, a la derecha como en las ventanas de siempre
-	int bx=x+w-PAD-btnW, by=y+h-PAD-BH ;
+	// todo centrado: título, texto y botones
+	int bx=x+(w-btnW)/2, by=y+h-PAD-BH ;
 	for (int i=0;i<buttonCount_;i++) {
 		const std::string &t=label_[button_[i]] ;
 		int tx=bx+(bw[i]-(int)t.size()*16)/2, tyb=by+(BH-16)/2 ;
