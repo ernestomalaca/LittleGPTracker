@@ -321,6 +321,7 @@ void ProjectView::Update(Observable &,I_ObservableData *data) {
             MixerService::GetInstance()->SetRenderMode(0);
             PersistencyService *service = PersistencyService::GetInstance();
             service->Save();
+            View::SetNotification("Proyecto guardado");   // trk2als: que se note
             break;
         }
         case ACTION_SAVE_AS: {
