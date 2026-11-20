@@ -409,7 +409,8 @@ void ProjectView::drawBoard() {
     char b[48];
 
     // los tres protagonistas
-    const int TY = 46, TH = 120, TW = 188;
+    // (la escala, más ancha: sus nombres son largos)
+    const int TY = 46, TH = 120, TW = 150, EW = 264;
     // tempo
     bool fT = focus == tempoField_;
     FillRect(24, TY, TW, TH, card, 8);
@@ -422,24 +423,42 @@ void ProjectView::drawBoard() {
 
     // escala: nota y escala (‹›)
     bool fS = focus == rootField_ || focus == scaleField_;
-    int ex = 226;
-    FillRect(ex, TY, TW, TH, card, 8);
-    if (fS) FrameRect(ex, TY, TW, TH, acc, 8, 3);
+    int ex = 24 + TW + 14;
+    FillRect(ex, TY, EW, TH, card, 8);
+    if (fS) FrameRect(ex, TY, EW, TH, acc, 8, 3);
     DrawText(ex + 12, TY + 12, "ESCALA", acc, 0);
     std::string root = project_->FindVariable(VAR_SCALEROOT)->GetString();
     std::string scale = project_->FindVariable(VAR_SCALE)->GetString();
-    if (scale.size() > 9) scale = scale.substr(0, 9);
     int rw = 24 * (int)root.size();
     if (focus == rootField_) FillRect(ex + 6, TY + 40, rw + 12, 44, acc, 4);
     DrawText(ex + 12, TY + 46, root.c_str(), focus == rootField_ ? bg : fg, 2);
     int sx = ex + 12 + rw + 12;
-    if (focus == scaleField_) FillRect(sx - 6, TY + 52, 16 * (int)scale.size() + 12, 26, acc, 4);
-    DrawText(sx, TY + 57, scale.c_str(), focus == scaleField_ ? bg : fg, 1);
+    // el nombre al lado de la nota; si no cabe, en dos renglones (y si aún
+    // así no cabe, se corta con ..)
+    int room = (ex + EW - 12 - sx) / 16;
+    std::string l1 = scale, l2;
+    if ((int)scale.size() > room) {
+        size_t sp = scale.rfind(' ', room);
+        if (sp == std::string::npos) sp = scale.find(' ');
+        if (sp != std::string::npos) { l1 = scale.substr(0, sp); l2 = scale.substr(sp + 1); }
+        if ((int)l1.size() > room) l1 = l1.substr(0, room - 2) + "..";
+        if ((int)l2.size() > room) l2 = l2.substr(0, room - 2) + "..";
+    }
+    int lw = 16 * (int)(l1.size() > l2.size() ? l1.size() : l2.size());
+    bool fSc = focus == scaleField_;
+    if (l2.empty()) {
+        if (fSc) FillRect(sx - 6, TY + 52, lw + 12, 26, acc, 4);
+        DrawText(sx, TY + 57, l1.c_str(), fSc ? bg : fg, 1);
+    } else {
+        if (fSc) FillRect(sx - 6, TY + 42, lw + 12, 44, acc, 4);
+        DrawText(sx, TY + 46, l1.c_str(), fSc ? bg : fg, 1);
+        DrawText(sx, TY + 66, l2.c_str(), fSc ? bg : fg, 1);
+    }
     if (fS) DrawText(ex + 12, TY + 98, "<> elige  A+<> cambia", dim, 0);
 
     // Link: el modo y el desfase (‹›)
     bool fL = focus == linkField_, fO = focus == ofsField_;
-    int lx = 428;
+    int lx = ex + EW + 14;
     FillRect(lx, TY, TW, TH, card, 8);
     if (fL || fO) FrameRect(lx, TY, TW, TH, acc, 8, 3);
     DrawText(lx + 12, TY + 12, "ABLETON LINK", acc, 0);
@@ -450,7 +469,7 @@ void ProjectView::drawBoard() {
     snprintf(b, sizeof(b), "desfase %+d ms", project_->FindVariable(VAR_LINKOFS)->GetInt());
     if (fO) FillRect(lx + 6, TY + 92, 8 * (int)strlen(b) + 12, 18, acc, 3);
     DrawText(lx + 12, TY + 95, b, fO ? bg : dim, 0);
-    if (fO) DrawText(lx + 12, TY + 76, "+ si Chancho atrasa", dim, 0);
+    if (fO) DrawText(lx + 12, TY + 76, "+ si va atrasado", dim, 0);
 
     // fichas
     static const char *chipName[8] = {"VOLUMEN", "DRIVE", "TIPO", "NIVEL", "MIDI", "METRONOMO", "TRANSP", "FOLD"};
