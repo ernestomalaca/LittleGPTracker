@@ -81,6 +81,11 @@ class SongView : public View {
     void nameNewChain(unsigned char chain, int col = -1);
     void LoadTrackPreset(const std::string &name);
     int presetCh_;
+    bool newTrack_;   // trk2als: la pista se acaba de agregar (cancelar la quita)
+    void openTrackBrowser(int ch, bool isNew);
+    void OnTrackBrowser(int code, const std::string &name);
+    void askDeleteTrack(int ch);
+    void goToInstrument(int ch);
     void pickAudio(int cell = -1);
     void placeAudio();
     void stepAudio(int dir);

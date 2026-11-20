@@ -7,6 +7,7 @@
 static const int addType[2] = {TT_MIDI, TT_AUDIO} ;
 static const char *addName[2] = {"Pista MIDI", "Pista de audio"} ;
 static const char *addInfo[2] = {"notas", "loops"} ;
+static const char *addWhere[2] = {"notas · abre el navegador de sonidos", "loops · abre la carpeta de samples"} ;
 
 // opciones de una pista MIDI (la de audio solo tiene la última)
 static const int trackCode[4] = {TTD_LOAD, TTD_NEWKIT, TTD_EDIT, TTD_DELETE} ;
@@ -26,6 +27,7 @@ void TrackTypeDialog::DrawView() {
 	GUITextProperties props ;
 	char line[64] ;
 	SetColor(CD_NORMAL) ;
+	if (adding_ && SupportsShapes()) { drawAdd() ; return ; }
 	if (adding_) {
 		SetWindow(width, 7) ;
 		const char *title = "Agregar pista" ;
@@ -107,4 +109,24 @@ void TrackTypeDialog::ProcessButtonMask(unsigned short mask, bool pressed) {
 		}
 	}
 	isDirty_ = true ;
+}
+
+void TrackTypeDialog::drawAdd() {
+	const int W = 480, H = 260 ;
+	int x = (640 - W) / 2, y = (480 - H) / 2 ;
+	DrawPanel(x, y, W, H) ;
+	GUIColor bg = ColorOf(CD_BACKGROUND), fg = ColorOf(CD_NORMAL) ;
+	GUIColor acc = ColorOf(CD_HILITE2), dim = Mix(bg, fg, 50), card = Mix(bg, fg, 10) ;
+	DrawText(x + 32, y + 28, "AGREGAR PISTA", acc, 1) ;
+	for (int t = 0; t < 2; t++) {
+		int ry = y + 68 + t * 64 ;
+		bool sel = (t == selected_) ;
+		if (sel) {
+			FillRect(x + 24, ry, W - 48, 56, card, 8) ;
+			FrameRect(x + 24, ry, W - 48, 56, acc, 8, 2) ;
+		}
+		DrawText(x + 40, ry + 10, addName[t], sel ? fg : dim, 1) ;
+		DrawText(x + 40, ry + 33, addWhere[t], dim, 0) ;
+	}
+	DrawText(x + 32, y + H - 34, "A elige    B cancela", dim, 0) ;
 }

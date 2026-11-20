@@ -62,6 +62,7 @@ SongView::SongView(GUIWindow &w, ViewData *viewData, const char *song)
     rowMode_ = false;
     pendingTypeCh_ = -1;
     presetCh_ = -1;
+    newTrack_ = false;
     pickClip_ = pickCell_ = -1;
     newSlotCell_ = -1;
     pendingType_ = 0;
@@ -1507,9 +1508,108 @@ void SongView::processNormalButtonMask(unsigned int mask) {
 
 static void TrackPresetCallback(View &v, ModalView &dialog) {
     SongView &sv = (SongView &)v;
-    if (dialog.GetReturnCode() > 0) {
-        sv.LoadTrackPreset(((PresetDialog &)dialog).GetSelected());
+    sv.OnTrackBrowser(dialog.GetReturnCode(), ((PresetDialog &)dialog).GetSelected());
+}
+
+// trk2als: A en la cabecera de una pista MIDI: el navegador de sonidos (con
+// "Kit vacío", "Importar .sf2" y "Sample vacío"); lo que se elija va a su instrumento
+void SongView::openTrackBrowser(int ch, bool isNew) {
+    presetCh_ = ch;
+    newTrack_ = isNew;
+    PresetDialog *d = new PresetDialog(*this);
+    d->SetEmptyOptions(true);
+    DoModal(d, TrackPresetCallback);
+}
+
+void SongView::goToInstrument(int ch) {
+    int owner = viewData_->project_->GetTrackInstrument(ch);
+    if (owner < 0) return;
+    viewData_->currentInstrument_ = owner;
+    viewData_->instrumentFromSong_ = true;
+    headerMode_ = false;   // al volver, el cursor ya está en los clips
+    viewData_->songX_ = ch;
+    ViewType vt = VT_INSTRUMENT;
+    ViewEvent ve(VET_SWITCH_VIEW, &vt);
+    SetChanged();
+    NotifyObservers(&ve);
+}
+
+static void TrackSf2Callback(View &v, ModalView &dialog) {
+    SongView &sv = (SongView &)v;
+    Project *project = sv.viewData_->project_;
+    int ch = sv.presetCh_;
+    if (dialog.GetReturnCode() == 1) {
+        int owner = project->GetTrackInstrument(ch);
+        if (owner >= 0) {
+            SampleInstrument *si = (SampleInstrument *)project->GetInstrumentBank()->GetInstrument(owner);
+            std::string n = si->ZoneSetName();
+            if (n.empty()) n = "Multicapa";
+            project->SetTrackName(ch, n.c_str());
+            sv.SetNotification((n + " cargado").c_str());
+        }
+    } else if (sv.newTrack_) {
+        project->DeleteTrack(ch);   // la pista nueva se queda sin nada: fuera
+        sv.clampTrackCursor();
     }
+    sv.newTrack_ = false;
+    sv.SetDirty(true);
+}
+
+void SongView::OnTrackBrowser(int code, const std::string &name) {
+    Project *project = viewData_->project_;
+    int ch = presetCh_;
+    if (code == 1) {
+        newTrack_ = false;
+        LoadTrackPreset(name);
+        return;
+    }
+    if (code == PD_EMPTY_KIT) {
+        newTrack_ = false;
+        ApplyTrackType(ch, TTD_NEWKIT, false);
+        return;
+    }
+    if (code == PD_EMPTY_SAMPLE) {
+        newTrack_ = false;
+        int owner = project->GetTrackInstrument(ch);
+        if (owner < 0) return;
+        project->GetInstrumentBank()->GetInstrument(owner)->Purge();
+        project->SetTrackName(ch, "Sample");
+        View::SetNotification("sample vacío: A en sample elige el archivo");
+        goToInstrument(ch);
+        return;
+    }
+    if (code == PD_IMPORT_SF2) {
+        int owner = project->GetTrackInstrument(ch);
+        if (owner < 0) return;
+        viewData_->currentInstrument_ = owner;
+        DoModal(new ImportSampleDialog(*this, false, true), TrackSf2Callback);
+        return;
+    }
+    // cancelar: si la pista era nueva, se quita
+    if (newTrack_) {
+        project->DeleteTrack(ch);
+        newTrack_ = false;
+        clampTrackCursor();
+        isDirty_ = true;
+    }
+}
+
+static void DeleteTrackCallback(View &v, ModalView &dialog) {
+    SongView &sv = (SongView &)v;
+    if (dialog.GetReturnCode() == MBL_YES && sv.pendingTypeCh_ >= 0)
+        sv.ApplyTrackType(sv.pendingTypeCh_, TTD_DELETE, false);
+    sv.pendingTypeCh_ = -1;
+}
+
+void SongView::askDeleteTrack(int ch) {
+    Project *project = viewData_->project_;
+    if (!project->TrackExists(ch)) return;
+    pendingTypeCh_ = ch;
+    char t[64];
+    snprintf(t, sizeof(t), "¿Borrar la pista %d?\n%s", ch + 1, project->GetTrackName(ch));
+    MessageBox *mb = new MessageBox(*this, "No se puede deshacer", MBBF_YES | MBBF_NO);
+    mb->Title(t).Label(MBL_YES, "Ok").Label(MBL_NO, "Volver");
+    DoModal(mb, DeleteTrackCallback);
 }
 
 // trk2als: el preset va al instrumento de la pista, y la pista toma su nombre
@@ -1584,8 +1684,16 @@ void SongView::ApplyTrackType(int channel, int code, bool) {
         int ch = project->AddTrack(code == TT_AUDIO ? TT_AUDIO : TT_MIDI);
         if (ch < 0) return;
         viewData_->songX_ = ch;
-        snprintf(msg, sizeof(msg), "nueva: %s", project->GetTrackName(ch));
-        View::SetNotification(msg);
+        // trk2als: la MIDI va directo al navegador; la de audio, a elegir un loop
+        if (code != TT_AUDIO) {
+            openTrackBrowser(ch, true);
+            return;
+        }
+        headerMode_ = false;
+        clampTrackCursor();
+        isDirty_ = true;
+        pickAudio(-1);
+        return;
     }
     headerMode_ = false;   // trk2als: de la cabecera a los clips (si quedan pistas)
     clampTrackCursor();
@@ -1635,6 +1743,12 @@ void SongView::processRowButtonMask(unsigned int mask) {
 }
 
 void SongView::processHeaderButtonMask(unsigned int mask) {
+    // trk2als: B+A borra la pista (B solo espera a la A)
+    if (mask == (EPBM_A | EPBM_B)) {
+        askDeleteTrack(viewData_->songX_);
+        return;
+    }
+    if (mask == EPBM_B) return;
     if (mask & (EPBM_R | EPBM_L | EPBM_B)) { // atajos de siempre: salir de la cabecera
         headerMode_ = false;
         isDirty_ = true;
@@ -1645,10 +1759,15 @@ void SongView::processHeaderButtonMask(unsigned int mask) {
         onStart();
         return;
     }
-    if (mask == EPBM_A) { // A: en el '+' agregar una pista; en una pista, borrarla
+    if (mask == EPBM_A) { // A: en el '+' agregar una pista; en una pista, su sonido
         int ch = viewData_->songX_;
         Project *project = viewData_->project_;
         bool adding = !project->TrackExists(ch);
+        if (!adding) {
+            if (project->GetTrackInstrument(ch) >= 0) openTrackBrowser(ch, false);
+            else View::SetNotification("pista de audio: A en una celda carga un loop");
+            return;
+        }
         pendingTypeCh_ = ch;
         TrackTypeDialog *d = new TrackTypeDialog(*this, ch, adding, project->GetTrackName(ch),
                                                  project->GetTrackInstrument(ch) >= 0);
@@ -1935,7 +2054,7 @@ void SongView::DrawView() {
         else if (sesPasting_)
             drawHelpBar("suelta A:pegar;flechas:acomodar;B:cancelar");
         else
-            drawHelpBar(headerMode_ ? "A:menú de pista;<>:pista;v:a los clips"
+            drawHelpBar(headerMode_ ? "A:sonido / agregar;B+A:borrar pista;<>:pista;v:a los clips"
                                     : "A:poner/abrir;A+<>:elegir;B+A:borrar;SEL,B:marcar;SEL+A:pegar;SEL+<>:pantalla;SEL+L:deshacer;SEL+R:rehacer");
         return;
     }
@@ -2082,7 +2201,7 @@ void SongView::DrawView() {
     if (rowMode_)
         drawHelpBar("START:lanzar la fila;SEL+START:detener todo;>:a las pistas");
     else
-    drawHelpBar(headerMode_ ? "A:menú de pista;<>:pista;v:a los clips"
+    drawHelpBar(headerMode_ ? "A:sonido / agregar;B+A:borrar pista;<>:pista;v:a los clips"
                             : "A:poner/abrir;A+<>:elegir;B+A:borrar;SEL+<>:pantalla;SEL+L:deshacer;SEL+R:rehacer");
 };
 

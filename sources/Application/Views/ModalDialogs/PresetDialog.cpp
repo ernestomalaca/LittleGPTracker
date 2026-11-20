@@ -31,7 +31,7 @@ static Uint32 previewWake(Uint32, void *) {
 
 PresetDialog::PresetDialog(View &view, bool forSave, int kind)
     : ModalView(view), forSave_(forSave), kind_(kind), selected_(0), top_(0),
-      col_(1), treeSel_(0), treeTop_(0), previewAt_(0) {
+      emptyOptions_(false), col_(1), treeSel_(0), treeTop_(0), previewAt_(0) {
 	folder_ = InstrumentPresets::LastFolder() ;   // se abre donde se quedó
 	if (kind_ >= 0) {   // solo un tipo: en su carpeta (Kits...) si la hay
 		const char *kf = InstrumentPresets::KindFolder(kind_) ;
@@ -119,6 +119,20 @@ void PresetDialog::load() {
 		e.name = "[guardar aquí]" ;
 		entries_.push_back(e) ;
 	}
+	// trk2als: la opción vacía de la categoría (Kits, Multicapa, Samples)
+	if (emptyOptions_ && !forSave_ && !folder_.empty()) {
+		std::string cat = folder_.substr(0, folder_.find('/')) ;
+		int code = 0 ;
+		if (cat == InstrumentPresets::KindFolder(InstrumentPresets::PK_KIT)) code = PD_EMPTY_KIT ;
+		else if (cat == InstrumentPresets::KindFolder(InstrumentPresets::PK_MULTI)) code = PD_IMPORT_SF2 ;
+		else if (cat == InstrumentPresets::KindFolder(InstrumentPresets::PK_SAMPLE)) code = PD_EMPTY_SAMPLE ;
+		if (code) {
+			e.kind = K_EMPTY ;
+			e.zones = code ;
+			e.name = code == PD_EMPTY_KIT ? "Kit vacío" : code == PD_IMPORT_SF2 ? "Importar .sf2" : "Sample vacío" ;
+			entries_.push_back(e) ;
+		}
+	}
 	// lo que está más hondo que el árbol se recorre desde la lista
 	bool deep = depthOf(folder_) >= 2 ;
 	if (depthOf(folder_) >= 3) {
@@ -148,9 +162,9 @@ void PresetDialog::load() {
 	}
 	selected_ = 0 ;
 	top_ = 0 ;
-	if (!forSave_) {   // de entrada en el primer preset (no en "..")
+	if (!forSave_) {   // de entrada en el primer preset (no en ".." ni en la vacía)
 		for (size_t i = 0; i < entries_.size(); i++) {
-			if (entries_[i].kind != K_UP) { selected_ = int(i) ; break ; }
+			if (entries_[i].kind == K_PRESET) { selected_ = int(i) ; break ; }
 		}
 	}
 }
@@ -408,11 +422,14 @@ void PresetDialog::drawShapes() {
 			sub = b ;
 		} else {
 			FrameRect(sx, sy, ss, ss, dim, 7, 2) ;
-			const char *ic = e.kind == K_UP ? "<" : e.kind == K_HERE ? "+" : "/" ;
+			const char *ic = e.kind == K_UP ? "<" : (e.kind == K_HERE || e.kind == K_EMPTY) ? "+" : "/" ;
 			DrawText(sx + 11, sy + 11, ic, dim, 1) ;
 			if (e.kind == K_FOLDER) { name = name.substr(0, name.size() - 1) ; sub = "carpeta" ; }
 			if (e.kind == K_UP) { name = "volver" ; sub = "carpeta de arriba" ; }
 			if (e.kind == K_HERE) { name = "Guardar aquí" ; sub = folder_.empty() ? "presets" : folder_ ; }
+			if (e.kind == K_EMPTY)
+				sub = e.zones == PD_EMPTY_KIT ? "armarlo pad por pad" :
+				      e.zones == PD_IMPORT_SF2 ? "un soundfont de la samplelib" : "eliges el sample tú" ;
 		}
 		int nx = sx + ss + 14 ;
 		int room = (LX + LW - 50 - nx) / 16 ;
@@ -519,6 +536,11 @@ void PresetDialog::ProcessButtonMask(unsigned short mask, bool pressed) {
 		case K_HERE:
 			InstrumentPresets::LastFolder() = folder_ ;
 			EndModal(1) ;
+			return ;
+		case K_EMPTY:
+			stopPreview() ;
+			InstrumentPresets::LastFolder() = folder_ ;
+			EndModal(e.zones) ;
 			return ;
 		case K_PRESET:
 			stopPreview() ;

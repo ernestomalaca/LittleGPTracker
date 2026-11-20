@@ -12,7 +12,11 @@
 // patroncito con los pads del kit).
 // Para cargar: GetSelected() da el nombre con su carpeta ("Kits/Cumbia/KIT 1").
 // Para guardar (forSave): "[guardar aquí]" elige la carpeta; GetFolder().
-// GetReturnCode(): 1 = listo; 0 = cancelar
+// GetReturnCode(): 1 = listo; 0 = cancelar; con SetEmptyOptions(): también
+// PD_EMPTY_KIT, PD_EMPTY_SAMPLE, PD_IMPORT_SF2 (la primera fila de cada categoría)
+#define PD_EMPTY_KIT 2
+#define PD_EMPTY_SAMPLE 3
+#define PD_IMPORT_SF2 4
 class PresetDialog : public ModalView {
 public:
 	// kind: -1 = todos; si no, solo presets de ese tipo
@@ -27,8 +31,10 @@ public:
 	virtual bool Tick() ;
 	std::string GetSelected() ;
 	std::string GetFolder() { return folder_ ; }
+	// trk2als: "Kit vacío" / "Importar .sf2" / "Sample vacío" en cada categoría
+	void SetEmptyOptions(bool on) { emptyOptions_ = on ; load() ; }
 private:
-	enum Kind { K_UP, K_HERE, K_FOLDER, K_PRESET } ;
+	enum Kind { K_UP, K_HERE, K_FOLDER, K_PRESET, K_EMPTY } ;
 	struct Entry {
 		Kind kind ;
 		std::string name ;
@@ -57,6 +63,7 @@ private:
 	std::string chosen_ ;
 	int selected_ ;
 	int top_ ;
+	bool emptyOptions_ ;
 	int col_ ;        // 0 carpetas, 1 lista
 	int treeSel_ ;
 	int treeTop_ ;

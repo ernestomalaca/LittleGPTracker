@@ -24,7 +24,10 @@ public:
 	virtual void OnPlayerUpdate(PlayerEventType, unsigned int) ;
 	virtual void OnFocus() ;
 	virtual void ProcessButtonMask(unsigned short mask, bool pressed) ;
+	// trk2als: la de agregar, con el diseño de la ventana de ayuda
+	virtual bool UsesShapes() { return adding_ && SupportsShapes() ; }
 private:
+	void drawAdd() ;
 	int channel_ ;
 	bool adding_ ;
 	bool midi_ ;
