@@ -1,6 +1,7 @@
 #ifndef _INSTRUMENT_PRESETS_H_
 #define _INSTRUMENT_PRESETS_H_
 
+#include "System/FileSystem/FileSystem.h"
 #include <string>
 #include <vector>
 
@@ -26,6 +27,17 @@ namespace InstrumentPresets {
 	int KindOf(const std::string &name) ;
 	bool FolderHas(const std::string &folder,int kind) ;
 	const char *KindFolder(int kind) ;   // "Samples", "Multicapa", "Kits"
+	// trk2als: la samplelib dentro del navegador, como una carpeta más de
+	// Samples: "Samples/Librería/Drums/kick.wav" es samplelib/Drums/kick.wav.
+	// Un .wav de ahí se carga como un preset de sample (tipo Simpler)
+	std::string LibFolder() ;                     // "Samples/Librería"
+	bool IsLib(const std::string &name) ;         // ¿es la librería o algo dentro?
+	Path LibPath(const std::string &name) ;       // la ruta real
+	bool LibExists() ;
+	void ListLib(const std::string &folder, std::vector<std::string> &folders,
+	             std::vector<std::string> &wavs) ;
+	int CountLib(const std::string &folder) ;     // .wav adentro (con subcarpetas)
+	void ForgetLibCounts() ;                      // al abrir el navegador: se vuelven a contar
 	bool Exists(const std::string &name) ;
 	// guarda el instrumento (sobrescribe si ya existe). false si falló
 	bool Save(SampleInstrument *instr, const std::string &name) ;

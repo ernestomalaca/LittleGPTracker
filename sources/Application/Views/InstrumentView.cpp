@@ -1895,8 +1895,7 @@ void InstrumentView::LaunchAfter(int instrument,int track,const std::string &nam
 		onInstrumentChange() ;
 	}
 	if (ok && !HasModal()) {
-		std::string shortName=name.substr(name.rfind('/')==std::string::npos?0:name.rfind('/')+1) ;
-		View::SetNotification((shortName+" cargado").c_str()) ;
+		View::SetNotification((SoundLauncher::DisplayName(name)+" cargado").c_str()) ;
 	}
 	isDirty_=true ;
 }

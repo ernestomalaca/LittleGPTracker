@@ -70,6 +70,7 @@ PresetDialog::PresetDialog(View &view, bool forSave, int kind)
     : ModalView(view), forSave_(forSave), kind_(kind), selected_(0), top_(0),
       emptyOptions_(false), col_(1), treeSel_(0), treeTop_(0), previewAt_(0) {
 	launcher_ = 0 ;
+	InstrumentPresets::ForgetLibCounts() ;   // por si se agregaron samples (p. ej. desde chancho.local)
 	folder_ = InstrumentPresets::LastFolder() ;   // se abre donde se quedó
 	if (kind_ >= 0) {   // solo un tipo: en su carpeta (Kits...) si la hay
 		const char *kf = InstrumentPresets::KindFolder(kind_) ;
@@ -157,10 +158,29 @@ void PresetDialog::buildTree() {
 
 void PresetDialog::load() {
 	std::vector<std::string> folders, presets ;
-	InstrumentPresets::ListFolder(folder_, folders, presets) ;
 	entries_.clear() ;
 	Entry e ;
 	e.ptype = -1 ; e.zones = 0 ;
+	if (InstrumentPresets::IsLib(folder_)) {   // trk2als: dentro de la samplelib
+		InstrumentPresets::ListLib(folder_, folders, presets) ;
+		for (size_t i = 0; i < folders.size(); i++) {
+			e.kind = K_FOLDER ;
+			e.name = folders[i] + "/" ;
+			e.zones = InstrumentPresets::CountLib(full(folders[i])) ;
+			if (e.zones) entries_.push_back(e) ;   // carpetas sin .wav: no estorban
+		}
+		for (size_t i = 0; i < presets.size(); i++) {   // cada .wav: como un preset de sample
+			e.kind = K_PRESET ;
+			e.name = presets[i] ;
+			e.ptype = InstrumentPresets::PK_SAMPLE ;
+			e.zones = 0 ;
+			entries_.push_back(e) ;
+		}
+		selected_ = 0 ;
+		top_ = 0 ;
+		return ;
+	}
+	InstrumentPresets::ListFolder(folder_, folders, presets) ;
 	if (forSave_) {
 		e.kind = K_HERE ;
 		e.name = "[guardar aquí]" ;
@@ -184,6 +204,16 @@ void PresetDialog::load() {
 			e.name = code == PD_EMPTY_KIT ? "Kit vacío" : code == PD_IMPORT_SF2 ? "Importar .sf2" : "Sample vacío" ;
 			entries_.push_back(e) ;
 		}
+	}
+	// trk2als: en Samples, la samplelib: cualquier .wav como instrumento
+	if (!forSave_ && (kind_ < 0 || kind_ == InstrumentPresets::PK_SAMPLE) &&
+	    folder_ == InstrumentPresets::KindFolder(InstrumentPresets::PK_SAMPLE) && InstrumentPresets::LibExists()) {
+		e.kind = K_FOLDER ;
+		std::string lf = InstrumentPresets::LibFolder() ;
+		e.name = lf.substr(lf.find('/') + 1) + "/" ;
+		e.zones = InstrumentPresets::CountLib(lf) ;
+		entries_.push_back(e) ;
+		e.zones = 0 ;
 	}
 	// las subcategorías (en la raíz, las categorías están a la izquierda)
 	if (depthOf(folder_) >= 1) {
@@ -531,6 +561,10 @@ void PresetDialog::drawShapes() {
 			else if (e.ptype == InstrumentPresets::PK_MULTI) snprintf(b, sizeof(b), "multicapa · %d zonas", e.zones) ;
 			else snprintf(b, sizeof(b), "sample") ;
 			sub = b ;
+			if (InstrumentPresets::IsLib(folder_)) {   // un .wav de la samplelib
+				if (name.size() > 4) name = name.substr(0, name.size() - 4) ;
+				sub = "sample · librería" ;
+			}
 		} else if (e.kind == K_FOLDER || e.kind == K_NEWDIR) {
 			// una carpetita, del color de su categoría
 			int fk = folderKind(folder_.substr(0, folder_.find('/'))) ;

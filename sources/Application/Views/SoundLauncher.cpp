@@ -54,6 +54,12 @@ SoundLauncher::~SoundLauncher() {
 
 SoundLauncher *SoundLauncher::Current() { return current ; }
 
+std::string SoundLauncher::DisplayName(const std::string &name) {
+	std::string leaf = leafOf(name) ;
+	if (InstrumentPresets::IsLib(name) && leaf.size() > 4) leaf = leaf.substr(0, leaf.size() - 4) ;
+	return leaf ;
+}
+
 void SoundLauncher::Open(int instrument, LaunchHost *host) {
 	target_ = instrument ;
 	host_ = host ;
@@ -75,7 +81,7 @@ std::string SoundLauncher::currentOf(int instrument) {
 	std::string shown = tr >= 0 ? vd_->project_->GetTrackName(tr) : "" ;
 	std::map<int, std::string>::iterator it = preset_.find(instrument) ;
 	if (it == preset_.end() || it->second.empty()) return shown ;
-	if (tr >= 0 && leafOf(it->second) != shown) return shown ;   // se cambió por otro lado
+	if (tr >= 0 && shown_[instrument] != shown) return shown ;   // se cambió por otro lado
 	return it->second ;
 }
 
@@ -143,10 +149,13 @@ void SoundLauncher::TrackRemoved(int track) {
 	int instr = p->GetTrackInstrument(track) ;
 	if (phase_ && instr_ == instr) cancel() ;
 	preset_.erase(instr) ;
+	shown_.erase(instr) ;
 }
 
 void SoundLauncher::SetPreset(int instrument, const std::string &name) {
 	preset_[instrument] = name ;
+	int tr = trackOf(instrument) ;
+	shown_[instrument] = tr >= 0 ? vd_->project_->GetTrackName(tr) : "" ;
 }
 
 bool SoundLauncher::Tick() {
@@ -220,8 +229,8 @@ void SoundLauncher::apply() {
 	else if (tr >= 0) Player::GetInstance()->HoldTrack(tr, true) ;
 	bool ok = InstrumentPresets::Load(si, name) ;
 	if (ok) {
-		preset_[instr] = name ;
-		if (tr >= 0) project->SetTrackName(tr, leafOf(name).c_str()) ;
+		if (tr >= 0) project->SetTrackName(tr, DisplayName(name).c_str()) ;
+		SetPreset(instr, name) ;
 	}
 	if (host) host->LaunchAfter(instr, tr, name, ok) ;
 	else if (tr >= 0) Player::GetInstance()->HoldTrack(tr, false) ;

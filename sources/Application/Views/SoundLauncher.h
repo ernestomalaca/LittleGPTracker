@@ -36,6 +36,8 @@ public:
 	SoundLauncher(ViewData *vd, LaunchHost *owner) ;
 	virtual ~SoundLauncher() ;
 	static SoundLauncher *Current() ;   // el del proyecto abierto (o 0)
+	// el nombre corto para la pista y los avisos ("KIT 1", "kick" de kick.wav)
+	static std::string DisplayName(const std::string &name) ;
 
 	// al abrir un navegador que lanza: a qué instrumento y quién lo abrió
 	void Open(int instrument, LaunchHost *host) ;
@@ -85,6 +87,7 @@ private:
 	unsigned long lastDraw_ ;
 	// el preset (con carpeta) que tiene cada instrumento
 	std::map<int, std::string> preset_ ;
+	std::map<int, std::string> shown_ ;   // cómo quedó llamándose su pista
 } ;
 
 #endif

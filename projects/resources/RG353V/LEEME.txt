@@ -60,6 +60,11 @@ Sonidos (presets) y su pre-escucha
   Ejemplo:  presets/Kits/Cumbia/KIT 1/preview.wav
   X prende o apaga la pre-escucha (se queda así para todos los proyectos).
 
+Samples de la librería como instrumento (tipo Simpler)
+  En el navegador, Samples > Librería muestra las carpetas de tu samplelib.
+  A sobre un .wav lo lanza a la pista como un instrumento de sample (se usa
+  desde la samplelib, sin copiarlo). La pista toma el nombre del archivo.
+
 Lanzar sonidos a la pista (como clips)
   Desde la cabecera de una pista MIDI, A sobre un sonido lo lanza a la
   pista: su barrita avanza mientras se leen los samples y luego mientras

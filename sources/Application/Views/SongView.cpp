@@ -1740,7 +1740,7 @@ void SongView::LoadTrackPreset(const std::string &name) {
             : "No se pudo cargar el preset");
         return;
     }
-    std::string shortName = name.substr(name.rfind('/') == std::string::npos ? 0 : name.rfind('/') + 1);
+    std::string shortName = SoundLauncher::DisplayName(name);
     project->SetTrackName(ch, shortName.c_str());
     launcher_->SetPreset(owner, name);
     View::SetNotification((shortName + (cleaned ? " cargado\nse quitaron samples que nadie usaba" : " cargado")).c_str());
@@ -2775,8 +2775,7 @@ void SongView::LaunchBefore(int, int track, bool firstOfVisit) {
 void SongView::LaunchAfter(int, int track, const std::string &name, bool ok) {
     if (track >= 0) endSoundChange(track);
     if (ok && !HasModal()) {
-        std::string shortName = name.substr(name.rfind('/') == std::string::npos ? 0 : name.rfind('/') + 1);
-        View::SetNotification((shortName + " cargado").c_str());
+        View::SetNotification((SoundLauncher::DisplayName(name) + " cargado").c_str());
     }
     isDirty_ = true;
 }

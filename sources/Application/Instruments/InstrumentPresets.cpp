@@ -6,6 +6,8 @@
 #include "System/FileSystem/FileSystem.h"
 #include "System/Console/Trace.h"
 #include <algorithm>
+#include <map>
+#include <ctype.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -47,6 +49,13 @@ static bool copyFile(const std::string &from, const std::string &to) {
 // Path con alias ("root:...") no sabe si existe: hay que resolverlo antes
 static Path resolved(const Path &p) {
 	return Path(p.GetPath()) ;
+}
+
+static bool isWav(const std::string &n) {
+	if (n.size() < 5) return false ;
+	std::string e = n.substr(n.size() - 4) ;
+	for (size_t i = 0; i < e.size(); i++) e[i] = tolower(e[i]) ;
+	return e == ".wav" ;
 }
 
 static Path presetPath(const std::string &name) {
@@ -201,6 +210,16 @@ bool InstrumentPresets::Save(SampleInstrument *instr, const std::string &name) {
 }
 
 bool InstrumentPresets::Load(SampleInstrument *instr, const std::string &name) {
+	if (IsLib(name)) {   // trk2als: un .wav de la samplelib: el instrumento de sample con ese archivo
+		Path p = LibPath(name) ;
+		if (!isWav(name) || !p.Exists()) return false ;
+		int idx = SamplePool::GetInstance()->Acquire(p) ;
+		if (idx < 0) return false ;
+		instr->Purge() ;
+		instr->SetZones("") ;
+		instr->AssignSample(idx) ;
+		return true ;
+	}
 	Path folder = presetPath(name) ;
 	Path file = Path(folder).Descend(PRESET_FILE) ;
 	TiXmlDocument doc(file.GetPath()) ;
@@ -332,6 +351,73 @@ bool InstrumentPresets::FolderHas(const std::string &folder,int kind) {
 	return false ;
 }
 
+// --- trk2als: la samplelib ----------------------------------------------------
+
+std::string InstrumentPresets::LibFolder() {
+	return std::string(KindFolder(PK_SAMPLE)) + "/Librería" ;
+}
+
+bool InstrumentPresets::IsLib(const std::string &name) {
+	std::string lf = LibFolder() ;
+	return name == lf || (name.size() > lf.size() && name.compare(0, lf.size() + 1, lf + "/") == 0) ;
+}
+
+Path InstrumentPresets::LibPath(const std::string &name) {
+	Path p(Path("root:samplelib").GetPath()) ;
+	std::string lf = LibFolder() ;
+	std::string rel = name.size() > lf.size() ? name.substr(lf.size() + 1) : "" ;
+	size_t start = 0 ;
+	while (start < rel.size()) {
+		size_t slash = rel.find('/', start) ;
+		std::string part = rel.substr(start, slash == std::string::npos ? std::string::npos : slash - start) ;
+		if (!part.empty()) p = p.Descend(part) ;
+		if (slash == std::string::npos) break ;
+		start = slash + 1 ;
+	}
+	return Path(p.GetPath()) ;
+}
+
+bool InstrumentPresets::LibExists() { return LibPath(LibFolder()).Exists() ; }
+
+void InstrumentPresets::ListLib(const std::string &folder, std::vector<std::string> &folders,
+                                std::vector<std::string> &wavs) {
+	folders.clear() ;
+	wavs.clear() ;
+	Path root = LibPath(folder) ;
+	if (!root.Exists()) return ;
+	I_Dir *dir = FileSystem::GetInstance()->Open(root.GetPath().c_str()) ;
+	if (!dir) return ;
+	dir->GetContent((char *)"*") ;
+	IteratorPtr<Path> it(dir->GetIterator()) ;
+	for (it->Begin(); !it->IsDone(); it->Next()) {
+		Path p = it->CurrentItem() ;
+		std::string n = p.GetName() ;
+		if (n.empty() || n[0] == '.') continue ;
+		if (p.IsDirectory()) folders.push_back(n) ;
+		else if (isWav(n)) wavs.push_back(n) ;
+	}
+	delete dir ;
+	std::sort(folders.begin(), folders.end()) ;
+	std::sort(wavs.begin(), wavs.end()) ;
+}
+
+// se recuerda mientras el navegador está abierto: recorrer la tarjeta cada
+// vez que se entra a una carpeta sería lento
+static std::map<std::string, int> libCount ;
+void InstrumentPresets::ForgetLibCounts() { libCount.clear() ; }
+
+int InstrumentPresets::CountLib(const std::string &folder) {
+	std::map<std::string, int> &cache = libCount ;
+	std::map<std::string, int>::iterator c = cache.find(folder) ;
+	if (c != cache.end()) return c->second ;
+	std::vector<std::string> folders, wavs ;
+	ListLib(folder, folders, wavs) ;
+	int n = (int)wavs.size() ;
+	for (size_t i = 0; i < folders.size(); i++) n += CountLib(folder + "/" + folders[i]) ;
+	cache[folder] = n ;
+	return n ;
+}
+
 const char *InstrumentPresets::KindFolder(int kind) {
 	switch (kind) {
 		case PK_KIT: return "Kits" ;
@@ -342,6 +428,16 @@ const char *InstrumentPresets::KindFolder(int kind) {
 
 bool InstrumentPresets::Describe(const std::string &name, Info &out) {
 	out = Info() ;
+	if (IsLib(name)) {   // trk2als: un .wav de la samplelib: un sample suelto
+		Path p = LibPath(name) ;
+		if (!isWav(name) || !p.Exists()) return false ;
+		std::string full = p.GetPath() ;
+		size_t slash = full.find_last_of('/') ;
+		out.dir = full.substr(0, slash) ;
+		out.sample = full.substr(slash + 1) ;
+		out.kind = PK_SAMPLE ;
+		return true ;
+	}
 	Path folder = presetPath(name) ;
 	out.dir = folder.GetPath() ;
 	TiXmlDocument doc(Path(folder).Descend(PRESET_FILE).GetPath()) ;
