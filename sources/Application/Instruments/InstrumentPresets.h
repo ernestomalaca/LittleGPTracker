@@ -32,6 +32,10 @@ namespace InstrumentPresets {
 	// carga el preset en el instrumento; si el sample no está en el
 	// proyecto, lo copia. false si falló
 	bool Load(SampleInstrument *instr, const std::string &name) ;
+	// trk2als: lo lento de Load (copiar e importar sus samples al proyecto),
+	// sin tocar el instrumento: se puede hacer con la pista sonando y luego
+	// Load solo aplica (rápido)
+	bool Prepare(const std::string &name) ;
 	// trk2als: lo que hace falta para mostrar y pre-escuchar un preset sin
 	// cargarlo: tipo, cuántas zonas o pads, su carpeta, el sample principal
 	// y los .wav de las zonas (en orden)

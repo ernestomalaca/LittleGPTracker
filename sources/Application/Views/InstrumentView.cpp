@@ -1887,6 +1887,7 @@ void InstrumentView::OnPresetFolder(const std::string &folder) {
 void InstrumentView::OnPresetLoad(const std::string &name) {
 	if (name.empty() || !current_ || current_->GetType()!=IT_SAMPLE) return ;
 	int tr=ownerTrack(viewData_) ;   // la pista se calla mientras se reescribe
+	InstrumentPresets::Prepare(name) ;   // sus samples, antes (es lo lento)
 	if (tr>=0) Player::GetInstance()->HoldTrack(tr,true) ;
 	bool loaded=InstrumentPresets::Load((SampleInstrument *)current_,name) ;
 	if (tr>=0) Player::GetInstance()->HoldTrack(tr,false) ;
@@ -2476,6 +2477,7 @@ void InstrumentView::OnKitLoad(const std::string &name) {
 	if (name.empty() || !current_ || current_->GetType()!=IT_SAMPLE) return ;
 	padBusy_=true ;
 	int tr=ownerTrack(viewData_) ;
+	InstrumentPresets::Prepare(name) ;
 	if (tr>=0) Player::GetInstance()->HoldTrack(tr,true) ;
 	bool ok=InstrumentPresets::Load((SampleInstrument *)current_,name) ;
 	if (tr>=0) Player::GetInstance()->HoldTrack(tr,false) ;

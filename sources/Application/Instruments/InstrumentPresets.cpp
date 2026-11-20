@@ -411,3 +411,18 @@ void InstrumentPresets::Restore(SampleInstrument *instr, const Snapshot &s) {
 	}
 	instr->SetZones(zones) ;
 }
+
+bool InstrumentPresets::Prepare(const std::string &name) {
+	Info info ;
+	if (!Describe(name, info)) return false ;
+	SamplePool *pool = SamplePool::GetInstance() ;
+	std::vector<std::string> files(info.zoneFiles) ;
+	if (!info.sample.empty()) files.push_back(info.sample) ;
+	for (size_t i = 0; i < files.size(); i++) {
+		if (pool->IndexOf(files[i].c_str()) >= 0) continue ;
+		Path src(info.dir + "/" + files[i]) ;
+		if (!src.Exists()) continue ;   // Load avisa lo que falte
+		if (pool->ImportSample(src) < 0) return false ;
+	}
+	return true ;
+}

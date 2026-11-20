@@ -1675,10 +1675,15 @@ void SongView::LoadTrackPreset(const std::string &name) {
     if (name.empty() || owner < 0 || owner >= MAX_SAMPLEINSTRUMENT_COUNT) return;
     SampleInstrument *si =
         (SampleInstrument *)project->GetInstrumentBank()->GetInstrument(owner);
-    beginSoundChange(ch);
-    bool ok = InstrumentPresets::Load(si, name);
+    // trk2als: primero sus samples, con la pista sonando (es lo lento); luego
+    // la pista se calla solo lo que tarda en aplicarse
     bool cleaned = false;
     SamplePool *pool = SamplePool::GetInstance();
+    unsigned long t0 = SDL_GetTicks();
+    bool ready = InstrumentPresets::Prepare(name);
+    unsigned long t1 = SDL_GetTicks();
+    beginSoundChange(ch);
+    bool ok = ready && InstrumentPresets::Load(si, name);
     if (!ok && pool->GetNameListSize() >= MAX_PIG_SAMPLES - 16) {
         // trk2als: el pool se llenó con los samples de los sonidos de antes:
         // se quitan los que ya nadie usa y se intenta otra vez. Lo que se
@@ -1689,9 +1694,11 @@ void SongView::LoadTrackPreset(const std::string &name) {
         for (size_t i = 0; i + 1 < sesUndo_.size(); i++) sesUndo_[i].instrTrack = -1;   // la última (el sonido de antes) sí sigue
         for (size_t i = 0; i < sesRedo_.size(); i++) sesRedo_[i].instrTrack = -1;
         cleaned = true;
-        ok = InstrumentPresets::Load(si, name);
+        ok = InstrumentPresets::Prepare(name) && InstrumentPresets::Load(si, name);
     }
     endSoundChange(ch);
+    Trace::Log("PRESET", "%s: samples %lu ms, pista callada %lu ms", name.c_str(),
+               t1 - t0, (unsigned long)SDL_GetTicks() - t1);
     if (!ok) {
         View::SetNotification(pool->GetNameListSize() >= MAX_PIG_SAMPLES - 16
             ? "Ya no caben más samples en el proyecto"
