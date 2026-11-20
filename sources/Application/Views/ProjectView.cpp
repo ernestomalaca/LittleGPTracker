@@ -1,4 +1,5 @@
 #include "ProjectView.h"
+#include "Application/Utils/ProjectName.h"
 #include "Application/Player/Player.h"
 #ifdef WEBSERVER
 #include "Services/Web/WebServer.h"
@@ -316,8 +317,7 @@ void ProjectView::Update(Observable &,I_ObservableData *data) {
             while (!prj.empty() && prj[prj.size() - 1] == '/')
                 prj.erase(prj.size() - 1);
             std::string name = prj.substr(prj.find_last_of('/') + 1);
-            if (name.compare(0, 5, "lgpt_") == 0)
-                name = name.substr(5);
+            name = ProjectNiceName(name);
             std::string root = Path("root:").GetPath();
             while (!root.empty() && root[root.size() - 1] == '/')
                 root.erase(root.size() - 1);
@@ -335,9 +335,9 @@ void ProjectView::Update(Observable &,I_ObservableData *data) {
             break;
         }
         case ACTION_LOAD: {
-            MessageBox *mb = new MessageBox(
-                *this, "Cambiamos de cancion?\nLo que no guardaste\nse queda en el camino", MBBF_YES | MBBF_NO);
-            mb->Label(MBL_YES, "Cambiar").Label(MBL_NO, "Sigo aqui");
+            MessageBox *mb = new MessageBox(*this, "", MBBF_YES | MBBF_NO);
+            mb->Title("Cargar nuevo proyecto\ny perder los cambios?")
+                .Label(MBL_YES, "Ok").Label(MBL_NO, "Volver");
             DoModal(mb, LoadCallback);
             break;
         }

@@ -1,4 +1,5 @@
 #include "SongView.h"
+#include "Application/Utils/ProjectName.h"
 #include <cstring>
 #define SONG_COL_W 4   // trk2als: ancho de cada pista en la grilla
 #include "Application/Commands/ApplicationCommandDispatcher.h"
@@ -65,7 +66,7 @@ SongView::SongView(GUIWindow &w, ViewData *viewData, const char *song)
     newSlotCell_ = -1;
     pendingType_ = 0;
     songname_ = song;
-    View::projectName_ = (songname_.substr(0, 5) == "lgpt_") ? songname_.substr(5) : songname_;
+    View::projectName_ = ProjectNiceName(songname_);
 
     for (int i = 0; i < 8; i++) {
         this->lastPlayedPosition_[i] = 0;
@@ -1896,8 +1897,8 @@ void SongView::DrawView() {
     os << ((player->GetSequencerMode() == SM_SONG) ? "Song" : "Live");
     os << ": ";
 
-    if (songname_.substr(0, 5) == "lgpt_") {
-        os << songname_.substr(5);
+    if (IsProjectFolder(songname_)) {
+        os << ProjectNiceName(songname_);
     }
 
     std::string buffer(os.str());

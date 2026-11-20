@@ -22,6 +22,7 @@ public:
     Result OnDeleteProject(const Path &projectPath);
 
     Path GetSelection();
+    void Quit() { EndModal(0); }   // trk2als: después de confirmar
     Path GetCurrentProjectPath();
 
   protected:

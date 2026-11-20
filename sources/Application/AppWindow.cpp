@@ -22,6 +22,7 @@
 #endif
 #include "Resources/hdfont.h"
 #include "Application/Model/Config.h"
+#include "Application/Utils/ProjectName.h"
 
 AppWindow *instance = 0;
 
@@ -87,7 +88,7 @@ AppWindow::AppWindow(I_GUIWindowImp &imp) : GUIWindow(imp) {
         _swallow = 0;
         _helpMask = 0;
         const char *sp = Config::GetInstance()->GetValue("SPLASH");
-        int ms = sp ? atoi(sp) : 1800;
+        int ms = sp ? atoi(sp) : 2000;
         _splashUntil = ms > 0 ? System::GetInstance()->GetClock() + ms : 0;
         _splashDrawn = false;
     }
@@ -149,7 +150,7 @@ AppWindow::AppWindow(I_GUIWindowImp &imp) : GUIWindow(imp) {
     Config *config = Config::GetInstance(); // Possible to disable autoloading
     const char *autoLoadEnabled = config->GetValue("AUTO_LOAD_LAST");
     bool shouldAutoLoad =
-        (!autoLoadEnabled || // Default to yes if not in config
+        (autoLoadEnabled && // trk2als: por omisión arranca en la lista de proyectos
          strcmp(autoLoadEnabled, "YES") == 0);
 
     SelectProjectDialog *spd = new SelectProjectDialog(*_currentView);
@@ -1051,7 +1052,7 @@ Path AppWindow::GetLastProjectPath() {
 
     Path result;
     if (strlen(buffer) > 0) {
-        if (strstr(buffer, "lgpt_") != NULL) { // Ensure it's an lgpt project
+        if (IsProjectFolder(Path(buffer).GetName())) { // trk2als: chancho_ o lgpt_
             result = Path(buffer);
         } else {
             Trace::Error("GetLastProject: Invalid project path format: %s",

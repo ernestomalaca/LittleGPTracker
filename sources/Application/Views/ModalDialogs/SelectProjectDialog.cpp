@@ -1,5 +1,6 @@
 
 #include "SelectProjectDialog.h"
+#include "Application/Utils/ProjectName.h"
 #include "NewProjectDialog.h"
 #include "System/Console/Trace.h"
 #include "Application/Views/ModalDialogs/MessageBox.h"
@@ -18,21 +19,8 @@ Path SelectProjectDialog::lastFolder_("root:") ;
 int SelectProjectDialog::lastProject_ = 0 ;
 std::string SelectProjectDialog::lastName_ ;
 
-// trk2als: ¿es un proyecto? (la carpeta empieza con lgpt)
-static bool isProject(const std::string &name) {
-	if (name.size()<4) return false ;
-	std::string f=name.substr(0,4) ;
-	std::transform(f.begin(),f.end(),f.begin(),::tolower) ;
-	return f=="lgpt" ;
-}
-
-// el nombre sin el lgpt_ del principio
-static std::string projectTitle(const std::string &p) {
-	if (!isProject(p) || p.size()<=4) return p ;
-	int start=4 ;
-	if (!isalnum(p[4])) start++ ;
-	return p.substr(start) ;
-}
+static bool isProject(const std::string &name) { return IsProjectFolder(name) ; }
+static std::string projectTitle(const std::string &p) { return ProjectNiceName(p) ; }
 
 // cuándo se usó por última vez: lo más nuevo entre la carpeta (se toca al
 // abrirla) y el lgptsav.dat (al guardar)
@@ -85,6 +73,10 @@ static unsigned nameHash(const std::string &s) {
 	return h ;
 }
 
+
+static void ExitCallback(View &v, ModalView &dialog) {
+	if (dialog.GetReturnCode() == MBL_YES) ((SelectProjectDialog &)v).Quit() ;
+}
 
 static void DeleteProjectCallback(View &v, ModalView &dialog) {
     SelectProjectDialog &spd = (SelectProjectDialog&) v;
@@ -178,19 +170,9 @@ void SelectProjectDialog::drawGrid() {
 			Path &current=it->CurrentItem() ;
 			std::string p=current.GetName() ;
 
-			std::string firstFourChars = p.substr(0,4);
-			std::transform(firstFourChars.begin(), firstFourChars.end(), firstFourChars.begin(), ::tolower);
-			if(firstFourChars == "lgpt" && p.size()>4)
+			if(isProject(p))
       {
-        int namestart = 4;
-        // skip _ if needed
-        if ((!isalnum(p[4])) && (p.size()>4))
-        {
-          namestart++;
-        }
-				std::string t=p ;
-				p=" " ;
-        p+=t.substr(namestart) ;
+				p=" "+projectTitle(p) ;
       }
       else
       {
@@ -299,7 +281,10 @@ void SelectProjectDialog::drawShapes() {
 			}
 		}
 	}
-	if (size==0) DrawText(RX+8,LY+8,"no hay nada aqui",dim,1) ;
+	if (size==0) {
+		DrawText(RX+8,LY+8,"Todavia no hay proyectos",fg,1) ;
+		DrawText(RX+8,LY+34,"Nueva para empezar uno",dim,0) ;
+	}
 
 	// barrita de lugar, si hay más de los que caben
 	if (size>rows) {
@@ -416,11 +401,10 @@ void SelectProjectDialog::ProcessButtonMask(unsigned short mask,bool pressed) {
                     count++;
                 }
 
+					if (!current) break ;   // trk2als: lista vacía
 					//check if folder is a project, indicated by 'lgpt' being the first 4 characters of the folder name
 					std::string name = current->GetName() ;
-					std::string firstFourChars = name.substr(0,4);
-					std::transform(firstFourChars.begin(), firstFourChars.end(), firstFourChars.begin(), ::tolower);
-					if(firstFourChars == "lgpt"){
+					if(isProject(name)){
 						//ugly hack to make the "name" include subdirectories
 						//we pass along everything past the root dir
 						selection_ = *current ;
@@ -450,9 +434,12 @@ void SelectProjectDialog::ProcessButtonMask(unsigned short mask,bool pressed) {
                 }
 				break ;
             }
-            case 2: // Exit ;
-                EndModal(0) ;
+            case 2: { // Exit: trk2als: pregunta antes
+                MessageBox *mb = new MessageBox(*this, "", MBBF_YES | MBBF_NO);
+                mb->Title("Salir y perder la fe?").Label(MBL_YES, "Salir").Label(MBL_NO, "Me quedo");
+                DoModal(mb, ExitCallback);
 				break ;
+            }
 		}
         } else {
 
@@ -593,7 +580,8 @@ void SelectProjectDialog::setCurrentFolder(Path &path) {
 			if (path.IsDirectory())
       {
 				std::string name=path.GetName() ;
-				if (name[0] != '.' || name[1]== '.')
+				// trk2als: solo los proyectos (ni "..", ni otras carpetas)
+				if (isProject(name))
         {
 					Entry e ;
 					e.p=new Path(path) ;

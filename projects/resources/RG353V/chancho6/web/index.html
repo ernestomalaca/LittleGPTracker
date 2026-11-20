@@ -101,15 +101,17 @@ async function loadInfo() {
   } catch (e) { $("#now").textContent = "sin conexión con la consola"; }
 }
 
+// trk2als: carpetas de proyecto: chancho_<nombre> (las de antes: lgpt_<nombre>)
+function prefixLen(n) { const m = /^(chancho_|lgpt_?)(?=.)/i.exec(n); return m ? m[0].length : 0; }
 async function loadProjects() {
   const box = $("#projects");
   try {
     const r = await api("/api/ls");
-    const ps = r.entries.filter(e => e.dir && e.name.startsWith("lgpt_")).sort((a, b) => b.mtime - a.mtime);
+    const ps = r.entries.filter(e => e.dir && prefixLen(e.name) > 0).sort((a, b) => b.mtime - a.mtime);
     box.innerHTML = "";
     if (!ps.length) { box.innerHTML = '<div class="empty">Todavía no hay proyectos.</div>'; return; }
     for (const p of ps) {
-      const nice = p.name.slice(5);
+      const nice = p.name.slice(prefixLen(p.name));
       const open = info.project && info.project.toLowerCase() === nice.toLowerCase();
       const el = document.createElement("div");
       el.className = "proj" + (open ? " open" : "");
@@ -267,7 +269,7 @@ async function upload(items) {
   if (!items.length) return;
   const total = items.reduce((s, i) => s + i.file.size, 0); let done = 0;
   $("#bar").hidden = false;
-  const openNow = info.project && cwd.toLowerCase().startsWith(("lgpt_" + info.project).toLowerCase());
+  const top = cwd.split("/")[0]; const openNow = info.project && prefixLen(top) > 0 && top.slice(prefixLen(top)).toLowerCase() === info.project.toLowerCase();
   for (let k = 0; k < items.length; k++) {
     const it = items[k]; const dest = join(cwd, it.rel);
     say(`subiendo ${k + 1} de ${items.length}: ${it.rel}`);
@@ -301,7 +303,7 @@ $("#mkdir").onclick = async () => { const n = prompt("Nombre de la carpeta"); if
 $("#newProj").onclick = async () => {
   const n = prompt("Nombre del proyecto (letras y números)"); if (!n) return;
   const clean = n.replace(/[^A-Za-z0-9_-]/g, ""); if (!clean) return;
-  await api("/api/mkdir?path=" + q("lgpt_" + clean + "/samples"), { method: "POST" }); loadProjects();
+  await api("/api/mkdir?path=" + q("chancho_" + clean + "/samples"), { method: "POST" }); loadProjects();
 };
 
 loadInfo().then(() => { loadProjects(); go(""); });

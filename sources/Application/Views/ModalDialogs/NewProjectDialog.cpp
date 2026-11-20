@@ -1,5 +1,6 @@
 
 #include "NewProjectDialog.h"
+#include "Application/Utils/ProjectName.h"
 #include "Application/Utils/KeyboardLayout.h"
 #include "Application/Utils/RandomNames.h"
 
@@ -9,7 +10,7 @@ static char *buttonText[BUTTONS_LENGTH] = {(char *)"Random", (char *)"Ok",
 #define DIALOG_WIDTH 20
 
 NewProjectDialog::NewProjectDialog(View &view, Path currentPath)
-    : ModalView(view), prefix_("lgpt_"), allowExisting_(false),
+    : ModalView(view), prefix_(PROJECT_PREFIX), allowExisting_(false),
       currentPath_(currentPath) {}
 
 NewProjectDialog::~NewProjectDialog() {}
@@ -309,7 +310,7 @@ std::string NewProjectDialog::GetName() {
 std::string NewProjectDialog::RandomProjectName(const Path &dir) {
     std::string name;
     for (int tries = 0; tries < 200; tries++) {
-        name = std::string("lgpt_") + getRandomName();
+        name = std::string(PROJECT_PREFIX) + getRandomName();
         if (!Path(dir).Descend(name).Exists()) break;
     }
     return name;

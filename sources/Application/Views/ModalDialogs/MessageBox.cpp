@@ -127,7 +127,16 @@ void MessageBox::drawShapes() {
 		lines.erase(lines.begin()) ;
 	}
 	const int PAD=32, LINE=24, BH=36, GAP=16 ;
-	int textW=(int)title.size()*16 ;
+	// el título puede tener varias líneas (todas en el color de acento)
+	std::vector<std::string> tl ;
+	{
+		std::string rest=title ;
+		size_t nl ;
+		while ((nl=rest.find('\n'))!=std::string::npos) { tl.push_back(rest.substr(0,nl)) ; rest=rest.substr(nl+1) ; }
+		if (!rest.empty()) tl.push_back(rest) ;
+	}
+	int textW=0 ;
+	for (size_t i=0;i<tl.size();i++) if ((int)tl[i].size()*16>textW) textW=tl[i].size()*16 ;
 	for (size_t i=0;i<lines.size();i++)
 		if ((int)lines[i].size()*16>textW) textW=lines[i].size()*16 ;
 	int bw[4], btnW=0 ;
@@ -139,17 +148,18 @@ void MessageBox::drawShapes() {
 	int w=(textW>btnW?textW:btnW)+2*PAD ;
 	if (w<352) w=352 ;
 	if (w>624) w=624 ;
-	int h=PAD+(title.empty()?0:LINE+8)+(int)lines.size()*LINE+16+BH+PAD ;
+	int h=PAD+(tl.empty()?0:(int)tl.size()*LINE+8)+(int)lines.size()*LINE+16+BH+PAD ;
 	int x=(640-w)/2, y=(480-h)/2 ;
 	DrawPanel(x,y,w,h) ;
 
 	GUIColor bg=ColorOf(CD_BACKGROUND), fg=ColorOf(CD_NORMAL) ;
 	GUIColor acc=ColorOf(CD_HILITE2), dim=Mix(bg,fg,40) ;
 	int ty=y+PAD ;
-	if (!title.empty()) {
-		DrawText(x+PAD,ty,title.c_str(),acc,1) ;
-		ty+=LINE+8 ;
+	for (size_t i=0;i<tl.size();i++) {
+		DrawText(x+PAD,ty,tl[i].c_str(),acc,1) ;
+		ty+=LINE ;
 	}
+	if (!tl.empty()) ty+=8 ;
 	for (size_t i=0;i<lines.size();i++) {
 		DrawText(x+PAD,ty,lines[i].c_str(),fg,1) ;
 		ty+=LINE ;
