@@ -271,8 +271,9 @@ def loop_tempo(path, frames, sr):
 class Samples:
     """Copia los samples usados a <proyecto>/Samples/libreria/ y llena las referencias de Live."""
 
-    def __init__(self, library, project_dir, real_project_dir):
+    def __init__(self, library, project_dir, real_project_dir, refs=None):
         self.library, self.project_dir, self.real_dir = library, project_dir, real_project_dir
+        self.refs = refs or {}   # trk2als: nombre -> ruta (samples que el proyecto no copió)
         # sin esta carpeta Live no trata el folder como proyecto y no resuelve las rutas relativas
         os.makedirs(os.path.join(project_dir, "Ableton Project Info"), exist_ok=True)
 
@@ -280,6 +281,8 @@ class Samples:
         if not self.library:
             sys.exit("el proyecto usa samples: falta la línea 'library <carpeta>'")
         src = os.path.join(self.library, rel)
+        if not os.path.isfile(src) and rel in self.refs:
+            src = self.refs[rel]
         if not os.path.isfile(src):
             sys.exit(f"no encuentro el sample: {src}")
         live_rel = "Samples/libreria/" + rel.replace(os.sep, "/")

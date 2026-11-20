@@ -451,6 +451,8 @@ void AppWindow::LoadProject(const Path &p) {
     SamplePool *pool = SamplePool::GetInstance();
 
     unsigned int load_result = pool->Load();
+    // trk2als: y los que el proyecto usa desde la librería o los presets
+    int missingSamples = pool->LoadRefs();
 
     Project *project = new Project();
 
@@ -507,6 +509,18 @@ void AppWindow::LoadProject(const Path &p) {
     _clipView->AddObserver(*this);
 
     _currentView = _songView;
+    if (missingSamples > 0) {   // trk2als: se movió o borró algo de la librería
+        char m[96];
+        snprintf(m, sizeof(m), "%s\nSe movieron o borraron de la\nlibrería o de los presets",
+                 missingSamples == 1 ? "Falta 1 sample" : "Faltan samples");
+        if (missingSamples > 1) {
+            char t[32];
+            snprintf(t, sizeof(t), "Faltan %d samples", missingSamples);
+            snprintf(m, sizeof(m), "%s\nSe movieron o borraron de la\nlibrería o de los presets", t);
+        }
+        MessageBox *mb = new MessageBox(*_songView, m, MBBF_OK);
+        _songView->DoModal(mb);
+    }
     _currentView->OnFocus();
 
     if (!playerOK) {

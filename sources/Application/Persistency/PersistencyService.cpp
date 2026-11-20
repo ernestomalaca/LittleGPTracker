@@ -3,6 +3,7 @@
 #include "Externals/Compression/lz.h"
 #include "System/Console/Trace.h"
 #include "Foundation/Types/Types.h"
+#include "Application/Instruments/SamplePool.h"
 
 PersistencyService::PersistencyService():Service(MAKE_FOURCC('S','V','P','S')) {
 } ;
@@ -25,6 +26,7 @@ void PersistencyService::Save(const char *name) {
 	} ;
 
 	doc.SaveFile() ;
+	SamplePool::GetInstance()->SaveRefs() ;   // trk2als: los samples por referencia
 };
 
 bool PersistencyService::Load() {

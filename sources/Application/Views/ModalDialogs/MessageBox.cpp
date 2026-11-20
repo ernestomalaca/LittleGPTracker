@@ -5,7 +5,7 @@
 #include <string.h>
 
 static const char *buttonText[MBL_LAST] = {
-	"Va",
+	"Ok",
 	"Sí",
 	"Cancelar",
 	"No"

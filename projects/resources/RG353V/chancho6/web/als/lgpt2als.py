@@ -773,7 +773,16 @@ def convert(folder, template, out, real_dir=None):
     lg = LGPT(folder)
     L = T.LiveSet(template)
     proj_dir = os.path.dirname(os.path.abspath(out))
-    L_samples = T.Samples(os.path.join(folder, "samples"), proj_dir, real_dir or proj_dir)
+    # trk2als: samples por referencia (samples.ref: "nombre<TAB>root:ruta")
+    refs = {}
+    ref_file = os.path.join(folder, "samples.ref")
+    if os.path.isfile(ref_file):
+        root = os.path.dirname(os.path.abspath(folder))
+        for line in open(ref_file, encoding="utf-8", errors="replace"):
+            name, _, key = line.rstrip("\r\n").partition("\t")
+            if name and key:
+                refs[name] = os.path.join(root, key[5:]) if key.startswith("root:") else key
+    L_samples = T.Samples(os.path.join(folder, "samples"), proj_dir, real_dir or proj_dir, refs)
     proto_midi = next(L.proto["DRUMS"].iter("MidiClip"))
     proto_audio = next(L.proto["LOOP"].iter("AudioClip"))
     stats = Counter()

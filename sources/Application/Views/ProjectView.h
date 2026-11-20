@@ -37,7 +37,7 @@ private:
   UIField *rootField_, *scaleField_, *linkField_, *ofsField_;
   UIField *chipField_[8];
   void drawBigNumber(int x, int y, const char *txt, int h, GUIColor c);
-  UIField *btnField_[6];
-  const char *btnName_[6];
+  UIField *btnField_[7];
+  const char *btnName_[7];
 } ;
 #endif

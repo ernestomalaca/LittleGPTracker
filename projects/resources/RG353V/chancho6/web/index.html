@@ -208,13 +208,26 @@ async function exportLive(dir, nice, stEl, btn) {
   try {
     const py = await loadPy(st);
     const files = (await listTree(dir, [])).filter(f => f.path.endsWith("lgptsav.dat") || /\.(wav|aif|aiff)$/i.test(f.path));
+    // trk2als: los samples que el proyecto usa desde la librería o los presets
+    // (samples.ref: "nombre<TAB>root:ruta") se traen a su carpeta samples
+    try {
+      const rr = await fetch("/api/get?path=" + q(dir + "/samples.ref"));
+      if (rr.ok) {
+        for (const line of (await rr.text()).split("\n")) {
+          const tab = line.indexOf("\t"); if (tab < 0) continue;
+          const name = line.slice(0, tab), key = line.slice(tab + 1).trim();
+          if (!key.startsWith("root:")) continue;
+          files.push({ path: key.slice(5), size: 0, as: dir + "/samples/" + name });
+        }
+      }
+    } catch (e) {}
     if (!files.some(f => f.path === dir + "/lgptsav.dat")) throw new Error("el proyecto no está guardado todavía (Guardar en la consola)");
     try { py.FS.rmdir; py.runPython("import shutil,os\nfor d in ('/proj','/out'):\n    shutil.rmtree(d, ignore_errors=True)"); } catch (e) {}
     let done = 0; const total = files.reduce((s, f) => s + f.size, 0) || 1;
     for (const f of files) {
       st(`trayendo de la consola ${Math.round(done / total * 100)}% · ${f.path.split("/").pop()}`);
       const r = await fetch("/api/get?path=" + q(f.path)); if (!r.ok) throw new Error("no pude leer " + f.path);
-      const dst = "/proj/" + f.path; py.FS.mkdirTree(dst.slice(0, dst.lastIndexOf("/")));
+      const dst = "/proj/" + (f.as || f.path); py.FS.mkdirTree(dst.slice(0, dst.lastIndexOf("/")));
       py.FS.writeFile(dst, new Uint8Array(await r.arrayBuffer())); done += f.size;
     }
     st("convirtiendo…");

@@ -1990,7 +1990,7 @@ void InstrumentView::startPreview(int from,int end) {
 	std::string name=SamplePool::GetInstance()->GetNameList()[index] ;
 	double frac=double(from)/src->GetSize(-1) ;
 	Player *player=Player::GetInstance() ;
-	player->StartStreaming(Path(std::string("samples:")+name),1.0,0,frac,false) ;
+	player->StartStreaming(Path(SamplePool::GetInstance()->SourcePath(index)),1.0,0,frac,false) ;   // trk2als: también si es referencia
 	player->SetStreamEnd(end) ;
 	previewing_=true ;
 	slicePlay_=(end>0) ;

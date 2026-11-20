@@ -1,4 +1,5 @@
 #include "ProjectView.h"
+#include "Application/Instruments/SamplePool.h"
 #include "Application/Utils/ProjectName.h"
 #include "Application/Utils/Latin1.h"
 #include "Application/Player/Player.h"
@@ -33,6 +34,7 @@
 #define ACTION_TEMPO_CHANGED    MAKE_FOURCC('T','E','M','P')
 #define ACTION_EXPORT_LIVE      MAKE_FOURCC('A','L','S','X')
 #define ACTION_WEB              MAKE_FOURCC('W','E','B','!')   // trk2als: chancho.local
+#define ACTION_COLLECT          MAKE_FOURCC('R','C','P','L')   // trk2als: recopilar y guardar
 
 static void SaveAsProjectCallback(View &v,ModalView &dialog) {
 
@@ -72,6 +74,11 @@ static void SaveAsProjectCallback(View &v,ModalView &dialog) {
         if (FSS.Copy(path_srclgptdatsav, path_dstlgptdatsav) > -1) {
             FSS.Delete(path_srclgptdatsav);
         }
+
+        // trk2als: la lista de samples por referencia va con el proyecto
+        Path refSrc(path_srcprjdir.GetPath() + "samples.ref");
+        if (refSrc.Exists())
+            FSS.Copy(refSrc, Path(path_dstprjdir.GetPath() + "/samples.ref"));
 
         I_Dir *idir_srcsmpdir =
             FileSystem::GetInstance()->Open(path_srcsmpdir.GetPath().c_str());
@@ -175,10 +182,11 @@ ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
 
     // la barra de botones
     struct Btn { const char *name; FourCC action; int x; };
-    const Btn btns[6] = {{"CARGAR", ACTION_LOAD, 1}, {"GUARDAR", ACTION_SAVE, 8},
-                         {"GUARDAR COMO", ACTION_SAVE_AS, 16}, {"LIMPIAR", ACTION_PURGE_INSTRUMENT, 27},
+    const Btn btns[7] = {{"CARGAR", ACTION_LOAD, 1}, {"GUARDAR", ACTION_SAVE, 8},
+                         {"GUARDAR COMO", ACTION_SAVE_AS, 16}, {"RECOPILAR", ACTION_COLLECT, 23},
+                         {"LIMPIAR", ACTION_PURGE_INSTRUMENT, 27},
                          {"WEB", ACTION_WEB, 31}, {"SALIR", ACTION_QUIT, 34}};
-    for (int k = 0; k < 6; k++) {
+    for (int k = 0; k < 7; k++) {
         position = GUIPoint(btns[k].x, 9);
         UIActionField *a = new UIActionField(btns[k].name, btns[k].action, position);
         a->AddObserver(*this);
@@ -290,6 +298,22 @@ void ProjectView::Update(Observable &,I_ObservableData *data) {
             DoModal(mb,PurgeCallback) ;
 			break ;
 		}
+        case ACTION_COLLECT: {   // trk2als: copiar al proyecto lo que usa de fuera, y guardar
+            SamplePool *pool = SamplePool::GetInstance();
+            int refs = pool->ReferenceCount();
+            if (refs == 0) {
+                View::SetNotification("Todo está en el proyecto");
+                break;
+            }
+            int n = pool->Collect();
+            MixerService::GetInstance()->SetRenderMode(0);
+            PersistencyService::GetInstance()->Save();
+            char m[64];
+            if (n == refs) snprintf(m, sizeof(m), "Recopilado y guardado: %d samples", n);
+            else snprintf(m, sizeof(m), "Recopilados %d de %d (ver log)", n, refs);
+            View::SetNotification(m);
+            break;
+        }
         case ACTION_SAVE: {
             MixerService::GetInstance()->SetRenderMode(0);
             PersistencyService *service = PersistencyService::GetInstance();
@@ -496,21 +520,21 @@ void ProjectView::drawBoard() {
 
     // botones
     // repartidos de orilla a orilla
-    int bw[6], total = 0;
-    for (int k = 0; k < 6; k++) { bw[k] = 8 * (int)strlen(btnName_[k]) + 34; total += bw[k]; }
-    int gap = (592 - total) / 5;
+    int bw[7], total = 0;
+    for (int k = 0; k < 7; k++) { bw[k] = 8 * (int)strlen(btnName_[k]) + 22; total += bw[k]; }
+    int gap = (592 - total) / 6;
     int x = 24;
-    for (int k = 0; k < 6; k++) {
+    for (int k = 0; k < 7; k++) {
         int w = bw[k];
         bool f = focus == btnField_[k];
         bool webOn = false;
 #ifdef WEBSERVER
-        webOn = k == 4 && WebServer::GetInstance()->IsRunning();
+        webOn = k == 5 && WebServer::GetInstance()->IsRunning();
 #endif
         if (f) FillRect(x, 356, w, 42, acc, 6);
         else if (webOn) FillRect(x, 356, w, 42, Mix(bg, acc, 35), 6);   // prendido
         else FrameRect(x, 356, w, 42, rule, 6, 2);
-        DrawText(x + 17, 371, btnName_[k], f ? bg : (k == 5 ? dim : fg), 0);
+        DrawText(x + 11, 371, btnName_[k], f ? bg : (k == 6 ? dim : fg), 0);
         x += w + gap;
     }
 

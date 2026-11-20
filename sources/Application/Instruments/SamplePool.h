@@ -6,6 +6,8 @@
 #include "WavFile.h"
 #include "Application/Model/Song.h"
 #include "Foundation/Observable.h"
+#include <string>
+#include <vector>
 
 // trk2als: antes 128 (como los instrumentos); los kits traen 12-16 samples
 // cada uno y con varios kits cargados el pool se llenaba
@@ -50,6 +52,20 @@ public:
   int Reassign(std::string name, bool imported);
   void PurgeSample(int i);
   const char *GetSampleLib();
+
+  // trk2als: samples por referencia (como Live). Un .wav que se trae de la
+  // librería o de un preset ya no se copia al proyecto: se lee de donde está
+  // y el proyecto guarda su ruta (samples.ref). "Recopilar" los copia.
+  // Acquire: el sample de esa ruta (si ya está, el mismo; si otro sample se
+  // llama igual, entra con otro nombre: "Kick (2).wav"). Índice, o <0
+  int Acquire(const Path &src);
+  bool IsReference(int i) { return i >= 0 && i < count_ && !refs_[i].empty(); }
+  std::string SourcePath(int i);   // el archivo de verdad (proyecto o referencia)
+  void SaveRefs();                 // project:samples.ref
+  int LoadRefs();                  // al abrir; cuántas faltaron
+  int Collect();                   // copia al proyecto las referencias; cuántas
+  int ReferenceCount();
+  const std::vector<std::string> &Missing() { return missing_; }
 protected:
   void unload(int i);
   int loadSample(const char *path);
@@ -58,6 +74,9 @@ protected:
   int count_;
   char *names_[MAX_PIG_SAMPLES];
   SoundSource *wav_[MAX_PIG_SAMPLES];
+  std::string refs_[MAX_PIG_SAMPLES];   // trk2als: "" = en el proyecto; si no, su ruta
+  std::vector<std::string> missing_;
+  int loadAs(const char *path, const std::string &name);
 };
 
 #endif

@@ -165,8 +165,9 @@ bool InstrumentPresets::Save(SampleInstrument *instr, const std::string &name) {
 		}
 	}
 	for (size_t i = 0; i < samples.size(); i++) {
-		Path src(std::string("samples:") + samples[i]) ;
+		Path src(SamplePool::GetInstance()->SourcePath(SamplePool::GetInstance()->IndexOf(samples[i].c_str()))) ;
 		Path dst = Path(folder).Descend(samples[i]) ;
+		if (src.GetPath() == dst.GetPath()) continue ;   // ya vive ahí (se actualiza el preset)
 		if (!copyFile(src.GetPath(), dst.GetPath())) {
 			Trace::Error("No se pudo copiar %s", src.GetPath().c_str()) ;
 			return false ;
@@ -218,7 +219,10 @@ bool InstrumentPresets::Load(SampleInstrument *instr, const std::string &name) {
 		if (n && v && !strcmp(n, "s zones")) zones = v ;
 	}
 	SamplePool *pool = SamplePool::GetInstance() ;
-	// soundfont: los .wav de todas las zonas
+	// trk2als: cada .wav del preset se usa desde su carpeta (sin copiarlo al
+	// proyecto); si en el proyecto otro sample se llama igual, entra con
+	// otro nombre y las zonas se reescriben con ese nombre
+	std::string newZones ;
 	if (!zones.empty()) {
 		size_t pos = 0 ;
 		while (pos < zones.size()) {
@@ -233,31 +237,24 @@ bool InstrumentPresets::Load(SampleInstrument *instr, const std::string &name) {
 			}
 			if (comma == std::string::npos) continue ;
 			std::string wav = item.substr(comma + 1) ;
-			if (pool->IndexOf(wav.c_str()) >= 0) continue ;
 			Path src = Path(folder).Descend(wav) ;
-			if (!src.Exists()) {
+			int idx = src.Exists() ? pool->Acquire(src) : pool->IndexOf(wav.c_str()) ;
+			if (idx < 0) {
 				Trace::Error("Falta el sample %s del preset", wav.c_str()) ;
 				return false ;
 			}
-			if (pool->ImportSample(src) < 0) return false ;
+			if (!newZones.empty()) newZones += ";" ;
+			newZones += item.substr(0, comma + 1) + pool->GetNameList()[idx] ;
 		}
+		zones = newZones ;
 	}
 	int index = -1 ;
 	if (!sample.empty() && sample != "(null)") {
-		for (int i = 0; i < pool->GetNameListSize(); i++) {
-			if (sample == pool->GetNameList()[i]) {
-				index = i ;
-				break ;
-			}
-		}
+		Path src = Path(folder).Descend(sample) ;
+		index = src.Exists() ? pool->Acquire(src) : pool->IndexOf(sample.c_str()) ;
 		if (index < 0) {
-			Path src = Path(folder).Descend(sample) ;
-			if (!src.Exists()) {
-				Trace::Error("Falta el sample %s del preset", sample.c_str()) ;
-				return false ;
-			}
-			index = pool->ImportSample(src) ;
-			if (index < 0) return false ;
+			Trace::Error("Falta el sample %s del preset", sample.c_str()) ;
+			return false ;
 		}
 	}
 
@@ -426,10 +423,9 @@ static bool prepareNow(const std::string &name) {
 	std::vector<std::string> files(info.zoneFiles) ;
 	if (!info.sample.empty()) files.push_back(info.sample) ;
 	for (size_t i = 0; i < files.size(); i++) {
-		if (pool->IndexOf(files[i].c_str()) >= 0) continue ;
 		Path src(info.dir + "/" + files[i]) ;
 		if (!src.Exists()) continue ;   // Load avisa lo que falte
-		if (pool->ImportSample(src) < 0) return false ;
+		if (pool->Acquire(src) < 0) return false ;   // solo se lee (sin copiar)
 	}
 	return true ;
 }
