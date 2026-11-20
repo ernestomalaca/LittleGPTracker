@@ -224,11 +224,20 @@ AudioOut *MixerService::GetAudioOut() {
 void MixerService::Lock() {
 	if (!sync_) return ;
 	SDL_LockMutex(sync_) ;
-	if (depth_++ == 0) owner_ = SDL_ThreadID() ;
+	SDL_threadID me = SDL_ThreadID() ;
+	if (depth_ > 0 && owner_ == me) depth_++ ;
+	else { owner_ = me ; depth_ = 1 ; }
 }
 
+// trk2als: un Unlock sin su Lock (de este hilo) se ignora: antes descuadraba
+// la cuenta y el candado parecía libre cuando la interfaz lo tenía
 void MixerService::Unlock() {
 	if (!sync_) return ;
+	if (depth_ <= 0 || owner_ != SDL_ThreadID()) {
+		static int told = 0 ;
+		if (told++ < 3) Trace::Log("AUDIO", "candado: Unlock sin Lock (ignorado)") ;
+		return ;
+	}
 	if (--depth_ == 0) owner_ = 0 ;
 	SDL_UnlockMutex(sync_) ;
 }
