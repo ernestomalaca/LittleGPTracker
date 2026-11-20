@@ -427,47 +427,40 @@ static bool hasWord(const std::string &name, const char *const *words) {
 	return false ;
 }
 
-// un compás de kit: bombo, hat, caja, hat... al tempo del proyecto
-static bool kitPreview(const InstrumentPresets::Info &info, int tempo, const std::string &out, bool exactBar = false) {
-	static const char *const kicks[] = {"kick", "bd", "bombo", "kik", 0} ;
-	static const char *const snares[] = {"snare", "sd", "caja", "clap", "rim", 0} ;
-	static const char *const hats[] = {"hat", "hh", "shaker", "maraca", "guira", "ride", 0} ;
-	int pick[3] = {-1, -1, -1} ;
-	const char *const *lists[3] = {kicks, snares, hats} ;
-	int nz = (int)info.zoneFiles.size() ;
-	if (nz == 0) return false ;
-	for (int k = 0; k < 3; k++)
-		for (int i = 0; i < nz && pick[k] < 0; i++)
-			if (hasWord(info.zoneFiles[i], lists[k])) pick[k] = i ;
-	// si los nombres no ayudan: los primeros pads
-	for (int k = 0; k < 3; k++) if (pick[k] < 0) pick[k] = k < nz ? k : 0 ;
-	// 8 corcheas: B H C H B B C H
-	static const int pattern[8] = {0, 2, 1, 2, 0, 0, 1, 2} ;
+// trk2als: la pre-escucha a tempo: golpes sueltos, no un beat (que no
+// enganche): "un baterista probando su batería"
+struct Hit {
+	std::string file ;
+	double at ;       // en tiempos (negras) desde el inicio
+	double pitch ;    // 1 = su altura; 2 = una octava arriba
+} ;
+
+static bool renderHits(const std::vector<Hit> &hits, int beats, int tempo, const std::string &out, bool exact) {
 	const int SR = 44100 ;
-	if (tempo < 40) tempo = 120 ;
-	long step = long(SR * 30.0 / tempo) ;          // una corchea
-	long len = step * 8 + (exactBar ? 0 : SR / 2) ;   // en loop con la música: un compás justo
+	if (tempo < 20) tempo = 120 ;
+	double beatF = SR * 60.0 / tempo ;
+	long len = long(beatF * beats) + (exact ? 0 : SR / 2) ;   // en loop con la música: justo
 	std::vector<int> mix(len * 2, 0) ;
-	for (int k = 0; k < 3; k++) {
-		std::string path = info.dir + "/" + info.zoneFiles[pick[k]] ;
-		WavFile *w = WavFile::Open(path.c_str()) ;
+	for (size_t h = 0; h < hits.size(); h++) {
+		WavFile *w = WavFile::Open(hits[h].file.c_str()) ;
 		if (!w) continue ;
 		long n = w->GetSize(-1) ;
 		int ch = w->GetChannelCount(-1), sr = w->GetSampleRate(-1) ;
 		if (n <= 0 || sr <= 0 || !w->GetBuffer(0, n)) { delete w ; continue ; }
 		short *src = (short *)w->GetSampleBuffer(-1) ;
-		long outN = long(double(n) * SR / sr) ;
-		if (outN > step * 4) outN = step * 4 ;      // los largos, recortados
-		for (int s = 0; s < 8; s++) {
-			if (pattern[s] != k) continue ;
-			long at = step * s ;
-			for (long i = 0; i < outN && at + i < len; i++) {
-				long j = long(double(i) * sr / SR) ;
-				if (j >= n) break ;
-				int l = src[j * ch], r = src[j * ch + (ch > 1 ? 1 : 0)] ;
-				mix[(at + i) * 2] += l ;
-				mix[(at + i) * 2 + 1] += r ;
-			}
+		double rate = double(sr) / SR * hits[h].pitch ;   // cuadros del archivo por cuadro de salida
+		long outN = long(double(n) / rate) ;
+		long maxN = long(beatF * 0.95) ;   // cada golpe dura a lo más un tiempo
+		if (outN > maxN) outN = maxN ;
+		long at = long(hits[h].at * beatF) ;
+		for (long i = 0; i < outN && at + i < len; i++) {
+			long j = long(i * rate) ;
+			if (j >= n) break ;
+			int l = src[j * ch], r = src[j * ch + (ch > 1 ? 1 : 0)] ;
+			long left = outN - i ;   // sin click al recortar
+			if (left < 256) { l = int(l * left / 256) ; r = int(r * left / 256) ; }
+			mix[(at + i) * 2] += l ;
+			mix[(at + i) * 2 + 1] += r ;
 		}
 		delete w ;
 	}
@@ -484,6 +477,52 @@ static bool kitPreview(const InstrumentPresets::Info &info, int tempo, const std
 		put16(f, v) ;
 	}
 	return true ;
+}
+
+// un kit: bombo, bombo, caja, caja | hat-hat, hat-hat, tom, platillo (2 compases)
+static int kitHits(const InstrumentPresets::Info &info, std::vector<Hit> &hits) {
+	static const char *const kicks[] = {"kick", "bd", "bombo", "kik", 0} ;
+	static const char *const snares[] = {"snare", "sd", "caja", "clap", "rim", 0} ;
+	static const char *const hats[] = {"hat", "hh", "shaker", "maraca", "guira", 0} ;
+	static const char *const toms[] = {"tom", "conga", "bongo", "perc", 0} ;
+	static const char *const cyms[] = {"crash", "cymbal", "ride", "splash", "china", 0} ;
+	const char *const *lists[5] = {kicks, snares, hats, toms, cyms} ;
+	int nz = (int)info.zoneFiles.size() ;
+	if (nz == 0) return 0 ;
+	int pick[5] = {-1, -1, -1, -1, -1} ;
+	for (int k = 0; k < 5; k++)
+		for (int i = 0; i < nz && pick[k] < 0; i++)
+			if (hasWord(info.zoneFiles[i], lists[k])) pick[k] = i ;
+	for (int k = 0; k < 5; k++) if (pick[k] < 0) pick[k] = k < nz ? k : nz - 1 ;   // los nombres no ayudan: los primeros pads
+	// 0 bombo, 1 caja, 2 hat, 3 tom, 4 platillo; en tiempos
+	static const struct { int piece ; double at ; } seq[] = {
+		{0, 0}, {0, 1}, {1, 2}, {1, 3}, {2, 4}, {2, 4.5}, {2, 5}, {2, 5.5}, {3, 6}, {4, 7}} ;
+	for (size_t i = 0; i < sizeof(seq) / sizeof(seq[0]); i++) {
+		Hit h ;
+		h.file = info.dir + "/" + info.zoneFiles[pick[seq[i].piece]] ;
+		h.at = seq[i].at ;
+		h.pitch = 1 ;
+		hits.push_back(h) ;
+	}
+	return 8 ;
+}
+
+// multicapa: una zona grave, una media y una aguda; un sample: su nota, una
+// quinta y una octava. Negras sueltas en un compás (no es una melodía)
+static int noteHits(const InstrumentPresets::Info &info, std::vector<Hit> &hits) {
+	Hit h ;
+	h.pitch = 1 ;
+	int nz = (int)info.zoneFiles.size() ;
+	if (nz > 0) {
+		int z[4] = {0, nz / 2, nz - 1, nz / 2} ;
+		for (int i = 0; i < 4; i++) { h.file = info.dir + "/" + info.zoneFiles[z[i]] ; h.at = i ; hits.push_back(h) ; }
+		return 4 ;
+	}
+	if (info.sample.empty()) return 0 ;
+	h.file = info.dir + "/" + info.sample ;
+	static const double p[4] = {1.0, 1.4983, 2.0, 1.4983} ;   // 0, +7, +12, +7 semitonos
+	for (int i = 0; i < 4; i++) { h.at = i ; h.pitch = p[i] ; hits.push_back(h) ; }
+	return 4 ;
 }
 
 void PresetDialog::startPreview() {
@@ -507,17 +546,20 @@ void PresetDialog::startPreview() {
 		isDirty_ = true ;
 		return ;
 	}
-	// 2. un kit: un compás con sus pads
-	if (info.kind == InstrumentPresets::PK_KIT) {
+	// 2. la prueba de sonido a tempo: un kit, sus piezas una por una; una
+	// multicapa o un sample, unas notas sueltas. Un .wav de la librería, tal cual
+	if (!InstrumentPresets::IsLib(name)) {
+		std::vector<Hit> hits ;
+		int beats = info.kind == InstrumentPresets::PK_KIT ? kitHits(info, hits) : noteHits(info, hits) ;
 		Path tmp(previewTmp) ;
 		int tempo = viewData_->project_ ? viewData_->project_->GetTempo() : 120 ;
 		bool running = player->IsRunning() ;
-		if (kitPreview(info, tempo, tmp.GetPath(), running)) {
-			if (running) {   // con la música andando: a tempo, en fase y en loop (como un loop)
+		if (beats && renderHits(hits, beats, tempo, tmp.GetPath(), running)) {
+			if (running) {   // con la música andando: a tempo, en fase y en loop
 				double beat = 60.0 / tempo ;
 				double t = player->GetPlayTime() ;
 				long next = long(floor(t / beat)) + 1 ;
-				player->StartStreaming(tmp, 1.0, next * beat - t, double(next % 4) / 4.0, true) ;
+				player->StartStreaming(tmp, 1.0, next * beat - t, double(next % beats) / beats, true) ;
 			} else
 				player->StartStreaming(tmp) ;
 			playing_ = entries_[selected_].name ;
@@ -525,12 +567,8 @@ void PresetDialog::startPreview() {
 		}
 		return ;
 	}
-	// 3. el sample (en una multicapa, el principal; si no, la primera zona)
-	std::string file = info.sample ;
-	if (file.empty() && !info.zoneFiles.empty()) file = info.zoneFiles[0] ;
-	if (file.empty()) return ;
-	Path p(info.dir + "/" + file) ;
-	if (!p.Exists() && !info.zoneFiles.empty()) p = Path(info.dir + "/" + info.zoneFiles[0]) ;
+	// 3. un .wav de la librería: el archivo
+	Path p(info.dir + "/" + info.sample) ;
 	if (!p.Exists()) return ;
 	player->StartStreaming(p) ;
 	playing_ = entries_[selected_].name ;
