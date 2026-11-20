@@ -170,7 +170,7 @@ if (wave) {
 }
 }
 
-#define IMPORT_CHUNK_SIZE 1000
+#define IMPORT_CHUNK_SIZE 65536   // trk2als: antes 1000 bytes por escritura
 
 /*
   Returns a nonnegative int or an element of
@@ -209,7 +209,7 @@ int SamplePool::ImportSample(Path &path) {
 
     // copy file to current project
 
-    char buffer[IMPORT_CHUNK_SIZE];
+    static char buffer[IMPORT_CHUNK_SIZE];   // (en la pila no: 64 KB)
     while (size>0) {
 		int count=(size>IMPORT_CHUNK_SIZE)?IMPORT_CHUNK_SIZE:size ;
 		fin->Read(buffer,1,count) ;

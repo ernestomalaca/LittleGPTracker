@@ -3,8 +3,33 @@
 #include "Services/Time/TimeService.h"
 #include "System/Console/Trace.h"
 #include "System/System/System.h"
+#include "Application/Model/Config.h"
+#include <string.h>
+#if defined(__linux__)
+#include <pthread.h>
+#include <sched.h>
+#endif
+
+// trk2als: los hilos del audio en tiempo real (SCHED_FIFO), para que copiar
+// samples a la tarjeta u otra carga del sistema no los deje sin turno (se
+// oían huecos). Si el sistema no lo permite, sigue como antes.
+// config.xml: <AUDIORT value="NO"/> lo apaga
+static void audioRealtime(const char *who, int prio) {
+#if defined(__linux__)
+    const char *cfg = Config::GetInstance()->GetValue("AUDIORT");
+    if (cfg && !strcmp(cfg, "NO")) return;
+    struct sched_param sp;
+    memset(&sp, 0, sizeof(sp));
+    sp.sched_priority = prio;
+    int r = pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
+    if (r == 0) Trace::Log("AUDIO", "%s en tiempo real (FIFO %d)", who, prio);
+    else Trace::Log("AUDIO", "%s sin tiempo real (error %d)", who, r);
+#endif
+}
 
 void sdl_callback(void *userdata, Uint8 *stream, int len) {
+    static bool rt = false;
+    if (!rt) { rt = true; audioRealtime("la salida de audio", 70); }
     SDLAudioDriver *sound = (SDLAudioDriver *)userdata;
     sound->OnChunkDone(stream, len);
 };
@@ -16,6 +41,7 @@ SDLAudioDriverThread::SDLAudioDriverThread(SDLAudioDriver *driver) {
 };
 
 bool SDLAudioDriverThread::Execute() {
+    audioRealtime("el mezclador", 60);
     while (!shouldTerminate()) {
         semaphore_->Wait();
         driver_->OnNewBufferNeeded();

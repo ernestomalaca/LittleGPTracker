@@ -60,5 +60,10 @@ Sonidos (presets) y su pre-escucha
   Ejemplo:  presets/Kits/Cumbia/KIT 1/preview.wav
   X prende o apaga la pre-escucha (se queda así para todos los proyectos).
 
+Audio en tiempo real
+  Chancho le pide al sistema que sus hilos de audio vayan primero (para que
+  copiar samples a la tarjeta no deje huecos). Si notas algo raro,
+  <AUDIORT value="NO"/> en config.xml lo apaga.
+
 Si algo falla
   chancho6/log.txt tiene lo que dijo el programa.
