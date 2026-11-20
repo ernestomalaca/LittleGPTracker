@@ -239,6 +239,12 @@ private:
 	unsigned long linkSlices_ ;
 	int linkLastTempo_ ;
 	bool linkStartStop_, linkSeenPlaying_, linkRemoteStart_, linkRemoteStop_ ;
+	// trk2als: reenganchar la fase (Link prendido con la música andando, o la
+	// sesión saltó): se espera el tiempo de la sesión que cae donde vamos en el compás
+	volatile bool linkResync_ ;
+	unsigned long linkResyncAt_ ;   // (interfaz) cuándo pedirlo: dar tiempo a encontrar la sesión
+	int linkPeersSeen_ ;
+	int barSlice_ ;                 // rebanada dentro del compás (96 = 4 tiempos x 24)
 };
 
 #endif

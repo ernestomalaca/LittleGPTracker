@@ -38,6 +38,10 @@ Player::Player() {
     linkSlices_ = 0;
     linkLastTempo_ = -1;
     linkStartStop_ = linkSeenPlaying_ = linkRemoteStart_ = linkRemoteStop_ = false;
+    linkResync_ = false;
+    linkResyncAt_ = 0;
+    linkPeersSeen_ = -1;
+    barSlice_ = 0;
     metroStep_ = 0;
     sliceCount_ = 0;
     autoRec_ = false;
@@ -653,6 +657,7 @@ void Player::Update(Observable &o,I_ObservableData *d) {
         if (!firstPlayCycle_) {
             Groove::GetInstance()->Trigger();
             sync->NextSlice();
+            barSlice_ = (barSlice_ + 1) % 96;   // trk2als: dónde vamos en el compás
             if (sync->MajorSlice()) metroStep_++;   // trk2als: otro paso (1/16)
             triggerLiveChains_ = false;
             if (retrigAllImmediate_) {
@@ -681,7 +686,7 @@ void Player::Update(Observable &o,I_ObservableData *d) {
         sliceCount_++;
 
         // trk2als: metrónomo, un click en cada tiempo (4 pasos)
-        if (firstPlayCycle_) metroStep_ = 0;
+        if (firstPlayCycle_) { metroStep_ = 0; barSlice_ = 0; }
         if ((firstPlayCycle_ || sync->MajorSlice()) && metroStep_ % 4 == 0 &&
             (project_->FindVariable(VAR_METRONOME)->GetInt() || autoRec_ || autoRecPending_)) {
             mixer_->MetronomeClick(metroStep_ % 16 == 0);
@@ -1530,6 +1535,26 @@ bool Player::linkSlice(SyncMaster *sync) {
     double sr = Audio::GetInstance()->GetSampleRate();
     double real = LinkBridge::MeasuredSampleRate();
     if (sr > 0 && real > sr * 0.8 && real < sr * 1.25) base = (float)(base * real / sr);
+    if (linkResync_ && !linkWait_) {
+        // la sesión de Link en el mismo punto del compás que nosotros: se
+        // espera (la música se detiene ahí, como mucho un compás) y sigue
+        linkResync_ = false;
+        double here = ((barSlice_ + (firstPlayCycle_ ? 0 : 1)) % 96) / 24.0;   // la que va a sonar
+        double ph = fmod(beat, 4.0);
+        if (ph < 0) ph += 4.0;
+        double d = here - ph;
+        while (d < 0) d += 4.0;
+        while (d >= 4.0) d -= 4.0;
+        if (getenv("TRK_LINKDBG"))
+            linkDbg("REENGANCHE al compás de la sesión: espera %.2f tiempos", d < 0.04 || d > 3.96 ? 0.0 : d);
+        if (d < 0.04 || d > 3.96) {   // ya casi: sin esperar
+            linkOrigin_ = beat + (d > 2 ? d - 4.0 : d) - linkSlices_ / 24.0;
+        } else {
+            linkOrigin_ = beat + d;
+            linkWait_ = true;
+        }
+        linkInteg_ = 0;
+    }
     if (linkWait_) {
         if (beat < linkOrigin_ - 0.5 / 24.0) return false;
         linkWait_ = false;
@@ -1537,12 +1562,13 @@ bool Player::linkSlice(SyncMaster *sync) {
         linkInteg_ = 0;
     }
     double err = (beat - linkOrigin_) - linkSlices_ / 24.0;   // + = vamos atrás
-    if (err > 1.0 || err < -1.0) {   // saltó (alguien movió la sesión): se reengancha
+    if (err > 0.5 || err < -0.5) {   // saltó (alguien movió la sesión): al compás
         if (getenv("TRK_LINKDBG"))
-            linkDbg("REENGANCHE: error %+.3f tiempos", err);
-        linkOrigin_ = beat - linkSlices_ / 24.0;
+            linkDbg("saltó: error %+.3f tiempos", err);
+        linkOrigin_ = beat - linkSlices_ / 24.0;   // por ahora sin corregir...
         err = 0;
         linkInteg_ = 0;
+        linkResync_ = true;                         // ...y en la siguiente, en fase
     }
     // integral lento (la tarjeta de sonido y el reloj de Link no van exactos)
     linkInteg_ += 0.002 * err;
@@ -1611,6 +1637,24 @@ void Player::LinkPoll() {
         Trace::Log("LINK", on ? "prendido" : "apagado");
         linkLastTempo_ = -1;
         linkSeenPlaying_ = false;
+        // trk2als: prendido con la música andando: en un momento (cuando ya
+        // encontró la sesión) se pone en fase con ella
+        if (on && isRunning_) linkResyncAt_ = System::GetInstance()->GetClock() + 1500;
+        linkPeersSeen_ = -1;
+    }
+    if (on) {
+        // llegó alguien a la sesión con la música andando: también en fase
+        int peers = LinkBridge::Peers();
+        if (linkPeersSeen_ >= 0 && peers > linkPeersSeen_ && isRunning_ && !linkResyncAt_)
+            linkResyncAt_ = System::GetInstance()->GetClock() + 1000;
+        linkPeersSeen_ = peers;
+        if (linkResyncAt_ && System::GetInstance()->GetClock() >= linkResyncAt_) {
+            linkResyncAt_ = 0;
+            if (isRunning_) {
+                Trace::Log("LINK", "en fase con la sesión (al compás)");
+                linkResync_ = true;
+            }
+        }
     }
     linkStartStop_ = mode == 2;
     if (!on) return;
