@@ -283,7 +283,7 @@ void ProjectView::Update(Observable &,I_ObservableData *data) {
 		case ACTION_PURGE_INSTRUMENT:
 		{
             MessageBox *mb = new MessageBox(
-                *this, "Limpiar los samples?\nSe borran los que\nningun instrumento usa",
+                *this, "Limpiar los samples?\nSe borran los que\nno tienen instrumento",
                 MBBF_YES | MBBF_NO);
             mb->Label(MBL_YES, "Limpiar");
             DoModal(mb,PurgeCallback) ;
