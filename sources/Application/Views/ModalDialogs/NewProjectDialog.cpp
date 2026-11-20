@@ -274,7 +274,7 @@ void NewProjectDialog::drawShapes() {
             DrawText(x + (w - tw) / 2, y + (H - 12) / 2, sp[s], on ? bg : fg, 0);
         }
         if (warning) DrawText(32, 398, warn_.c_str(), warnc, 0);
-        else DrawText(32, 398, "A escribe   B borra   L / R mueven el cursor", dim, 0);
+        else DrawText(32, 398, "A escribe   B borra   L1 / R1 mueven el cursor", dim, 0);
         return;
     }
 
