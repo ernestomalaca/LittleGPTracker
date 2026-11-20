@@ -8,6 +8,7 @@
 #include "ImportSampleDialog.h"
 #include "System/FileSystem/FileSystem.h"
 #include <stdio.h>
+#include <math.h>
 #include <string.h>
 #include <ctype.h>
 #include <fstream>
@@ -390,9 +391,8 @@ void PresetDialog::goBack() {
 void PresetDialog::schedulePreview() {
 	stopPreview() ;
 	if (forSave_ || col_ != 1 || entries_.empty() || !previewEnabled()) return ;
-	// con la música andando, la pista es la pre-escucha de kits y multicapas;
-	// los samples de la librería sí se escuchan (como en el navegador de Live)
-	if (!pick_ && launcher_ && launcher_->LaunchPlaying() && !InstrumentPresets::IsLib(folder_)) return ;
+	// trk2als: la pre-escucha la decide X (también con la música andando:
+	// los kits suenan a tempo y en fase; en un jam conviene apagarla)
 	if (entries_[selected_].kind != K_PRESET) return ;
 	previewAt_ = SDL_GetTicks() + PREVIEW_WAIT ;
 #ifdef SDL2
@@ -428,7 +428,7 @@ static bool hasWord(const std::string &name, const char *const *words) {
 }
 
 // un compás de kit: bombo, hat, caja, hat... al tempo del proyecto
-static bool kitPreview(const InstrumentPresets::Info &info, int tempo, const std::string &out) {
+static bool kitPreview(const InstrumentPresets::Info &info, int tempo, const std::string &out, bool exactBar = false) {
 	static const char *const kicks[] = {"kick", "bd", "bombo", "kik", 0} ;
 	static const char *const snares[] = {"snare", "sd", "caja", "clap", "rim", 0} ;
 	static const char *const hats[] = {"hat", "hh", "shaker", "maraca", "guira", "ride", 0} ;
@@ -446,7 +446,7 @@ static bool kitPreview(const InstrumentPresets::Info &info, int tempo, const std
 	const int SR = 44100 ;
 	if (tempo < 40) tempo = 120 ;
 	long step = long(SR * 30.0 / tempo) ;          // una corchea
-	long len = step * 8 + SR / 2 ;
+	long len = step * 8 + (exactBar ? 0 : SR / 2) ;   // en loop con la música: un compás justo
 	std::vector<int> mix(len * 2, 0) ;
 	for (int k = 0; k < 3; k++) {
 		std::string path = info.dir + "/" + info.zoneFiles[pick[k]] ;
@@ -510,8 +510,16 @@ void PresetDialog::startPreview() {
 	// 2. un kit: un compás con sus pads
 	if (info.kind == InstrumentPresets::PK_KIT) {
 		Path tmp(previewTmp) ;
-		if (kitPreview(info, viewData_->project_ ? viewData_->project_->GetTempo() : 120, tmp.GetPath())) {
-			player->StartStreaming(tmp) ;
+		int tempo = viewData_->project_ ? viewData_->project_->GetTempo() : 120 ;
+		bool running = player->IsRunning() ;
+		if (kitPreview(info, tempo, tmp.GetPath(), running)) {
+			if (running) {   // con la música andando: a tempo, en fase y en loop (como un loop)
+				double beat = 60.0 / tempo ;
+				double t = player->GetPlayTime() ;
+				long next = long(floor(t / beat)) + 1 ;
+				player->StartStreaming(tmp, 1.0, next * beat - t, double(next % 4) / 4.0, true) ;
+			} else
+				player->StartStreaming(tmp) ;
 			playing_ = entries_[selected_].name ;
 			isDirty_ = true ;
 		}
@@ -757,7 +765,7 @@ void PresetDialog::drawShapes() {
 		std::string s = "sonando: " + playing_ ;
 		FillRect(24, BY, 592, 34, Mix(bg, acc, 14), 6) ;
 		DrawText(36, BY + 11, s.c_str(), acc, 0) ;
-		DrawText(616 - 12 - 8 * 18, BY + 11, "A carga   B atrás", fg, 0) ;
+		DrawText(616 - 12 - 8 * 18, BY + 11, launcher_ ? "A lanza   B atrás" : pick_ ? "A elige   B atrás" : "A carga   B atrás", fg, 0) ;
 	} else if (forSave_) {
 		DrawText(32, BY + 11, col_ == 0 ? "A o derecha entra   B cancela" : "A elige / entra   izquierda o B atrás", dim, 0) ;
 	} else if (launcher_) {
@@ -765,7 +773,7 @@ void PresetDialog::drawShapes() {
 		const char *ac = autoClose() ? "Y cierra: sí" : "Y cierra: no" ;
 		int ax = 616 - 12 - 8 * TextLen(ac) ;
 		DrawText(ax, BY + 11, ac, autoClose() ? acc : dim, 0) ;
-		if (!launcher_->LaunchPlaying() || InstrumentPresets::IsLib(folder_)) {   // sin música (o samples): la pre-escucha
+		{   // la pre-escucha: X la cambia
 			const char *pv = previewEnabled() ? "X escucha: sí" : "X escucha: no" ;
 			DrawText(ax - 16 - 8 * TextLen(pv), BY + 11, pv, previewEnabled() ? acc : dim, 0) ;
 		}
