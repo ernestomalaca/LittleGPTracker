@@ -52,6 +52,7 @@ private:
 	void load() ;
 	void buildTree() ;
 	void goBack() ;
+	int countSounds(const std::string &f) ;
 	bool folderOk(const std::string &f) ;
 	std::string full(const std::string &n) ;
 	void drawGrid() ;

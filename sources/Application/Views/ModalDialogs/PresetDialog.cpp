@@ -143,7 +143,9 @@ void PresetDialog::load() {
 			if (!folderOk(full(folders[i]))) continue ;
 			e.kind = K_FOLDER ;
 			e.name = folders[i] + "/" ;
+			e.zones = countSounds(full(folders[i])) ;   // cuántos sonidos tiene
 			entries_.push_back(e) ;
+			e.zones = 0 ;
 		}
 	}
 	if (!forSave_) {
@@ -175,6 +177,17 @@ void PresetDialog::OnNewFolder(const std::string &name) {
 	load() ;
 	selected_ = 0 ;   // "Guardar aquí"
 	isDirty_ = true ;
+}
+
+// cuántos sonidos hay en una carpeta (con lo de sus subcarpetas)
+int PresetDialog::countSounds(const std::string &f) {
+	std::vector<std::string> folders, presets ;
+	InstrumentPresets::ListFolder(f, folders, presets) ;
+	int n = 0 ;
+	for (size_t i = 0; i < presets.size(); i++)
+		if (kind_ < 0 || InstrumentPresets::KindOf(f + "/" + presets[i]) == kind_) n++ ;
+	for (size_t i = 0; i < folders.size(); i++) n += countSounds(f + "/" + folders[i]) ;
+	return n ;
 }
 
 // trk2als: atrás (← o B): a la carpeta de arriba, o a las categorías
@@ -444,15 +457,31 @@ void PresetDialog::drawShapes() {
 			else if (e.ptype == InstrumentPresets::PK_MULTI) snprintf(b, sizeof(b), "multicapa · %d zonas", e.zones) ;
 			else snprintf(b, sizeof(b), "sample") ;
 			sub = b ;
+		} else if (e.kind == K_FOLDER || e.kind == K_NEWDIR) {
+			// una carpetita, del color de su categoría
+			int fk = folderKind(folder_.substr(0, folder_.find('/'))) ;
+			GUIColor c1 = fk >= 0 ? kindColor(fk, false) : Mix(bg, fg, 55) ;
+			GUIColor c2 = fk >= 0 ? kindColor(fk, true) : Mix(bg, fg, 35) ;
+			if (e.kind == K_NEWDIR) {   // la nueva: solo el contorno y un +
+				FrameRect(sx + 2, sy + 4, 16, 10, c1, 3, 2) ;
+				FrameRect(sx, sy + 10, ss, ss - 12, c1, 6, 2) ;
+				DrawText(sx + 11, sy + 15, "+", c1, 1) ;
+			} else {
+				FillRect(sx + 2, sy + 4, 16, 10, c2, 3) ;
+				FillRect(sx, sy + 10, ss, ss - 12, c1, 6) ;
+				FillRect(sx, sy + 10, ss, 5, c2, 2) ;
+				name = name.substr(0, name.size() - 1) ;
+				char b[24] ;
+				snprintf(b, sizeof(b), e.zones == 1 ? "1 sonido" : "%d sonidos", e.zones) ;
+				sub = b ;
+			}
+			if (e.kind == K_NEWDIR) sub = "una subcategoría aquí" ;
 		} else {
 			FrameRect(sx, sy, ss, ss, dim, 7, 2) ;
-			const char *ic = e.kind == K_UP ? "<" : e.kind == K_HERE ? ">" :
-			                 (e.kind == K_EMPTY || e.kind == K_NEWDIR) ? "+" : "/" ;
+			const char *ic = e.kind == K_UP ? "<" : e.kind == K_HERE ? ">" : "+" ;
 			DrawText(sx + 11, sy + 11, ic, dim, 1) ;
-			if (e.kind == K_FOLDER) { name = name.substr(0, name.size() - 1) ; sub = "carpeta" ; }
 			if (e.kind == K_UP) { name = "volver" ; sub = "carpeta de arriba" ; }
 			if (e.kind == K_HERE) { name = "Guardar aquí" ; sub = folder_.empty() ? "presets" : folder_ ; }
-			if (e.kind == K_NEWDIR) sub = "una subcategoría aquí" ;
 			if (e.kind == K_EMPTY)
 				sub = e.zones == PD_EMPTY_KIT ? "armarlo pad por pad" :
 				      e.zones == PD_IMPORT_SF2 ? "un soundfont de la samplelib" : "eliges el sample tú" ;
