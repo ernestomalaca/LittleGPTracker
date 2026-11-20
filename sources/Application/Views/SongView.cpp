@@ -1681,21 +1681,20 @@ void SongView::LoadTrackPreset(const std::string &name) {
     SamplePool *pool = SamplePool::GetInstance();
     unsigned long t0 = SDL_GetTicks();
     bool ready = InstrumentPresets::Prepare(name);
-    unsigned long t1 = SDL_GetTicks();
-    beginSoundChange(ch);
-    bool ok = ready && InstrumentPresets::Load(si, name);
-    if (!ok && pool->GetNameListSize() >= MAX_PIG_SAMPLES - 16) {
+    if (!ready && pool->GetNameListSize() >= MAX_PIG_SAMPLES - 16) {
         // trk2als: el pool se llenó con los samples de los sonidos de antes:
-        // se quitan los que ya nadie usa y se intenta otra vez. Lo que se
-        // podía deshacer de sonidos se pierde (sus samples ya no están)
-        MixerService::GetInstance()->Lock();
+        // se quitan los que ya nadie usa y se intenta otra vez. Sin callar
+        // nada ni detener el audio: lo que se quita no está sonando. Lo que
+        // se podía deshacer de sonidos se pierde (sus samples ya no están)
         project->PurgeInstruments(true);
-        MixerService::GetInstance()->Unlock();
-        for (size_t i = 0; i + 1 < sesUndo_.size(); i++) sesUndo_[i].instrTrack = -1;   // la última (el sonido de antes) sí sigue
+        for (size_t i = 0; i < sesUndo_.size(); i++) sesUndo_[i].instrTrack = -1;
         for (size_t i = 0; i < sesRedo_.size(); i++) sesRedo_[i].instrTrack = -1;
         cleaned = true;
-        ok = InstrumentPresets::Prepare(name) && InstrumentPresets::Load(si, name);
+        ready = InstrumentPresets::Prepare(name);
     }
+    unsigned long t1 = SDL_GetTicks();
+    beginSoundChange(ch);   // ahora sí: la pista se calla lo que tarda en aplicarse
+    bool ok = ready && InstrumentPresets::Load(si, name);
     endSoundChange(ch);
     Trace::Log("PRESET", "%s: samples %lu ms, pista callada %lu ms", name.c_str(),
                t1 - t0, (unsigned long)SDL_GetTicks() - t1);
