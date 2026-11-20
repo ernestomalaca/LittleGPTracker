@@ -120,6 +120,7 @@ static void PurgeCallback(View &v,ModalView &dialog) {
 } ;
 
 ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
+    msgAt_ = 0;
 
     lastClock_ = 0;
     lastTick_ = 0;
@@ -221,10 +222,10 @@ void ProjectView::ProcessButtonMask(unsigned short mask,bool pressed) {
             int renderMode = viewData_->renderMode_;
 			if (renderMode > 0 && !player->IsRunning()) {
 				viewData_->isRendering_ = true;
-				View::SetNotification("Rendering started!");
+				notify("Rendering started!");
 			} else if (viewData_->isRendering_ && player->IsRunning()) {
 				viewData_->isRendering_ = false;
-				View::SetNotification("Rendering done!");
+				notify("Rendering done!");
 			}
 
 			player->OnStartButton(PM_SONG,viewData_->songX_,false,viewData_->songX_) ;
@@ -255,9 +256,9 @@ void ProjectView::DrawView() {
     if ((viewData_->renderMode_ != currentMode) && !MixerService::GetInstance()->IsRendering()) {
         // Mode changed
         if (currentMode > 0 && viewData_->renderMode_ == 0) {
-            View::SetNotification("Rendering on, press start");
+            notify("Rendering on, press start");
         } else if (currentMode == 0 && viewData_->renderMode_ > 0) {
-            View::SetNotification("Rendering off");
+            notify("Rendering off");
         }
         viewData_->renderMode_ = currentMode;
         MixerService::GetInstance()->SetRenderMode(currentMode);
@@ -302,7 +303,7 @@ void ProjectView::Update(Observable &,I_ObservableData *data) {
             SamplePool *pool = SamplePool::GetInstance();
             int refs = pool->ReferenceCount();
             if (refs == 0) {
-                View::SetNotification("Todo está en el proyecto");
+                notify("Todo está en el proyecto");
                 break;
             }
             MixerService *ms = MixerService::GetInstance();
@@ -314,14 +315,14 @@ void ProjectView::Update(Observable &,I_ObservableData *data) {
             char m[64];
             if (n == refs) snprintf(m, sizeof(m), "Recopilado y guardado: %d samples", n);
             else snprintf(m, sizeof(m), "Recopilados %d de %d (ver log)", n, refs);
-            View::SetNotification(m);
+            notify(m);
             break;
         }
         case ACTION_SAVE: {
             MixerService::GetInstance()->SetRenderMode(0);
             PersistencyService *service = PersistencyService::GetInstance();
             service->Save();
-            View::SetNotification("Proyecto guardado");   // trk2als: que se note
+            notify("Proyecto guardado");   // trk2als: que se note
             break;
         }
         case ACTION_SAVE_AS: {
@@ -336,7 +337,7 @@ void ProjectView::Update(Observable &,I_ObservableData *data) {
             // config.xml: <TRK2ALS_DIR value="/ruta/a/trk2als/tracker"/>
             const char *dir = Config::GetInstance()->GetValue("TRK2ALS_DIR");
             if (!dir) {
-                View::SetNotification("Set TRK2ALS_DIR in config.xml");
+                notify("Set TRK2ALS_DIR in config.xml");
                 break;
             }
             MixerService::GetInstance()->SetRenderMode(0);
@@ -359,7 +360,7 @@ void ProjectView::Update(Observable &,I_ObservableData *data) {
                               "' 2>&1";
             Trace::Log("ProjectView", "Export Live: %s", cmd.c_str());
             int rc = system(cmd.c_str());
-            View::SetNotification(rc == 0 ? "Live set exported!"
+            notify(rc == 0 ? "Live set exported!"
                                           : "Export failed, see export.log");
             break;
         }
@@ -384,11 +385,11 @@ void ProjectView::Update(Observable &,I_ObservableData *data) {
         case ACTION_WEB: {   // trk2als: prende / apaga chancho.local
             WebServer *web = WebServer::GetInstance();
             if (!web->Allowed()) {
-                View::SetNotification("WEB apagado en config.xml");
+                notify("WEB apagado en config.xml");
                 break;
             }
             web->Toggle();
-            View::SetNotification(web->IsRunning() ? "chancho.local prendido" : "chancho.local apagado");
+            notify(web->IsRunning() ? "chancho.local prendido" : "chancho.local apagado");
             isDirty_ = true;
             break;
         }
@@ -542,6 +543,14 @@ void ProjectView::drawBoard() {
         x += w + gap;
     }
 
+    // el aviso de lo que acaba de pasar (guardar, recopilar...), en el espacio de abajo
+    if (!msg_.empty()) {
+        int tw = 8 * TextLen(msg_);
+        int mx = 320 - tw / 2 - 16;
+        FillRect(mx, 408, tw + 32, 30, Mix(bg, acc, 16), 6);
+        DrawText(mx + 16, 417, msg_.c_str(), acc, 0);
+    }
+
     snprintf(b, sizeof(b), "Chancho 6 - %s.%s.%s", PROJECT_NUMBER, PROJECT_RELEASE, BUILD_COUNT);
     DrawText(24, 452, b, Mix(bg, fg, 30), 0);
 #ifdef WEBSERVER
@@ -574,4 +583,31 @@ void ProjectView::drawBigNumber(int x, int y, const char *txt, int h, GUIColor c
         if (m & 0x40) FillRect(x + t - 1, y + mid, hl, t, c, r);           // g
         x += w + t + 2;
     }
+}
+
+// trk2als: aviso abajo (con figuras); sin figuras, el de siempre arriba
+void ProjectView::notify(const char *msg) {
+    if (!SupportsShapes()) {
+        View::SetNotification(msg);
+        return;
+    }
+    msg_ = msg ? msg : "";
+    msgAt_ = SDL_GetTicks();
+    isDirty_ = true;
+#ifdef SDL2
+    // para que se borre solo aunque no se toque nada
+    struct W { static Uint32 wake(Uint32, void *) {
+        SDL_Event e; memset(&e, 0, sizeof(e));
+        e.type = SDL_WINDOWEVENT; e.window.event = SDL_WINDOWEVENT_EXPOSED;
+        SDL_PushEvent(&e); return 0; } };
+    SDL_AddTimer(2100, W::wake, 0);
+#endif
+}
+
+bool ProjectView::Tick() {
+    if (!msg_.empty() && SDL_GetTicks() - msgAt_ >= 2000) {
+        msg_.clear();
+        return true;
+    }
+    return false;
 }

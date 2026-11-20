@@ -4,6 +4,7 @@
 #include "BaseClasses/FieldView.h"
 #include "Foundation/Observable.h"
 #include "ViewData.h"
+#include <string>
 
 
 class ProjectView: public FieldView,public I_Observer {
@@ -15,6 +16,9 @@ public:
 	virtual void DrawView() ;
 	virtual void OnPlayerUpdate(PlayerEventType,unsigned int) {} ;
 	virtual void OnFocus() {} ;
+	virtual bool Tick() ;
+	// trk2als: los avisos de esta pantalla van abajo, en el espacio libre
+	void notify(const char *msg) ;
 
 	// Observer for action callback
 
@@ -38,6 +42,8 @@ private:
   UIField *chipField_[8];
   void drawBigNumber(int x, int y, const char *txt, int h, GUIColor c);
   UIField *btnField_[7];
+  std::string msg_;
+  unsigned long msgAt_;
   const char *btnName_[7];
 } ;
 #endif
