@@ -29,7 +29,7 @@ tempoNudge_(0)
     // trk2als: tempo de los proyectos nuevos, 120 o DEFAULTTEMPO en config.xml
     const char *defTempo = Config::GetInstance()->GetValue("DEFAULTTEMPO");
     int startTempo = defTempo ? atoi(defTempo) : 120;
-    if (startTempo < 60 || startTempo > 400) startTempo = 120;
+    if (startTempo < 20 || startTempo > 999) startTempo = 120;
     WatchedVariable *tempo = new WatchedVariable("tempo", VAR_TEMPO, startTempo);
     this->Insert(tempo);
     Variable *masterVolume = new Variable("master", VAR_MASTERVOL, 100, 100);

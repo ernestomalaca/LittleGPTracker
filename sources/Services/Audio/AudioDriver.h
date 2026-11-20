@@ -5,7 +5,7 @@
 #include "AudioSettings.h"
 
 #define SOUND_BUFFER_COUNT 50
-#define SOUND_BUFFER_MAX 20000
+#define SOUND_BUFFER_MAX 40000   // trk2als: un bloque a 20 bpm (Live llega ahí) no cabía en 20000
 
 struct AudioBufferData {
    char *buffer_ ;

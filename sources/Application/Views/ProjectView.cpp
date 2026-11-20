@@ -144,7 +144,7 @@ ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
 	Variable *v=project_->FindVariable(VAR_TEMPO) ;
 	GUIPoint position(1, 3);
     UITempoField *f = new UITempoField(ACTION_TEMPO_CHANGED, position, *v,
-                                       "%d", 60, 400, 1, 10);
+                                       "%d", 20, 999, 1, 10);   // trk2als: como Live (20 a 999)
     T_SimpleList<UIField>::Insert(f) ;
 	f->AddObserver(*this) ;
 	tempoField_=f ;

@@ -1669,8 +1669,8 @@ void Player::LinkPoll() {
         linkLastTempo_ = proj;
     } else if (fabs(lt - proj) >= 0.5) {    // lo cambiaron allá
         int t = (int)(lt + 0.5);
-        if (t < 60) t = 60;
-        if (t > 400) t = 400;
+        if (t < 20) t = 20;   // trk2als: el rango de Live
+        if (t > 999) t = 999;
         project_->FindVariable(VAR_TEMPO)->SetInt(t);
         linkLastTempo_ = t;
     }
