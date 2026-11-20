@@ -69,7 +69,8 @@ Lanzar sonidos a la pista (como clips)
   Desde la cabecera de una pista MIDI, A sobre un sonido lo lanza a la
   pista: su barrita avanza mientras se leen los samples y luego mientras
   espera el 1 del compás; ahí entra. Sin música, entra en cuanto se leyó.
-  Con la música andando no hay pre-escucha: la pista es la pre-escucha.
+  X prende o apaga la pre-escucha (también con la música andando: los kits
+  suenan a tempo y en fase). En un jam, apágala para navegar en silencio.
   - El navegador sigue abierto para probar otro (gana el último que lances).
   - A sobre el que ya está en la pista (palomita) cierra el navegador.
   - B cierra y deja el último que entró.
