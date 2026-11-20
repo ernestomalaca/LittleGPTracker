@@ -34,9 +34,8 @@ private:
   UIField *tempoField_;
   // trk2als: el tablero
   void drawBoard();
-  UIField *rootField_, *scaleField_, *transpField_, *foldField_;
-  UIField *chipField_[7];
-  UIField *metroField_;
+  UIField *rootField_, *scaleField_, *linkField_, *ofsField_;
+  UIField *chipField_[8];
   void drawBigNumber(int x, int y, const char *txt, int h, GUIColor c);
   UIField *btnField_[6];
   const char *btnName_[6];

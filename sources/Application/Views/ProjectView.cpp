@@ -128,44 +128,40 @@ ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
 	f->AddObserver(*this) ;
 	tempoField_=f ;
 
-    // la escala: raíz, escala, transponer, fold (en el mismo renglón)
+    // trk2als: "tres protagonistas": arriba tempo | escala (nota, escala) |
+    // Link (modo, desfase), todo en el renglón 3 (‹› recorre los tres
+    // cuadros); abajo ocho fichas y los botones
     v = project_->FindVariable(VAR_SCALEROOT);
     if (v->GetInt() < 0) v->SetInt(0);
-    position = GUIPoint(20, 3);
+    position = GUIPoint(12, 3);
     rootField_ = new UIIntVarField(position, *v, "%s", 0, 11, 1, 12);
     T_SimpleList<UIField>::Insert(rootField_);
 
     v = project_->FindVariable(VAR_SCALE);
     if (v->GetInt() < 0) v->SetInt(0);
-    position = GUIPoint(24, 3);
+    position = GUIPoint(16, 3);
     scaleField_ = new UIIntVarField(position, *v, "%s", 0, scaleCount - 1, 1, 10);
     T_SimpleList<UIField>::Insert(scaleField_);
 
-    v = project_->FindVariable(VAR_TRANSPOSE);
-    position = GUIPoint(20, 4);
-    transpField_ = new UIIntVarField(position, *v, "%d", -48, 48, 0x1, 0xC);
-    T_SimpleList<UIField>::Insert(transpField_);
+    v = project_->FindVariable(VAR_LINK);
+    position = GUIPoint(28, 3);
+    linkField_ = new UIIntVarField(position, *v, "%s", 0, 2, 1, 1);
+    T_SimpleList<UIField>::Insert(linkField_);
 
-    v = project_->FindVariable(VAR_FOLD);
-    position = GUIPoint(24, 4);
-    foldField_ = new UIIntVarField(position, *v, "%s", 0, 1, 1, 1);
-    T_SimpleList<UIField>::Insert(foldField_);
+    v = project_->FindVariable(VAR_LINKOFS);
+    position = GUIPoint(32, 3);
+    ofsField_ = new UIIntVarField(position, *v, "%d", -250, 250, 5, 25);
+    T_SimpleList<UIField>::Insert(ofsField_);
 
     // las fichas
     struct Chip { FourCC var; int x, y, min, max, xo, yo; };
-    // el metrónomo va en el cuadro del tempo (↓ desde el tempo)
-    v = project_->FindVariable(VAR_METRONOME);
-    position = GUIPoint(1, 4);
-    metroField_ = new UIIntVarField(position, *v, "%s", 0, 1, 1, 1);
-    T_SimpleList<UIField>::Insert(metroField_);
-
-    const Chip chips[7] = {
+    const Chip chips[8] = {
         {VAR_MASTERVOL, 1, 6, 10, 100, 1, 10},  {VAR_PREGAIN, 10, 6, 10, 200, 1, 10},
         {VAR_SOFTCLIP, 19, 6, 0, 4, 1, 4},      {VAR_SOFTCLIP_GAIN, 28, 6, 0, 1, 1, 1},
-        {VAR_MIDIDEVICE, 1, 7, 0, 0, 1, 1},     {VAR_LINK, 10, 7, 0, 2, 1, 1},
-        {VAR_LINKOFS, 19, 7, -250, 250, 5, 25},
+        {VAR_MIDIDEVICE, 1, 7, 0, 0, 1, 1},     {VAR_METRONOME, 10, 7, 0, 1, 1, 1},
+        {VAR_TRANSPOSE, 19, 7, -48, 48, 1, 12}, {VAR_FOLD, 28, 7, 0, 1, 1, 1},
     };
-    for (int k = 0; k < 7; k++) {
+    for (int k = 0; k < 8; k++) {
         v = project_->FindVariable(chips[k].var);
         NAssert(v);
         int mx = chips[k].var == VAR_MIDIDEVICE ? MidiService::GetInstance()->Size() : chips[k].max;
@@ -407,47 +403,54 @@ void ProjectView::drawBoard() {
     UIField *focus = GetFocus();
     char b[48];
 
-    // tempo: el número con dígitos propios (nítidos a cualquier tamaño) y
-    // el metrónomo abajo
-    bool fT = focus == tempoField_, fM = focus == metroField_;
-    FillRect(24, 46, 288, 150, card, 8);
-    if (fT || fM) FrameRect(24, 46, 288, 150, acc, 8, 3);
-    DrawText(40, 60, "TEMPO", acc, 0);
+    // los tres protagonistas
+    const int TY = 46, TH = 120, TW = 188;
+    // tempo
+    bool fT = focus == tempoField_;
+    FillRect(24, TY, TW, TH, card, 8);
+    if (fT) FrameRect(24, TY, TW, TH, acc, 8, 3);
+    DrawText(36, TY + 12, "TEMPO", acc, 0);
     snprintf(b, sizeof(b), "%d", project_->GetTempo());
-    drawBigNumber(40, 80, b, 60, fg);
-    DrawText(200, 118, "bpm", dim, 0);
-    snprintf(b, sizeof(b), "metronomo %s", project_->FindVariable(VAR_METRONOME)->GetInt() ? "si" : "no");
-    if (fM) FillRect(34, 150, 8 * (int)strlen(b) + 12, 18, acc, 3);
-    DrawText(40, 153, b, fM ? bg : dim, 0);
-    if (fT) DrawText(40, 176, "A+<> 1   A+^v 10   B tap", dim, 0);
+    DrawText(36, TY + 46, b, fg, 2);
+    DrawText(36 + 32 * (int)strlen(b) + 8, TY + 62, "bpm", dim, 0);
+    if (fT) DrawText(36, TY + 98, "A+<> 1  A+^v 10", dim, 0);
 
-    // escala: nota y escala arriba (<>), transponer y fold abajo (v)
-    bool fS = focus == rootField_ || focus == scaleField_ || focus == transpField_ ||
-              focus == foldField_;
-    FillRect(328, 46, 288, 150, card, 8);
-    if (fS) FrameRect(328, 46, 288, 150, acc, 8, 3);
-    DrawText(344, 60, "ESCALA", acc, 0);
+    // escala: nota y escala (‹›)
+    bool fS = focus == rootField_ || focus == scaleField_;
+    int ex = 226;
+    FillRect(ex, TY, TW, TH, card, 8);
+    if (fS) FrameRect(ex, TY, TW, TH, acc, 8, 3);
+    DrawText(ex + 12, TY + 12, "ESCALA", acc, 0);
     std::string root = project_->FindVariable(VAR_SCALEROOT)->GetString();
     std::string scale = project_->FindVariable(VAR_SCALE)->GetString();
-    if (scale.size() > 11) scale = scale.substr(0, 11);
+    if (scale.size() > 9) scale = scale.substr(0, 9);
     int rw = 32 * (int)root.size();
-    if (focus == rootField_) FillRect(338, 82, rw + 20, 44, acc, 4);
-    DrawText(348, 88, root.c_str(), focus == rootField_ ? bg : fg, 2);
-    int sx = 348 + rw + 22;
-    if (focus == scaleField_) FillRect(sx - 10, 92, 16 * (int)scale.size() + 20, 26, acc, 4);
-    DrawText(sx, 97, scale.c_str(), focus == scaleField_ ? bg : fg, 1);
-    snprintf(b, sizeof(b), "transp %+d", project_->FindVariable(VAR_TRANSPOSE)->GetInt());
-    if (focus == transpField_) FillRect(338, 150, 8 * (int)strlen(b) + 12, 18, acc, 3);
-    DrawText(344, 153, b, focus == transpField_ ? bg : dim, 0);
-    snprintf(b, sizeof(b), "fold %s", project_->FindVariable(VAR_FOLD)->GetInt() ? "si" : "no");
-    if (focus == foldField_) FillRect(sx - 6, 150, 8 * (int)strlen(b) + 12, 18, acc, 3);
-    DrawText(sx, 153, b, focus == foldField_ ? bg : dim, 0);
-    if (fS) DrawText(344, 176, "<> v elegir   A+<> cambiar", dim, 0);
+    if (focus == rootField_) FillRect(ex + 6, TY + 40, rw + 12, 44, acc, 4);
+    DrawText(ex + 12, TY + 46, root.c_str(), focus == rootField_ ? bg : fg, 2);
+    int sx = ex + 12 + rw + 12;
+    if (focus == scaleField_) FillRect(sx - 6, TY + 52, 16 * (int)scale.size() + 12, 26, acc, 4);
+    DrawText(sx, TY + 57, scale.c_str(), focus == scaleField_ ? bg : fg, 1);
+    if (fS) DrawText(ex + 12, TY + 98, "<> elegir A+<> cambiar", dim, 0);
+
+    // Link: el modo y el desfase (‹›)
+    bool fL = focus == linkField_, fO = focus == ofsField_;
+    int lx = 428;
+    FillRect(lx, TY, TW, TH, card, 8);
+    if (fL || fO) FrameRect(lx, TY, TW, TH, acc, 8, 3);
+    DrawText(lx + 12, TY + 12, "ABLETON LINK", acc, 0);
+    int lm = project_->FindVariable(VAR_LINK)->GetInt();
+    const char *lmode = lm == 0 ? "no" : lm == 1 ? "si" : "si+play";
+    if (fL) FillRect(lx + 6, TY + 40, 32 * (int)strlen(lmode) + 12, 44, acc, 4);
+    DrawText(lx + 12, TY + 46, lmode, fL ? bg : fg, lm == 2 ? 1 : 2);
+    snprintf(b, sizeof(b), "desfase %+d ms", project_->FindVariable(VAR_LINKOFS)->GetInt());
+    if (fO) FillRect(lx + 6, TY + 92, 8 * (int)strlen(b) + 12, 18, acc, 3);
+    DrawText(lx + 12, TY + 95, b, fO ? bg : dim, 0);
+    if (fO) DrawText(lx + 12, TY + 76, "+ si Chancho atrasa", dim, 0);
 
     // fichas
-    static const char *chipName[7] = {"VOLUMEN", "DRIVE", "TIPO", "NIVEL", "MIDI", "LINK", "DESFASE"};
-    for (int k = 0; k < 7; k++) {
-        int x = 24 + (k % 4) * 150, y = 212 + (k / 4) * 74;
+    static const char *chipName[8] = {"VOLUMEN", "DRIVE", "TIPO", "NIVEL", "MIDI", "METRONOMO", "TRANSP", "FOLD"};
+    for (int k = 0; k < 8; k++) {
+        int x = 24 + (k % 4) * 150, y = 182 + (k / 4) * 76;
         int cw = 142;
         bool f = focus == chipField_[k];
         FillRect(x, y, cw, 66, card, 6);
@@ -455,35 +458,35 @@ void ProjectView::drawBoard() {
         DrawText(x + 12, y + 9, chipName[k], acc, 0);
         Variable *v = &((UIIntVarField *)chipField_[k])->GetVariable();
         std::string val;
-        if (v->GetType() == Variable::INT) { snprintf(b, sizeof(b), "%d", v->GetInt()); val = b; }
+        if (k == 6) { snprintf(b, sizeof(b), "%+d", v->GetInt()); val = b; }   // transponer
+        else if (k == 7) val = v->GetInt() ? "si" : "no";                        // fold
+        else if (v->GetType() == Variable::INT) { snprintf(b, sizeof(b), "%d", v->GetInt()); val = b; }
         else val = v->GetString() ? v->GetString() : "--";
         if (val == "off") val = "no";
         if (val == "on") val = "si";
-        if (val == "on+play") val = "si+play";   // (LINK: el modo; arriba a la derecha se ve si conectó)
-        if (k == 6) {   // desfase en ms; + si Chancho suena atrasado
-            snprintf(b, sizeof(b), "%+d ms", v->GetInt());
-            val = b;
-            if (f) DrawText(x + 90, y + 13, "+ atrasa", dim, 0);
-        }
         if (val.empty() || val == "(null)") val = "--";
         if (val.size() > 7u) val = val.substr(0, 7);
         DrawText(x + 12, y + 33, val.c_str(), fg, 1);
     }
 
     // botones
+    // repartidos de orilla a orilla
+    int bw[6], total = 0;
+    for (int k = 0; k < 6; k++) { bw[k] = 8 * (int)strlen(btnName_[k]) + 34; total += bw[k]; }
+    int gap = (592 - total) / 5;
     int x = 24;
     for (int k = 0; k < 6; k++) {
-        int w = 8 * (int)strlen(btnName_[k]) + 26;
+        int w = bw[k];
         bool f = focus == btnField_[k];
         bool webOn = false;
 #ifdef WEBSERVER
         webOn = k == 4 && WebServer::GetInstance()->IsRunning();
 #endif
-        if (f) FillRect(x, 380, w, 40, acc, 6);
-        else if (webOn) FillRect(x, 380, w, 40, Mix(bg, acc, 35), 6);   // prendido
-        else FrameRect(x, 380, w, 40, rule, 6, 2);
-        DrawText(x + 13, 394, btnName_[k], f ? bg : (k == 5 ? dim : fg), 0);
-        x += w + 7;
+        if (f) FillRect(x, 356, w, 42, acc, 6);
+        else if (webOn) FillRect(x, 356, w, 42, Mix(bg, acc, 35), 6);   // prendido
+        else FrameRect(x, 356, w, 42, rule, 6, 2);
+        DrawText(x + 17, 371, btnName_[k], f ? bg : (k == 5 ? dim : fg), 0);
+        x += w + gap;
     }
 
     snprintf(b, sizeof(b), "Chancho 6 - %s.%s.%s", PROJECT_NUMBER, PROJECT_RELEASE, BUILD_COUNT);
