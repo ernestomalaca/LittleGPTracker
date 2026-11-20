@@ -252,6 +252,14 @@ void PresetDialog::load() {
 	top_ = 0 ;
 }
 
+// el nombre corto de un sonido (sin carpeta ni .wav)
+static std::string SoundLauncherShort(const std::string &n) {
+	std::string leaf = n.substr(n.rfind('/') == std::string::npos ? 0 : n.rfind('/') + 1) ;
+	if (leaf.size() > 4 && (leaf.compare(leaf.size() - 4, 4, ".wav") == 0 || leaf.compare(leaf.size() - 4, 4, ".WAV") == 0))
+		leaf = leaf.substr(0, leaf.size() - 4) ;
+	return leaf ;
+}
+
 // trk2als: el sonido que ya tiene la pista: palomita (y en sus carpetas)
 bool PresetDialog::isCurrent(const Entry &e) {
 	if (!launcher_ || e.kind != K_PRESET) return false ;
@@ -539,7 +547,8 @@ void PresetDialog::drawShapes() {
 		if (TextLen(label) > room) label = label.substr(0, room > 2 ? room - 2 : 1) + ".." ;
 		GUIColor c = sel ? (col_ == 0 ? bg : acc) : (n.depth == 0 ? fg : dim) ;
 		DrawText(x, y + 1, label.c_str(), c, 1) ;
-		if (holdsCurrent(n.path)) checkBadge(TX + TW - 26, y + 2, sel && col_ == 0 ? bg : fg, sel && col_ == 0 ? acc : colBg) ;
+		if (holdsCurrent(n.path))   // por aquí está lo que suena: una flechita (la palomita es solo del sonido)
+			DrawText(TX + TW - 22, y + 1, ">", sel && col_ == 0 ? bg : acc, 1) ;
 	}
 
 	// la lista
@@ -561,6 +570,7 @@ void PresetDialog::drawShapes() {
 		}
 		int sx = LX + 8, sy = y + 5, ss = 38 ;
 		std::string name = e.name, sub ;
+		bool folderHolds = false ;
 		if (e.kind == K_PRESET) {
 			GUIColor c1 = kindColor(e.ptype, false), c2 = kindColor(e.ptype, true) ;
 			FillRect(sx, sy, ss, ss, c1, 7) ;
@@ -589,10 +599,13 @@ void PresetDialog::drawShapes() {
 				FillRect(sx, sy + 10, ss, ss - 12, c1, 6) ;
 				FillRect(sx, sy + 10, ss, 5, c2, 2) ;
 				name = name.substr(0, name.size() - 1) ;
-				if (holdsCurrent(full(name))) checkBadge(sx + ss - 15, sy + ss - 15, fg, bg) ;   // aquí adentro está
 				char b[24] ;
 				snprintf(b, sizeof(b), e.zones == 1 ? "1 sonido" : "%d sonidos", e.zones) ;
 				sub = b ;
+				if (holdsCurrent(full(name))) {   // aquí adentro está lo que suena: cuál
+					folderHolds = true ;
+					sub += std::string(" · ") + SoundLauncherShort(launcher_->LaunchCurrent()) ;
+				}
 			}
 			if (e.kind == K_NEWDIR) sub = "una subcategoría aquí" ;
 		} else {
@@ -631,6 +644,7 @@ void PresetDialog::drawShapes() {
 			int tx = LX + LW - 30, ty = y + 15 ;
 			for (int k = 0; k < 9; k++) FillRect(tx + k, ty + k / 2, 1, 10 - (k / 2) * 2, fg) ;
 		}
+		if (folderHolds && !(sel && col_ == 1)) DrawText(LX + LW - 34, y + 14, ">", acc, 1) ;
 		if (sel && col_ == 1) {
 			int cx = LX + LW - 42, cy = y + 9 ;
 			bool sounding = e.kind == K_PRESET && playing_ == e.name ;
