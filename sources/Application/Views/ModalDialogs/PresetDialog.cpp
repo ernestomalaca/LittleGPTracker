@@ -390,7 +390,9 @@ void PresetDialog::goBack() {
 void PresetDialog::schedulePreview() {
 	stopPreview() ;
 	if (forSave_ || col_ != 1 || entries_.empty() || !previewEnabled()) return ;
-	if (!pick_ && launcher_ && launcher_->LaunchPlaying()) return ;   // la pista es la pre-escucha
+	// con la música andando, la pista es la pre-escucha de kits y multicapas;
+	// los samples de la librería sí se escuchan (como en el navegador de Live)
+	if (!pick_ && launcher_ && launcher_->LaunchPlaying() && !InstrumentPresets::IsLib(folder_)) return ;
 	if (entries_[selected_].kind != K_PRESET) return ;
 	previewAt_ = SDL_GetTicks() + PREVIEW_WAIT ;
 #ifdef SDL2
@@ -763,7 +765,7 @@ void PresetDialog::drawShapes() {
 		const char *ac = autoClose() ? "Y cierra: sí" : "Y cierra: no" ;
 		int ax = 616 - 12 - 8 * TextLen(ac) ;
 		DrawText(ax, BY + 11, ac, autoClose() ? acc : dim, 0) ;
-		if (!launcher_->LaunchPlaying()) {   // sin música: la pre-escucha de siempre
+		if (!launcher_->LaunchPlaying() || InstrumentPresets::IsLib(folder_)) {   // sin música (o samples): la pre-escucha
 			const char *pv = previewEnabled() ? "X escucha: sí" : "X escucha: no" ;
 			DrawText(ax - 16 - 8 * TextLen(pv), BY + 11, pv, previewEnabled() ? acc : dim, 0) ;
 		}
