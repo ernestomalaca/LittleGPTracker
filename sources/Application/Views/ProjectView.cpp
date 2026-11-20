@@ -30,6 +30,7 @@
 #define ACTION_PURGE_INSTRUMENT MAKE_FOURCC('P','R','G','I')
 #define ACTION_TEMPO_CHANGED    MAKE_FOURCC('T','E','M','P')
 #define ACTION_EXPORT_LIVE      MAKE_FOURCC('A','L','S','X')
+#define ACTION_WEB              MAKE_FOURCC('W','E','B','!')   // trk2als: chancho.local
 
 static void SaveAsProjectCallback(View &v,ModalView &dialog) {
 
@@ -141,24 +142,30 @@ ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
     T_SimpleList<UIField>::Insert(scaleField_);
 
     v = project_->FindVariable(VAR_TRANSPOSE);
-    position = GUIPoint(30, 3);
+    position = GUIPoint(20, 4);
     transpField_ = new UIIntVarField(position, *v, "%d", -48, 48, 0x1, 0xC);
     T_SimpleList<UIField>::Insert(transpField_);
 
     v = project_->FindVariable(VAR_FOLD);
-    position = GUIPoint(34, 3);
+    position = GUIPoint(24, 4);
     foldField_ = new UIIntVarField(position, *v, "%s", 0, 1, 1, 1);
     T_SimpleList<UIField>::Insert(foldField_);
 
     // las fichas
     struct Chip { FourCC var; int x, y, min, max, xo, yo; };
-    const Chip chips[8] = {
-        {VAR_MASTERVOL, 1, 6, 10, 100, 1, 10}, {VAR_METRONOME, 10, 6, 0, 1, 1, 1},
-        {VAR_PREGAIN, 19, 6, 10, 200, 1, 10},  {VAR_SOFTCLIP, 28, 6, 0, 4, 1, 4},
-        {VAR_SOFTCLIP_GAIN, 1, 7, 0, 1, 1, 1}, {VAR_MIDIDEVICE, 10, 7, 0, 0, 1, 1},
-        {VAR_LINK, 19, 7, 0, 2, 1, 1},     {VAR_LINKOFS, 28, 7, -250, 250, 5, 25},
+    // el metrónomo va en el cuadro del tempo (↓ desde el tempo)
+    v = project_->FindVariable(VAR_METRONOME);
+    position = GUIPoint(1, 4);
+    metroField_ = new UIIntVarField(position, *v, "%s", 0, 1, 1, 1);
+    T_SimpleList<UIField>::Insert(metroField_);
+
+    const Chip chips[7] = {
+        {VAR_MASTERVOL, 1, 6, 10, 100, 1, 10},  {VAR_PREGAIN, 10, 6, 10, 200, 1, 10},
+        {VAR_SOFTCLIP, 19, 6, 0, 4, 1, 4},      {VAR_SOFTCLIP_GAIN, 28, 6, 0, 1, 1, 1},
+        {VAR_MIDIDEVICE, 1, 7, 0, 0, 1, 1},     {VAR_LINK, 10, 7, 0, 2, 1, 1},
+        {VAR_LINKOFS, 19, 7, -250, 250, 5, 25},
     };
-    for (int k = 0; k < 8; k++) {
+    for (int k = 0; k < 7; k++) {
         v = project_->FindVariable(chips[k].var);
         NAssert(v);
         int mx = chips[k].var == VAR_MIDIDEVICE ? MidiService::GetInstance()->Size() : chips[k].max;
@@ -170,10 +177,10 @@ ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
 
     // la barra de botones
     struct Btn { const char *name; FourCC action; int x; };
-    const Btn btns[5] = {{"CARGAR", ACTION_LOAD, 1}, {"GUARDAR", ACTION_SAVE, 8},
+    const Btn btns[6] = {{"CARGAR", ACTION_LOAD, 1}, {"GUARDAR", ACTION_SAVE, 8},
                          {"GUARDAR COMO", ACTION_SAVE_AS, 16}, {"LIMPIAR", ACTION_PURGE_INSTRUMENT, 27},
-                         {"SALIR", ACTION_QUIT, 34}};
-    for (int k = 0; k < 5; k++) {
+                         {"WEB", ACTION_WEB, 31}, {"SALIR", ACTION_QUIT, 34}};
+    for (int k = 0; k < 6; k++) {
         position = GUIPoint(btns[k].x, 9);
         UIActionField *a = new UIActionField(btns[k].name, btns[k].action, position);
         a->AddObserver(*this);
@@ -343,6 +350,19 @@ void ProjectView::Update(Observable &,I_ObservableData *data) {
         }
         case ACTION_TEMPO_CHANGED:
 			break ;
+#ifdef WEBSERVER
+        case ACTION_WEB: {   // trk2als: prende / apaga chancho.local
+            WebServer *web = WebServer::GetInstance();
+            if (!web->Allowed()) {
+                View::SetNotification("WEB apagado en config.xml");
+                break;
+            }
+            web->Toggle();
+            View::SetNotification(web->IsRunning() ? "chancho.local prendido" : "chancho.local apagado");
+            isDirty_ = true;
+            break;
+        }
+#endif
 		default:
 			NInvalid ;
 			break ;
@@ -387,16 +407,21 @@ void ProjectView::drawBoard() {
     UIField *focus = GetFocus();
     char b[48];
 
-    // tempo
-    bool fT = focus == tempoField_;
+    // tempo: el número con dígitos propios (nítidos a cualquier tamaño) y
+    // el metrónomo abajo
+    bool fT = focus == tempoField_, fM = focus == metroField_;
     FillRect(24, 46, 288, 150, card, 8);
-    if (fT) FrameRect(24, 46, 288, 150, acc, 8, 3);
+    if (fT || fM) FrameRect(24, 46, 288, 150, acc, 8, 3);
     DrawText(40, 60, "TEMPO", acc, 0);
     snprintf(b, sizeof(b), "%d", project_->GetTempo());
-    DrawText(40, 84, b, fg, 4);
-    DrawText(40, 172, fT ? "A+<> 1   A+^v 10   B tap" : "bpm", dim, 0);
+    drawBigNumber(40, 80, b, 60, fg);
+    DrawText(200, 118, "bpm", dim, 0);
+    snprintf(b, sizeof(b), "metronomo %s", project_->FindVariable(VAR_METRONOME)->GetInt() ? "si" : "no");
+    if (fM) FillRect(34, 150, 8 * (int)strlen(b) + 12, 18, acc, 3);
+    DrawText(40, 153, b, fM ? bg : dim, 0);
+    if (fT) DrawText(40, 176, "A+<> 1   A+^v 10   B tap", dim, 0);
 
-    // escala
+    // escala: nota y escala arriba (<>), transponer y fold abajo (v)
     bool fS = focus == rootField_ || focus == scaleField_ || focus == transpField_ ||
               focus == foldField_;
     FillRect(328, 46, 288, 150, card, 8);
@@ -404,65 +429,61 @@ void ProjectView::drawBoard() {
     DrawText(344, 60, "ESCALA", acc, 0);
     std::string root = project_->FindVariable(VAR_SCALEROOT)->GetString();
     std::string scale = project_->FindVariable(VAR_SCALE)->GetString();
-    if (scale.size() > 14) scale = scale.substr(0, 14);
-    if (focus == rootField_) FillRect(338, 80, 32 * (int)root.size() + 20, 44, acc, 4);
-    DrawText(348, 86, root.c_str(), focus == rootField_ ? bg : fg, 2);
-    if (focus == scaleField_) FillRect(338, 132, 16 * (int)scale.size() + 20, 24, acc, 4);
-    DrawText(348, 136, scale.c_str(), focus == scaleField_ ? bg : fg, 1);
+    if (scale.size() > 11) scale = scale.substr(0, 11);
+    int rw = 32 * (int)root.size();
+    if (focus == rootField_) FillRect(338, 82, rw + 20, 44, acc, 4);
+    DrawText(348, 88, root.c_str(), focus == rootField_ ? bg : fg, 2);
+    int sx = 348 + rw + 22;
+    if (focus == scaleField_) FillRect(sx - 10, 92, 16 * (int)scale.size() + 20, 26, acc, 4);
+    DrawText(sx, 97, scale.c_str(), focus == scaleField_ ? bg : fg, 1);
     snprintf(b, sizeof(b), "transp %+d", project_->FindVariable(VAR_TRANSPOSE)->GetInt());
-    if (focus == transpField_) FillRect(476, 82, 8 * (int)strlen(b) + 12, 18, acc, 3);
-    DrawText(482, 85, b, focus == transpField_ ? bg : dim, 0);
-    snprintf(b, sizeof(b), "fold   %s", project_->FindVariable(VAR_FOLD)->GetInt() ? "si" : "no");
-    if (focus == foldField_) FillRect(476, 106, 8 * (int)strlen(b) + 12, 18, acc, 3);
-    DrawText(482, 109, b, focus == foldField_ ? bg : dim, 0);
-    if (fS) DrawText(344, 172, "<> elegir   A+<> cambiar", dim, 0);
+    if (focus == transpField_) FillRect(338, 150, 8 * (int)strlen(b) + 12, 18, acc, 3);
+    DrawText(344, 153, b, focus == transpField_ ? bg : dim, 0);
+    snprintf(b, sizeof(b), "fold %s", project_->FindVariable(VAR_FOLD)->GetInt() ? "si" : "no");
+    if (focus == foldField_) FillRect(sx - 6, 150, 8 * (int)strlen(b) + 12, 18, acc, 3);
+    DrawText(sx, 153, b, focus == foldField_ ? bg : dim, 0);
+    if (fS) DrawText(344, 176, "<> v elegir   A+<> cambiar", dim, 0);
 
     // fichas
-    static const char *chipName[8] = {"VOLUMEN", "METRONOMO", "DRIVE", "TIPO", "NIVEL", "MIDI", "LINK", "DESFASE"};
-    for (int k = 0; k < 8; k++) {
+    static const char *chipName[7] = {"VOLUMEN", "DRIVE", "TIPO", "NIVEL", "MIDI", "LINK", "DESFASE"};
+    for (int k = 0; k < 7; k++) {
         int x = 24 + (k % 4) * 150, y = 212 + (k / 4) * 74;
         int cw = 142;
         bool f = focus == chipField_[k];
-        Variable *cv = &((UIIntVarField *)chipField_[k])->GetVariable();
-        // Link conectado: la ficha se prende en el verde de Link
-        int peers = (k == 6 && cv->GetInt() > 0) ? Player::GetInstance()->LinkPeers() : 0;
-        bool lit = peers > 0;
-        GUIColor ink = lit ? bg : fg;
-        FillRect(x, y, cw, 66, lit ? LinkGreen() : card, 6);
-        if (f) FrameRect(x, y, cw, 66, lit ? fg : acc, 6, 3);
-        DrawText(x + 12, y + 9, chipName[k], lit ? bg : acc, 0);
+        FillRect(x, y, cw, 66, card, 6);
+        if (f) FrameRect(x, y, cw, 66, acc, 6, 3);
+        DrawText(x + 12, y + 9, chipName[k], acc, 0);
         Variable *v = &((UIIntVarField *)chipField_[k])->GetVariable();
         std::string val;
         if (v->GetType() == Variable::INT) { snprintf(b, sizeof(b), "%d", v->GetInt()); val = b; }
         else val = v->GetString() ? v->GetString() : "--";
         if (val == "off") val = "no";
         if (val == "on") val = "si";
-        if (val == "on+play") val = "si + play";
-        if (k == 6 && v->GetInt() > 0) {   // Link: cuántos links hay
-            if (peers > 0) snprintf(b, sizeof(b), "%d LINK%s", peers, peers == 1 ? "" : "S");
-            else snprintf(b, sizeof(b), "...");
-            DrawText(x + cw - 12 - 8 * (int)strlen(b), y + 9, b, lit ? bg : dim, 0);
-            if (val == "si + play") val = "si+play";
-        }
-        if (k == 7) {   // desfase en ms; + si Chancho suena atrasado
+        if (val == "on+play") val = "si+play";   // (LINK: el modo; arriba a la derecha se ve si conectó)
+        if (k == 6) {   // desfase en ms; + si Chancho suena atrasado
             snprintf(b, sizeof(b), "%+d ms", v->GetInt());
             val = b;
             if (f) DrawText(x + 90, y + 13, "+ atrasa", dim, 0);
         }
         if (val.empty() || val == "(null)") val = "--";
         if (val.size() > 7u) val = val.substr(0, 7);
-        DrawText(x + 12, y + 33, val.c_str(), ink, 1);
+        DrawText(x + 12, y + 33, val.c_str(), fg, 1);
     }
 
     // botones
     int x = 24;
-    for (int k = 0; k < 5; k++) {
-        int w = 8 * (int)strlen(btnName_[k]) + 28;
+    for (int k = 0; k < 6; k++) {
+        int w = 8 * (int)strlen(btnName_[k]) + 26;
         bool f = focus == btnField_[k];
+        bool webOn = false;
+#ifdef WEBSERVER
+        webOn = k == 4 && WebServer::GetInstance()->IsRunning();
+#endif
         if (f) FillRect(x, 380, w, 40, acc, 6);
+        else if (webOn) FillRect(x, 380, w, 40, Mix(bg, acc, 35), 6);   // prendido
         else FrameRect(x, 380, w, 40, rule, 6, 2);
-        DrawText(x + 14, 394, btnName_[k], f ? bg : (k == 4 ? dim : fg), 0);
-        x += w + 8;
+        DrawText(x + 13, 394, btnName_[k], f ? bg : (k == 5 ? dim : fg), 0);
+        x += w + 7;
     }
 
     snprintf(b, sizeof(b), "Chancho 6 - %s.%s.%s", PROJECT_NUMBER, PROJECT_RELEASE, BUILD_COUNT);
@@ -474,4 +495,27 @@ void ProjectView::drawBoard() {
         DrawText(616 - 8 * (int)addr.size(), 452, addr.c_str(), acc, 0);
     }
 #endif
+}
+
+// dígitos de tablero (siete segmentos redondeados), nítidos a cualquier alto
+void ProjectView::drawBigNumber(int x, int y, const char *txt, int h, GUIColor c) {
+    static const unsigned char seg[10] = {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F};
+    int t = h / 8;                 // grosor
+    int w = h * 6 / 10;            // ancho de un dígito
+    int r = t / 2;
+    int mid = (h - t) / 2;
+    for (const char *p = txt; *p; p++) {
+        if (*p < '0' || *p > '9') { x += w / 2; continue; }
+        unsigned char m = seg[*p - '0'];
+        int hl = w - 2 * t + 2;    // largo de las horizontales
+        int vl = mid - t + 2;      // largo de las verticales
+        if (m & 0x01) FillRect(x + t - 1, y, hl, t, c, r);                 // a
+        if (m & 0x02) FillRect(x + w - t, y + t - 1, t, vl, c, r);         // b
+        if (m & 0x04) FillRect(x + w - t, y + mid + t - 1, t, vl, c, r);   // c
+        if (m & 0x08) FillRect(x + t - 1, y + h - t, hl, t, c, r);         // d
+        if (m & 0x10) FillRect(x, y + mid + t - 1, t, vl, c, r);           // e
+        if (m & 0x20) FillRect(x, y + t - 1, t, vl, c, r);                 // f
+        if (m & 0x40) FillRect(x + t - 1, y + mid, hl, t, c, r);           // g
+        x += w + t + 2;
+    }
 }

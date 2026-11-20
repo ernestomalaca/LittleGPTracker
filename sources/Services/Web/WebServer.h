@@ -6,7 +6,9 @@
 // responder de mDNS para que el nombre funcione sin instalar nada.
 //
 // config.xml:
-//   <WEBSERVER value="YES"/>     (NO lo apaga)
+//   sin nada: apagado; se prende y apaga con el botón WEB del Proyecto
+//   <WEBSERVER value="YES"/>     (prendido desde que arranca)
+//   <WEBSERVER value="NO"/>      (nunca)
 //   <WEBPORT value="80"/>        (si no se puede, prueba 8080)
 //   <WEBNAME value="chancho"/>   (chancho.local)
 
@@ -16,6 +18,10 @@ class WebServer {
 public:
     static WebServer *GetInstance();
     void Start();
+    void Stop();
+    void Toggle();   // el botón WEB del Proyecto
+    bool Allowed();  // WEBSERVER NO lo prohíbe del todo
+    bool AutoStart();  // WEBSERVER YES: prendido desde que arranca
     bool IsRunning() { return running_; }
     int Port() { return port_; }
     const std::string &Name() { return name_; }
@@ -35,6 +41,7 @@ private:
     bool running_;
     int listenFd_;
     int port_;
+    volatile int gen_;   // cambia al apagar: los hilos viejos se salen
     std::string name_;
     std::string root_;   // la carpeta de los proyectos (root:)
     std::string web_;    // la carpeta de la página (bin:web)

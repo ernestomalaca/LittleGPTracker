@@ -47,7 +47,7 @@ WebServer *WebServer::GetInstance() {
     return instance_;
 }
 
-WebServer::WebServer() : running_(false), listenFd_(-1), port_(0) {}
+WebServer::WebServer() : running_(false), listenFd_(-1), port_(0), gen_(0) {}
 
 /************************************************************
  utilidades
@@ -545,10 +545,16 @@ static void *mdnsThread(void *) {
 }
 
 void WebServer::serveLoop() {
+    int gen = gen_;
+    int lfd = listenFd_;
     for (;;) {
         struct sockaddr_in cli;
         socklen_t len = sizeof(cli);
-        int fd = accept(listenFd_, (struct sockaddr *)&cli, &len);
+        int fd = accept(lfd, (struct sockaddr *)&cli, &len);
+        if (gen != gen_ || !running_) {   // lo apagaron
+            if (fd >= 0) close(fd);
+            return;
+        }
         if (fd < 0) {
             if (errno == EINTR) continue;
             usleep(100000);
@@ -573,11 +579,39 @@ void WebServer::serveLoop() {
     }
 }
 
+// apagar: se cierra el puerto y los hilos terminan solos (el de mDNS en
+// menos de 2 s); lo que se esté bajando o subiendo en ese momento termina
+void WebServer::Stop() {
+    if (!running_) return;
+    running_ = false;
+    gen_++;
+    if (listenFd_ >= 0) {
+        shutdown(listenFd_, SHUT_RDWR);
+        close(listenFd_);
+        listenFd_ = -1;
+    }
+    Trace::Log("WEB", "apagado");
+}
+
+void WebServer::Toggle() {
+    if (running_) Stop();
+    else Start();
+}
+
+bool WebServer::Allowed() {
+    const char *on = Config::GetInstance()->GetValue("WEBSERVER");
+    return !(on && (!strcmp(on, "NO") || !strcmp(on, "no")));
+}
+
+bool WebServer::AutoStart() {
+    const char *on = Config::GetInstance()->GetValue("WEBSERVER");
+    return on && (!strcmp(on, "YES") || !strcmp(on, "yes") || !strcmp(on, "ON") || !strcmp(on, "on"));
+}
+
 void WebServer::Start() {
     if (running_) return;
+    if (!Allowed()) return;
     Config *config = Config::GetInstance();
-    const char *on = config->GetValue("WEBSERVER");
-    if (on && (!strcmp(on, "NO") || !strcmp(on, "no"))) return;
     const char *nm = config->GetValue("WEBNAME");
     name_ = nm ? nm : "chancho";
     const char *pv = config->GetValue("WEBPORT");
@@ -742,7 +776,12 @@ void WebServer::mdnsLoop() {
     tv.tv_usec = 0;
     setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     int announce = 0;
+    int gen = gen_;
     for (;;) {
+        if (gen != gen_ || !running_) {   // lo apagaron
+            close(fd);
+            return;
+        }
         // la red puede llegar después (o cambiar): se vuelve a unir al grupo
         std::string ip = LocalIP();
         if (!ip.empty() && ip != joinedIp) {

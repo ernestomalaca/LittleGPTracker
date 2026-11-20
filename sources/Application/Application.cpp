@@ -121,7 +121,9 @@ bool Application::Init(GUICreateWindowParams &params) {
   initMidiInput();
 	ControlRoom::GetInstance()->LoadMapping("bin:mapping.xml") ;
 #ifdef WEBSERVER
-	WebServer::GetInstance()->Start() ;   // trk2als: chancho.local
+	// trk2als: chancho.local va apagado; se prende con el botón WEB del
+	// Proyecto (o desde el arranque con WEBSERVER YES en config.xml)
+	if (WebServer::GetInstance()->AutoStart()) WebServer::GetInstance()->Start() ;
 #endif
 	return true ;
 } ;

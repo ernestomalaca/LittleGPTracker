@@ -27,15 +27,16 @@ Actualizar (por Wi-Fi, sin sacar la tarjeta)
   chancho6/chancho6-rg353v.elf.anterior.
 
 chancho.local (manejar los archivos desde la compu o el celular)
-  Con la consola en el mismo Wi-Fi, abre en el navegador:
-       http://chancho.local
+  Va apagado. Préndelo con el botón WEB en la pantalla de Proyecto (y
+  apágalo igual cuando termines). Con la consola en el mismo Wi-Fi, abre:
+       http://chancho.local:8080
   (la dirección y la IP salen abajo en la pantalla de Proyecto). Ahí puedes
   bajar un proyecto en zip, subir samples arrastrándolos (también carpetas
   enteras), navegar, renombrar y borrar archivos, y "Exportar a Live": el
   navegador arma el Live Set con sus samples y te lo da en un zip. Todo
   viene en la consola (chancho6/web), no hace falta internet.
-  Si chancho.local no abre, usa la IP. Para apagarlo: <WEBSERVER value="NO"/>
-  en config.xml.
+  Si chancho.local no abre, usa la IP. En config.xml: <WEBSERVER value="YES"/>
+  lo deja prendido desde que arranca; <WEBSERVER value="NO"/> lo quita.
 
 Ableton Link
   En Proyecto, la ficha ABLETON LINK (A+<>):
