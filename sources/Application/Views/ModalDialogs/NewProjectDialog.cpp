@@ -239,7 +239,7 @@ void NewProjectDialog::drawShapes() {
     const int FY = 52, FH = 72;
     FillRect(24, FY, 592, FH, card, 8);
     if (selected_ == 0 || keyboard_) FrameRect(24, FY, 592, FH, acc, 8, 3);
-    int nx = 44, ny = FY + 14;
+    int nx = 44, ny = FY + 18;
     if (!name_.empty()) DrawText(nx, ny, name_.c_str(), fg, 2);
     // el cursor: una rayita debajo de donde va la próxima letra
     int cx = nx + cursor_ * 24;
@@ -248,10 +248,6 @@ void NewProjectDialog::drawShapes() {
     char cnt[16];
     snprintf(cnt, sizeof(cnt), "%d/%d", (int)name_.size(), MAX_NAME_LENGTH);
     DrawText(PX + PW - 32 - 8 * (int)strlen(cnt), FY + 8, cnt, dim, 0);
-    if (!prefix_.empty()) {
-        std::string folder = prefix_ + (name_.empty() ? std::string("...") : name_);
-        DrawText(nx, FY + FH - 14, folder.c_str(), dim, 0);
-    }
 
     bool warning = !warn_.empty() && SDL_GetTicks() - warnTime_ < 2500;
 
