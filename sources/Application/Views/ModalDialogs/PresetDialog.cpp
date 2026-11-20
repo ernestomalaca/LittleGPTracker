@@ -73,6 +73,7 @@ PresetDialog::PresetDialog(View &view, bool forSave, int kind)
     : ModalView(view), forSave_(forSave), kind_(kind), selected_(0), top_(0),
       emptyOptions_(false), col_(1), treeSel_(0), treeTop_(0), previewAt_(0) {
 	launcher_ = 0 ;
+	inClip_ = false ;
 	pick_ = PICK_NONE ;
 	pickInstr_ = -1 ;
 	InstrumentPresets::ForgetLibCounts() ;   // por si se agregaron samples (p. ej. desde chancho.local)
@@ -402,6 +403,11 @@ void PresetDialog::schedulePreview() {
 
 void PresetDialog::stopPreview() {
 	previewAt_ = 0 ;
+	if (inClip_) {
+		inClip_ = false ;
+		if (launcher_) launcher_->LaunchPreviewStop() ;
+		playing_.clear() ;
+	}
 	if (!playing_.empty()) {
 		Player::GetInstance()->StopStreaming() ;
 		playing_.clear() ;
@@ -535,6 +541,13 @@ void PresetDialog::startPreview() {
 		return ;
 	}
 	std::string name = full(entries_[selected_].name) ;
+	// 0. si en la pista suena un clip MIDI: el clip con este sonido
+	if (launcher_ && launcher_->LaunchPreview(name)) {
+		inClip_ = true ;
+		playing_ = entries_[selected_].name ;
+		isDirty_ = true ;
+		return ;
+	}
 	InstrumentPresets::Info info ;
 	if (!InstrumentPresets::Describe(name, info)) return ;
 	Player *player = Player::GetInstance() ;
@@ -800,7 +813,7 @@ void PresetDialog::drawShapes() {
 	// abajo: lo que suena y los botones
 	const int BY = 410 ;
 	if (!playing_.empty()) {
-		std::string s = "sonando: " + playing_ ;
+		std::string s = (inClip_ ? "en el clip: " : "sonando: ") + playing_ ;
 		FillRect(24, BY, 592, 34, Mix(bg, acc, 14), 6) ;
 		DrawText(36, BY + 11, s.c_str(), acc, 0) ;
 		DrawText(616 - 12 - 8 * 18, BY + 11, launcher_ ? "A lanza   B atrás" : pick_ ? "A elige   B atrás" : "A carga   B atrás", fg, 0) ;
@@ -904,8 +917,9 @@ void PresetDialog::ProcessButtonMask(unsigned short mask, bool pressed) {
 			EndModal(e.zones) ;
 			return ;
 		case K_PRESET:
-			stopPreview() ;
 			chosen_ = full(e.name) ;
+			// la del clip sigue hasta que el sonido entre (se apaga después de lanzar)
+			if (!(launcher_ && inClip_)) stopPreview() ;
 			if (pick_) {   // trk2als: se importa y listo
 				pickLast() = folder_ ;
 				std::string msg ;
@@ -925,8 +939,10 @@ void PresetDialog::ProcessButtonMask(unsigned short mask, bool pressed) {
 				if (st == PresetLauncher::LS_NONE) {
 					InstrumentPresets::LastFolder() = folder_ ;
 					launcher_->Launch(chosen_) ;
+					stopPreview() ;
 					if (!autoClose()) return ;
 				}
+				stopPreview() ;
 				EndModal(PD_CLOSED) ;
 				return ;
 			}

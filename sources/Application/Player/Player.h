@@ -98,6 +98,15 @@ public:
     // cambia su instrumento; off: vuelve a tocar
     void HoldTrack(int track, bool on) ;
 
+	// trk2als: la pre-escucha en el clip: mientras in != 0, el clip MIDI que
+	// suena en esa pista toca con ese instrumento (el de la pista no se toca).
+	// Al cambiar se calla lo que sonaba en la pista
+	void SetPreviewInstrument(int track, I_Instrument *in) ;
+	I_Instrument *GetPreviewInstrument(int track) ;
+	bool ClipPlaying(int track) ;   // ¿suena un clip MIDI en esa pista?
+	// ya nadie lo mezcla ni lo va a tocar (antes de cambiarle o quitarle samples)
+	void KillInstrument(I_Instrument *in) ;
+
 	void StartStreaming(const Path &path) ;
 	void PreviewNote(int channel, I_Instrument *instr, int note) ;   // trk2als: tocar una nota con la canción parada
 	void StartStreaming(const Path &path, double speed, double delaySecs, double startFrac, bool loop) ;
@@ -207,6 +216,7 @@ private:
 		I_Instrument *instr ;
 } ;
 	std::vector<TimedHit> timed_[SONG_CHANNEL_COUNT] ;
+	I_Instrument *previewInstr_[SONG_CHANNEL_COUNT] ;   // trk2als
 	unsigned long sliceCount_ ;
 	void fireTimed() ;
 	// trk2als: el clip MIDI propio

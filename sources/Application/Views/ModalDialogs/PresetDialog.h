@@ -31,6 +31,10 @@ public:
 	virtual bool LaunchPlaying() = 0 ;   // ¿la música está andando? (entonces no hay pre-escucha)
 	// el sonido que tiene la pista ("Kits/Cumbia/KIT 1", o solo "KIT 1" si no se sabe de dónde)
 	virtual std::string LaunchCurrent() = 0 ;
+	// trk2als: la pre-escucha en el clip: si en la pista suena un clip MIDI,
+	// ese clip toca con este sonido (true) sin cambiar el de la pista
+	virtual bool LaunchPreview(const std::string &name) { return false ; }
+	virtual void LaunchPreviewStop() {}
 } ;
 
 class PresetDialog : public ModalView {
@@ -99,6 +103,7 @@ private:
 	int treeTop_ ;
 	unsigned long previewAt_ ;   // cuándo arranca la muestra (0 = nada)
 	std::string playing_ ;       // lo que está sonando
+	bool inClip_ ;               // y suena en el clip de la pista (no la muestra)
 	PresetLauncher *launcher_ ;
 	int pick_ ;
 	int pickInstr_ ;

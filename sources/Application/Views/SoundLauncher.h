@@ -10,6 +10,7 @@
 #include "Application/Views/ModalDialogs/PresetDialog.h"
 #include "Application/Instruments/InstrumentPresets.h"
 #include <map>
+#include <vector>
 #include <string>
 
 class ViewData ;
@@ -47,6 +48,8 @@ public:
 	virtual int LaunchState(const std::string &name, int &permille) ;
 	virtual bool LaunchPlaying() ;
 	virtual std::string LaunchCurrent() ;
+	virtual bool LaunchPreview(const std::string &name) ;
+	virtual void LaunchPreviewStop() ;
 
 	// lo llama la interfaz seguido (aunque se esté en otra pantalla);
 	// true = hay que redibujar
@@ -68,6 +71,11 @@ private:
 	void apply() ;
 	void cancel() ;
 	void notify(LaunchHost *h, const char *msg) ;
+	bool tickPreview() ;
+	void previewOff() ;
+	void previewRelease(bool purge) ;
+	void spareOff(int track) ;
+	bool spareQuiet() ;
 
 	ViewData *vd_ ;
 	LaunchHost *owner_ ;     // la Session: se entera de las limpiezas
@@ -88,6 +96,16 @@ private:
 	// el preset (con carpeta) que tiene cada instrumento
 	std::map<int, std::string> preset_ ;
 	std::map<int, std::string> shown_ ;   // cómo quedó llamándose su pista
+	// la pre-escucha en el clip: el sonido se lee aparte y entra en un
+	// instrumento de repuesto que toca el clip de la pista (el de la pista
+	// no cambia). Los samples que se trajeron solo para eso se quitan al final
+	InstrumentPresets::Preload *pjob_ ;
+	std::string pname_ ;
+	int ptrack_ ;            // la pista que lo oye (-1 nada)
+	bool pkeep_ ;            // se lanzó: sigue hasta que entre
+	bool prelease_ ;         // hay samples de la pre-escucha por quitar
+	std::vector<std::string> padded_ ;
+	unsigned long quietAt_ ;   // el repuesto se está apagando (cola): hasta cuándo
 } ;
 
 #endif

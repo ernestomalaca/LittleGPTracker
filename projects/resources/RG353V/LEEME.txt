@@ -55,8 +55,13 @@ Sonidos (presets) y su pre-escucha
     - si la carpeta del preset trae preview.wav, suena ese archivo
       (por ejemplo un loop de 2 a 4 segundos exportado de Ableton,
       44.1 kHz, 16 bits, estéreo o mono)
-    - si no: un kit toca un compás con sus pads (bombo, hat, caja...) al
-      tempo del proyecto; un sample o multicapa toca su sample principal
+    - si en la pista suena un clip MIDI (desde la cabecera de la pista):
+      ese clip toca con el sonido que estás viendo, con su automatización.
+      La pista no cambia: al moverte cambia el sonido, al cerrar vuelve el
+      suyo, y A lo lanza (sigue sonando así hasta que entra en el 1)
+    - si no: una prueba de sonido a tempo, como un baterista probando su
+      batería (un kit: bombo, caja, hats, tom, platillo; un sample o
+      multicapa: unas notas sueltas). No es un beat
   Ejemplo:  presets/Kits/Cumbia/KIT 1/preview.wav
   X prende o apaga la pre-escucha (se queda así para todos los proyectos).
 

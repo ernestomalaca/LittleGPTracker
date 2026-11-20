@@ -51,6 +51,7 @@ public:
 	void StartChannel(int channel) ;
 	void StopChannel(int channel) ;
 	void ChokeChannel(int channel) ; // trk2als
+	void KillInstrument(I_Instrument *in) ;   // trk2als: ningún canal lo sigue mezclando
 
 	bool IsChannelPlaying(int channel) ;
 	

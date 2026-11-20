@@ -87,6 +87,13 @@ void PlayerMixer::ChokeChannel(int channel) {   // trk2als
 	channel_[Phys(channel)]->ChokeInstrument() ;
 } ;
 
+void PlayerMixer::KillInstrument(I_Instrument *in) {   // trk2als
+	for (int p=0;p<SONG_CHANNEL_COUNT;p++) {
+		if (channel_[p]->GetInstrument()==in) channel_[p]->KillInstrument() ;
+		if (lastInstrument_[p]==in) lastInstrument_[p]=0 ;
+	}
+}
+
 void PlayerMixer::StopChannel(int channel) {
 	int p=Phys(channel) ;
     channel_[p]->StopInstrument() ;

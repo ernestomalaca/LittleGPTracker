@@ -53,6 +53,7 @@ Player::Player() {
     viewData_=0;
     for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {   // trk2als
         autoInstr_[i] = 0;
+        previewInstr_[i] = 0;
         autoStep_[i] = 0;
         autoStepSlice_[i] = 0;
     }
@@ -1293,6 +1294,7 @@ void Player::playClipStep(int channel) {
     I_Instrument *instrument = (owner >= 0) ? bank->GetInstrument(owner)
                                             : mixer_->GetLastInstrument(channel);
     if (!instrument) instrument = bank->GetInstrument(0);
+    if (previewInstr_[channel]) instrument = previewInstr_[channel];   // la pre-escucha
     if (!instrument) return;
     if (owner >= 0) {
         instrumentOnChannel_[channel][0] = (owner / 16) > 9 ? 'A' - 10 + owner / 16 : '0' + owner / 16;
@@ -1420,7 +1422,9 @@ void Player::updateAutomation() {
         int chain = viewData_->currentPlayChain_[ch];
         bool playing = mixer_->IsChannelPlaying(ch) && !isAudio(ch) && chain != 0xFF &&
                        viewData_->currentPlayPhrase_[ch] == CLIP_PHRASE;
-        SampleInstrument *si = playing ? trackSampler(ch) : 0;
+        // la pre-escucha en el clip también lleva la automatización del clip
+        SampleInstrument *si = !playing ? 0
+                             : previewInstr_[ch] ? (SampleInstrument *)previewInstr_[ch] : trackSampler(ch);
         if (si != autoInstr_[ch]) clearAutomation(ch);
         if (!si) continue;
         autoInstr_[ch] = si;
@@ -1754,6 +1758,47 @@ void Player::RemoveTrack(int ch) {
     UIController::GetInstance()->RemoveChannel(ch);
     project_->DeleteTrack(ch);   // la canción, sus clips y su instrumento
     mixer_->Unlock();
+}
+
+void Player::SetPreviewInstrument(int ch, I_Instrument *in) {
+    if (ch < 0 || ch >= SONG_CHANNEL_COUNT) return;
+    mixer_->Lock();
+    if (previewInstr_[ch] != in) {
+        // lo que sonaba (con el de antes) se calla: el que entra empieza limpio
+        mixer_->ChokeChannel(ch);
+        mixer_->StopInstrument(ch);
+        timed_[ch].clear();
+        TablePlayback::GetTablePlayback(ch).Stop();
+        clearAutomation(ch);
+        previewInstr_[ch] = in;
+    }
+    mixer_->Unlock();
+}
+
+I_Instrument *Player::GetPreviewInstrument(int ch) {
+    return (ch >= 0 && ch < SONG_CHANNEL_COUNT) ? previewInstr_[ch] : 0;
+}
+
+void Player::KillInstrument(I_Instrument *in) {
+    if (!in) return;
+    mixer_->Lock();
+    mixer_->KillInstrument(in);
+    for (int ch = 0; ch < SONG_CHANNEL_COUNT; ch++) {
+        if (previewInstr_[ch] == in) previewInstr_[ch] = 0;
+        if (autoInstr_[ch] == in) clearAutomation(ch);
+        std::vector<TimedHit> &q = timed_[ch];
+        for (size_t k = 0; k < q.size();) {
+            if (q[k].instr == in) q.erase(q.begin() + k);
+            else k++;
+        }
+    }
+    mixer_->Unlock();
+}
+
+bool Player::ClipPlaying(int ch) {
+    if (!isRunning_ || !viewData_ || !project_ || ch < 0 || ch >= SONG_CHANNEL_COUNT) return false;
+    if (project_->IsAudioChannel(ch)) return false;
+    return viewData_->currentPlayPhrase_[ch] == CLIP_PHRASE && viewData_->currentPlayChain_[ch] != 0xFF;
 }
 
 void Player::HoldTrack(int ch, bool on) {
