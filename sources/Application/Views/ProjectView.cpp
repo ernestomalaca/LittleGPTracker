@@ -1,5 +1,6 @@
 #include "ProjectView.h"
 #include "Application/Utils/ProjectName.h"
+#include "Application/Utils/Latin1.h"
 #include "Application/Player/Player.h"
 #ifdef WEBSERVER
 #include "Services/Web/WebServer.h"
@@ -283,7 +284,7 @@ void ProjectView::Update(Observable &,I_ObservableData *data) {
 		case ACTION_PURGE_INSTRUMENT:
 		{
             MessageBox *mb = new MessageBox(
-                *this, "Limpiar los samples?\nSe borran los que\nno tienen instrumento",
+                *this, "¿Limpiar los samples?\nSe borran los que\nno tienen instrumento",
                 MBBF_YES | MBBF_NO);
             mb->Label(MBL_YES, "Limpiar");
             DoModal(mb,PurgeCallback) ;
@@ -336,7 +337,7 @@ void ProjectView::Update(Observable &,I_ObservableData *data) {
         }
         case ACTION_LOAD: {
             MessageBox *mb = new MessageBox(*this, "", MBBF_YES | MBBF_NO);
-            mb->Title("Cargar nuevo proyecto\ny perder los cambios?")
+            mb->Title("¿Cargar nuevo proyecto\ny perder los cambios?")
                 .Label(MBL_YES, "Ok").Label(MBL_NO, "Volver");
             DoModal(mb, LoadCallback);
             break;
@@ -345,7 +346,7 @@ void ProjectView::Update(Observable &,I_ObservableData *data) {
             // trk2als: con sabor de aquí
             MessageBox *mb = new MessageBox(
                 *this, "", MBBF_YES | MBBF_NO);
-            mb->Title("Salir y perder la fe?").Label(MBL_YES, "Salir").Label(MBL_NO, "Me quedo");
+            mb->Title("¿Salir y perder la fe?").Label(MBL_YES, "Salir").Label(MBL_NO, "Me quedo");
             DoModal(mb, QuitCallback);
             break;
         }
@@ -463,8 +464,8 @@ void ProjectView::drawBoard() {
     if (fL || fO) FrameRect(lx, TY, TW, TH, acc, 8, 3);
     DrawText(lx + 12, TY + 12, "ABLETON LINK", acc, 0);
     int lm = project_->FindVariable(VAR_LINK)->GetInt();
-    const char *lmode = lm == 0 ? "no" : lm == 1 ? "si" : "si+play";
-    if (fL) FillRect(lx + 6, TY + 40, (lm == 2 ? 16 : 24) * (int)strlen(lmode) + 12, 44, acc, 4);
+    const char *lmode = lm == 0 ? "no" : lm == 1 ? "sí" : "sí+play";
+    if (fL) FillRect(lx + 6, TY + 40, (lm == 2 ? 16 : 24) * TextLen(lmode) + 12, 44, acc, 4);
     DrawText(lx + 12, TY + 46, lmode, fL ? bg : fg, lm == 2 ? 1 : 2);
     snprintf(b, sizeof(b), "desfase %+d ms", project_->FindVariable(VAR_LINKOFS)->GetInt());
     if (fO) FillRect(lx + 6, TY + 92, 8 * (int)strlen(b) + 12, 18, acc, 3);
@@ -472,7 +473,7 @@ void ProjectView::drawBoard() {
     if (fO) DrawText(lx + 12, TY + 76, "+ si va atrasado", dim, 0);
 
     // fichas
-    static const char *chipName[8] = {"VOLUMEN", "DRIVE", "TIPO", "NIVEL", "MIDI", "METRONOMO", "TRANSP", "FOLD"};
+    static const char *chipName[8] = {"VOLUMEN", "DRIVE", "TIPO", "NIVEL", "MIDI", "METRÓNOMO", "TRANSP", "FOLD"};
     for (int k = 0; k < 8; k++) {
         int x = 24 + (k % 4) * 150, y = 182 + (k / 4) * 76;
         int cw = 142;
@@ -483,11 +484,11 @@ void ProjectView::drawBoard() {
         Variable *v = &((UIIntVarField *)chipField_[k])->GetVariable();
         std::string val;
         if (k == 6) { snprintf(b, sizeof(b), "%+d", v->GetInt()); val = b; }   // transponer
-        else if (k == 7) val = v->GetInt() ? "si" : "no";                        // fold
+        else if (k == 7) val = v->GetInt() ? "sí" : "no";                        // fold
         else if (v->GetType() == Variable::INT) { snprintf(b, sizeof(b), "%d", v->GetInt()); val = b; }
         else val = v->GetString() ? v->GetString() : "--";
         if (val == "off") val = "no";
-        if (val == "on") val = "si";
+        if (val == "on") val = "sí";
         if (val.empty() || val == "(null)") val = "--";
         if (val.size() > 7u) val = val.substr(0, 7);
         DrawText(x + 12, y + 33, val.c_str(), fg, 1);

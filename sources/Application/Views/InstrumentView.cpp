@@ -228,13 +228,13 @@ public:
 			case PAD: {
 				int note=si_->KitBase()+v ;
 				std::string n=si_->PadName(note) ;
-				snprintf(buf,sizeof(buf),"pad %2d: %s %s",v+1,padNoteName(note).c_str(),n.empty()?"(vacio)":n.c_str()) ;
+				snprintf(buf,sizeof(buf),"pad %2d: %s %s",v+1,padNoteName(note).c_str(),n.empty()?"(vacío)":n.c_str()) ;
 				break ;
 			}
 			case SAMPLE: {
 				SamplePool *sp=SamplePool::GetInstance() ;
 				const char *n=(v>=0 && v<sp->GetNameListSize())?sp->GetNameList()[v]:0 ;
-				snprintf(buf,sizeof(buf),"sample: %.30s",n?n:"(vacio)") ;
+				snprintf(buf,sizeof(buf),"sample: %.30s",n?n:"(vacío)") ;
 				break ;
 			}
 			case DECAY:
@@ -1333,14 +1333,14 @@ void InstrumentView::drawWaveform() {
 	const char *help=helpText_?helpText_:"A+<>:valor;A+^v:valor x16;SEL+<>:pantalla" ;
 	if (kitMode_ && GetFocus() && !GetFocus()->IsStatic() &&
 	    isPadField(((UIIntVarField *)GetFocus())->GetVariableID()))
-		help="A:oir;AA:sample;X:vol/decay;Y:tono/pan;L:inicio/choke" ;
+		help="A:oír;AA:sample;X:vol/decay;Y:tono/pan;L:inicio/choke" ;
 	if (kitMode_ && GetFocus() && !GetFocus()->IsStatic() &&
 	    ((UIIntVarField *)GetFocus())->GetVariableID()==SIP_SAMPLE)
 		help="A:cambiar de kit;B+A:vaciar el instrumento" ;
 	if (!helpText_ && GetFocus() && !GetFocus()->IsStatic() &&
 	    automatable(((UIIntVarField *)GetFocus())->GetVariableID()))
 		help=Player::GetInstance()->AutoRecState() ? "A sostenido+<>:grabar;Y+START:dejar de grabar"
-		                                        : "A+<>:valor;Y+START:grabar automatizacion;B+A:borrarla" ;
+		                                        : "A+<>:valor;Y+START:grabar automatización;B+A:borrarla" ;
 	drawHelpBar(help) ;
 	drawAutoMarks() ;   // trk2als
 }
@@ -2403,7 +2403,7 @@ bool InstrumentView::padShortcut(unsigned short mask) {
 	if (!dir || (mod!=EPBM_X && mod!=EPBM_Y && mod!=EPBM_L)) return false ;
 	SampleInstrument *si=(SampleInstrument *)current_ ;
 	int note=padNote() ;
-	if (si->PadSample(note).empty()) { View::SetNotification("pad vacio") ; return true ; }
+	if (si->PadSample(note).empty()) { View::SetNotification("pad vacío") ; return true ; }
 	PadParams p=si->GetPad(note) ;
 	bool vert=(dir==EPBM_UP || dir==EPBM_DOWN) ;
 	int d=(dir==EPBM_UP || dir==EPBM_RIGHT)?1:-1 ;
@@ -2421,7 +2421,7 @@ bool InstrumentView::padShortcut(unsigned short mask) {
 		else strcpy(msg,"decay: todo") ;
 	} else if (mod==EPBM_Y && vert) {
 		p.tune=std::max(-24,std::min(24,p.tune+d)) ;
-		snprintf(msg,sizeof(msg),"afinacion %+dst",p.tune) ;
+		snprintf(msg,sizeof(msg),"afinación %+dst",p.tune) ;
 	} else if (mod==EPBM_Y) {
 		p.pan=std::max(-50,std::min(50,p.pan+d*5)) ;
 		snprintf(msg,sizeof(msg),"paneo %+d",p.pan) ;
@@ -2535,7 +2535,7 @@ bool InstrumentView::processKit(unsigned short mask) {
 		padBusy_=false ;
 		padClipCut_=padClip_ ;
 		refreshKit() ;
-		View::SetNotification(padClip_?"pad cortado":"pad vacio") ;
+		View::SetNotification(padClip_?"pad cortado":"pad vacío") ;
 		return true ;
 	}
 	if (mask==(EPBM_L|EPBM_A) && whole) {   // pegar (encima de otro: lo reemplaza)
@@ -2553,7 +2553,7 @@ bool InstrumentView::processKit(unsigned short mask) {
 		if (padClipCut_ && !oldWav.empty() && oldWav!=padClipWav_) {
 			padClipWav_=oldWav ;
 			padClipP_=oldP ;
-			View::SetNotification("pegado; el de antes quedo cortado") ;
+			View::SetNotification("pegado; el de antes quedó cortado") ;
 		} else {
 			padClipCut_=false ;
 			View::SetNotification("pad pegado") ;
@@ -2635,7 +2635,7 @@ void InstrumentView::drawPadGrid(SampleInstrument *si,int X,int Y,int W,int H) {
 	std::string wav=si->PadSample(note) ;
 	PadParams p=si->GetPad(note) ;
 	char l1[96], l2[96], dec[16], chk[12] ;
-	snprintf(l1,sizeof(l1),"pad %d  %s  %s",sel+1,padNoteName(note).c_str(),wav.empty()?"(vacio: A abre el navegador)":wav.c_str()) ;
+	snprintf(l1,sizeof(l1),"pad %d  %s  %s",sel+1,padNoteName(note).c_str(),wav.empty()?"(vacío: A abre el navegador)":wav.c_str()) ;
 	if (p.decay) snprintf(dec,sizeof(dec),"%dms",p.decay) ; else strcpy(dec,"todo") ;
 	if (p.choke) snprintf(chk,sizeof(chk),"%d",p.choke) ; else strcpy(chk,"no") ;
 	snprintf(l2,sizeof(l2),"vol %+ddB  tono %+d  pan %+d  decay %s  choke %s  inicio %d%%",
@@ -2696,7 +2696,7 @@ void InstrumentView::toggleAutoRec() {
 	if (player->AutoRecState()!=0) {
 		if (touching_) endTouch() ;
 		player->SetAutoRec(false) ;
-		View::SetNotification("automatizacion: grabacion apagada") ;
+		View::SetNotification("automatización: grabación apagada") ;
 		isDirty_=true ;
 		return ;
 	}
@@ -2717,7 +2717,7 @@ void InstrumentView::toggleAutoRec() {
 	} else {
 		// ya suena: empieza en el siguiente uno del compás
 		player->ArmAutoRec() ;
-		View::SetNotification("graba desde el siguiente compas") ;
+		View::SetNotification("graba desde el siguiente compás") ;
 	}
 	isDirty_=true ;
 }
@@ -2813,7 +2813,7 @@ bool InstrumentView::deleteLane() {
 	MixerService::GetInstance()->Lock() ;
 	c.RemoveLane(id,-1) ;
 	MixerService::GetInstance()->Unlock() ;
-	View::SetNotification("automatizacion borrada (Select la recupera)") ;
+	View::SetNotification("automatización borrada (Select la recupera)") ;
 	isDirty_=true ;
 	return true ;
 }
@@ -2828,7 +2828,7 @@ bool InstrumentView::undoLane() {
 	c.RemoveLane(laneUndoLane_.target,laneUndoLane_.pad) ;
 	c.lanes.push_back(laneUndoLane_) ;
 	MixerService::GetInstance()->Unlock() ;
-	View::SetNotification("automatizacion recuperada") ;
+	View::SetNotification("automatización recuperada") ;
 	isDirty_=true ;
 	return true ;
 }

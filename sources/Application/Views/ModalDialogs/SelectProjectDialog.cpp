@@ -282,7 +282,7 @@ void SelectProjectDialog::drawShapes() {
 		}
 	}
 	if (size==0) {
-		DrawText(RX+8,LY+8,"Todavia no hay proyectos",fg,1) ;
+		DrawText(RX+8,LY+8,"Todavía no hay proyectos",fg,1) ;
 		DrawText(RX+8,LY+34,"Nueva para empezar uno",dim,0) ;
 	}
 
@@ -369,7 +369,7 @@ void SelectProjectDialog::ProcessButtonMask(unsigned short mask,bool pressed) {
             }
             if (current != 0) {
                 std::string message =
-                    "Borrar el proyecto?\n" + projectTitle(current->GetName()) + "\nNo se puede deshacer";
+                    "¿Borrar el proyecto?\n" + projectTitle(current->GetName()) + "\nNo se puede deshacer";
                 MessageBox *mb =
                     new MessageBox(*this, message.c_str(), MBBF_YES | MBBF_NO);
                 mb->Label(MBL_YES, "Borrar").Label(MBL_NO, "Mejor no");
@@ -436,7 +436,7 @@ void SelectProjectDialog::ProcessButtonMask(unsigned short mask,bool pressed) {
             }
             case 2: { // Exit: trk2als: pregunta antes
                 MessageBox *mb = new MessageBox(*this, "", MBBF_YES | MBBF_NO);
-                mb->Title("Salir y perder la fe?").Label(MBL_YES, "Salir").Label(MBL_NO, "Me quedo");
+                mb->Title("¿Salir y perder la fe?").Label(MBL_YES, "Salir").Label(MBL_NO, "Me quedo");
                 DoModal(mb, ExitCallback);
 				break ;
             }
@@ -517,7 +517,7 @@ Result SelectProjectDialog::OnDeleteProject(const Path &projectPath) {
 	
 	// Check if project exists before deletion
     if (!pathCopy.Exists()) {
-        std::string errMsg = "No encontre el proyecto";
+        std::string errMsg = "No encontré el proyecto";
         View::SetNotification(errMsg.c_str(), 0);
         return Result("Project not found");
     }

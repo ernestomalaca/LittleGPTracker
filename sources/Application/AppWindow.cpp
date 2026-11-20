@@ -23,6 +23,7 @@
 #include "Resources/hdfont.h"
 #include "Application/Model/Config.h"
 #include "Application/Utils/ProjectName.h"
+#include "Application/Utils/Latin1.h"
 
 AppWindow *instance = 0;
 
@@ -196,8 +197,11 @@ AppWindow::AppWindow(I_GUIWindowImp &imp) : GUIWindow(imp) {
 
 AppWindow::~AppWindow() { MidiService::GetInstance()->Close(); }
 
-void AppWindow::DrawString(const char *string, GUIPoint &pos,
+void AppWindow::DrawString(const char *utf8, GUIPoint &pos,
                            GUITextProperties &props, bool force) {
+    // trk2als: tildes y ñ (UTF-8 -> la letra de 256)
+    std::string latin = ToLatin1(utf8);
+    const char *string = latin.c_str();
 
     // we know we don't have mode than 40 chars
 
@@ -1023,7 +1027,7 @@ void AppWindow::AddText(int x, int y, const char *text, GUIColor color, int scal
     Shape sh;
     sh.type = 1;
     sh.x = x; sh.y = y;
-    sh.text = text;
+    sh.text = ToLatin1(text);
     sh.scale = scale;
     sh.color = color;
     target().push_back(sh);
@@ -1180,9 +1184,9 @@ void AppWindow::showHelp() {
         size_t colon = item.find(':');
         std::string k = colon == std::string::npos ? item : item.substr(0, colon);
         std::string w = colon == std::string::npos ? "" : item.substr(colon + 1);
-        keys.push_back(k);
-        whats.push_back(w);
-        if (k.size() > keyLen) keyLen = k.size();
+        keys.push_back(ToLatin1(k));   // trk2als: con tildes (y el largo bien contado)
+        whats.push_back(ToLatin1(w));
+        if (keys.back().size() > keyLen) keyLen = keys.back().size();
     }
     if (keys.empty()) return;
     _helpShown = true;
@@ -1224,7 +1228,7 @@ void AppWindow::showHelp() {
         _overlay.push_back(t);
     }
     t.scale = 0;
-    t.x = X + 24; t.y = Y + h - 24; t.text = "L2+R2 o cualquier boton la cierra"; t.color = dim;
+    t.x = X + 24; t.y = Y + h - 24; t.text = "L2+R2 o cualquier botón la cierra"; t.color = dim;
     _overlay.push_back(t);
     _overlayOn = true;
     _overlayDirty = true;

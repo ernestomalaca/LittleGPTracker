@@ -524,7 +524,7 @@ void View::checkScaleChange() {
     }
     int scale = project->GetScale(), root = project->GetScaleRoot();
     char buf[160];
-    snprintf(buf, sizeof(buf), "Pasar las notas a %s %s?\n%d notas quedaron fuera\nNo se puede deshacer",
+    snprintf(buf, sizeof(buf), "¿Pasar las notas a %s %s?\n%d notas quedaron fuera\nNo se puede deshacer",
              scaleNotes[root], scaleNames[scale], n);
     MessageBox *mb = new MessageBox(*this, buf, MBBF_YES | MBBF_NO);
     DoModal(mb, FitScaleCallback);

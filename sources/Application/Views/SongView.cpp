@@ -1573,7 +1573,7 @@ void SongView::ApplyTrackType(int channel, int code, bool) {
     }
     if (code == TTD_DELETE) {
         if (Player::GetInstance()->IsRunning()) {   // nada de borrar lo que suena
-            View::SetNotification("deten la musica para borrar");
+            View::SetNotification("detén la música para borrar");
             return;
         }
         std::string name = project->GetTrackName(channel);
@@ -1935,7 +1935,7 @@ void SongView::DrawView() {
         else if (sesPasting_)
             drawHelpBar("suelta A:pegar;flechas:acomodar;B:cancelar");
         else
-            drawHelpBar(headerMode_ ? "A:menu de pista;<>:pista;v:a los clips"
+            drawHelpBar(headerMode_ ? "A:menú de pista;<>:pista;v:a los clips"
                                     : "A:poner/abrir;A+<>:elegir;B+A:borrar;SEL,B:marcar;SEL+A:pegar;SEL+<>:pantalla;SEL+L:deshacer;SEL+R:rehacer");
         return;
     }
@@ -2082,7 +2082,7 @@ void SongView::DrawView() {
     if (rowMode_)
         drawHelpBar("START:lanzar la fila;SEL+START:detener todo;>:a las pistas");
     else
-    drawHelpBar(headerMode_ ? "A:menu de pista;<>:pista;v:a los clips"
+    drawHelpBar(headerMode_ ? "A:menú de pista;<>:pista;v:a los clips"
                             : "A:poner/abrir;A+<>:elegir;B+A:borrar;SEL+<>:pantalla;SEL+L:deshacer;SEL+R:rehacer");
 };
 

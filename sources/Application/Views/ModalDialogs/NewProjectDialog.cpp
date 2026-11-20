@@ -66,7 +66,7 @@ void NewProjectDialog::typeKey() {
     }
     char ch = keyAt(krow_, kcol_);
     if (!ch) return;
-    if ((int)name_.size() >= MAX_NAME_LENGTH) { warn("Maximo 16 letras"); return; }
+    if ((int)name_.size() >= MAX_NAME_LENGTH) { warn("Máximo 16 letras"); return; }
     name_.insert(cursor_, 1, ch);
     cursor_++;
 }

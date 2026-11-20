@@ -222,7 +222,7 @@ void ClipView::putNote() {
     n.instr = instr;
     notes.push_back(n);
     writeNotes(notes);
-    if (stolen_) message("Maximo 4 notas a la vez");
+    if (stolen_) message("Máximo 4 notas a la vez");
     audition(cursorStep_);
 }
 
@@ -259,7 +259,7 @@ void ClipView::placeNotes(std::vector<Note> &notes, std::vector<Note> &add) {
         notes.push_back(n);
     }
     writeNotes(notes);
-    if (stolen_) message("Maximo 4 notas a la vez");
+    if (stolen_) message("Máximo 4 notas a la vez");
 }
 
 // dónde caería lo copiado: empieza justo en el cursor; lo que se sale de la
@@ -288,7 +288,7 @@ void ClipView::pasteNote() {
     std::vector<Note> add;
     int dropped;
     pastePreview(add, dropped);
-    if (add.empty()) { message("No cabe aqui"); return; }
+    if (add.empty()) { message("No cabe aquí"); return; }
     std::vector<Note> notes;
     readNotes(notes);
     placeNotes(notes, add);
@@ -318,7 +318,7 @@ void ClipView::loopButton(bool left) {
             message("Loop apagado: suena todo el clip");
         } else {
             song->SetClipLoop(chain, page, page);
-            message("Loop: solo el compas %d", page + 1);
+            message("Loop: solo el compás %d", page + 1);
         }
         return;
     }
@@ -335,7 +335,7 @@ void ClipView::loopButton(bool left) {
     }
     song->SetClipLoop(chain, s, e);
     char buf[48];
-    if (s == e) sprintf(buf, "Loop: compas %d", s + 1);
+    if (s == e) sprintf(buf, "Loop: compás %d", s + 1);
     else sprintf(buf, "Loop: compases %d a %d", s + 1, e + 1);
     message(buf);
 }
@@ -384,7 +384,7 @@ bool ClipView::duplicatePage(bool right) {
         else song->SetClipLoop(chain, s, e);
     }
     if (right) cursorStep_ += 16;   // a la copia
-    message(right ? "Compas %d duplicado a la derecha" : "Compas %d duplicado a la izquierda", page + 1);
+    message(right ? "Compás %d duplicado a la derecha" : "Compás %d duplicado a la izquierda", page + 1);
     return true;
 }
 
@@ -393,9 +393,9 @@ static void DeletePageCallback(View &v, ModalView &dialog) {
 }
 
 void ClipView::askDeletePage() {
-    if (pages() <= 1) { message("El clip necesita al menos un compas"); return; }
+    if (pages() <= 1) { message("El clip necesita al menos un compás"); return; }
     char buf[64];
-    snprintf(buf, sizeof(buf), "Borrar el compas %d?\nLo de despues se recorre", cursorStep_ / 16 + 1);
+    snprintf(buf, sizeof(buf), "¿Borrar el compás %d?\nLo de después se recorre", cursorStep_ / 16 + 1);
     MessageBox *mb = new MessageBox(*this, buf, MBBF_YES | MBBF_NO);
     DoModal(mb, DeletePageCallback);
 }
@@ -432,7 +432,7 @@ void ClipView::deletePageAnswer(bool yes) {
     if (cursorStep_ >= total()) cursorStep_ = total() - 1;
     undo_.push_back(before);
     redo_.clear();
-    message("Compas %d borrado", page + 1);
+    message("Compás %d borrado", page + 1);
 }
 
 /************************************************************
@@ -720,7 +720,7 @@ void ClipView::changeLength(int d) {
     }
     if (!marking_) cursorStep_ = notes[idx[0]].start;   // al editarla, el cursor salta al inicio
     writeNotes(notes);
-    if (stolen_) message("Maximo 4 notas a la vez");
+    if (stolen_) message("Máximo 4 notas a la vez");
 }
 
 // velocity: con varias notas, todas a la vez y en proporción (la más fuerte

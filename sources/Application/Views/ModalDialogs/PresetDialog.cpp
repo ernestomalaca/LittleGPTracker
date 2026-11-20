@@ -33,7 +33,7 @@ void PresetDialog::load() {
 	Entry e ;
 	if (forSave_) {
 		e.kind = K_HERE ;
-		e.name = "[guardar aqui]" ;
+		e.name = "[guardar aquí]" ;
 		entries_.push_back(e) ;
 	}
 	if (!folder_.empty()) {
@@ -80,7 +80,7 @@ void PresetDialog::DrawView() {
 		SetWindow(PD_WIDTH, 5) ;
 		SetColor(CD_NORMAL) ;
 		DrawString(1, 0, title.c_str(), props) ;
-		DrawString(1, 2, kind_ == InstrumentPresets::PK_KIT ? "Todavia no hay kits." : "Todavia no hay presets.", props) ;
+		DrawString(1, 2, kind_ == InstrumentPresets::PK_KIT ? "Todavía no hay kits." : "Todavía no hay presets.", props) ;
 		DrawString(1, 4, "B: cerrar", props) ;
 		return ;
 	}

@@ -8,6 +8,7 @@
 #include "UIFramework/BasicDatas/GUIEvent.h"
 #include "UIFramework/SimpleBaseClasses/GUIWindow.h"
 #include "Resources/hdfont.h"
+#include "Application/Utils/Latin1.h"
 #include "Resources/hdfont_small.h"
 #include "Resources/hdfont32.h"
 #include <math.h>
@@ -253,8 +254,9 @@ void SDLGUIWindowImp::prepareFonts() {
     prepareFullFonts();
 }
 
-void SDLGUIWindowImp::DrawChar(const char c, GUIPoint &pos,
+void SDLGUIWindowImp::DrawChar(const char cIn, GUIPoint &pos,
                                GUITextProperties &p) {
+    char c = cIn;
     int xx, yy;
     transform(pos, &xx, &yy);
 
@@ -275,6 +277,7 @@ void SDLGUIWindowImp::DrawChar(const char c, GUIPoint &pos,
         drawHDChar((unsigned char)c, xx, yy, p);
         return;
     }
+    c = (char)FoldLatin1((unsigned char)c);   // la de 8x8 no tiene tildes
 
     bool useCache = false;
     if (cacheFonts_ && (currentColor_ == foregroundColor_) && (!p.invert_)) {
@@ -336,7 +339,7 @@ void SDLGUIWindowImp::DrawChar(const char c, GUIPoint &pos,
 // con el fondo según la opacidad de cada pixel (16 tonos por caracter)
 void SDLGUIWindowImp::drawHDChar(unsigned char c, int xx, int yy,
                                  GUITextProperties &p) {
-    c &= 127;
+    // trk2als: 256 caracteres (con tildes)
     Uint32 fg = p.invert_ ? backgroundColor_ : currentColor_;
     Uint32 bg = p.invert_ ? currentColor_ : backgroundColor_;
     Uint8 fr, fgc, fb, br, bgc, bb;
@@ -495,7 +498,7 @@ void SDLGUIWindowImp::BlendText(const char *s, GUIPoint &pos, GUIColor &c,
     int adv = big ? hdToWin(24) : size;
     if (big) x -= hdToWin(4);
     for (; *s; s++, x += adv) {
-        unsigned char ch = ((unsigned char)*s) & 127;
+        unsigned char ch = (unsigned char)*s;   // trk2als: 256 (con tildes)
         if (ch == ' ') continue;
         if (x + size > maxX || y + sizeY > maxY || x < 0 || y < 0) continue;
         const unsigned char *g = big ? hdfont32[ch] : scale ? hdfont[ch] : hdfont_small[ch];

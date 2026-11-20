@@ -1,11 +1,12 @@
 #include "MessageBox.h"
+#include "Application/Utils/Latin1.h"
 #include <vector>
 #include <string>
 #include <string.h>
 
 static const char *buttonText[MBL_LAST] = {
 	"Va",
-	"Si",
+	"Sí",
 	"Cancelar",
 	"No"
 } ;
@@ -136,12 +137,12 @@ void MessageBox::drawShapes() {
 		if (!rest.empty()) tl.push_back(rest) ;
 	}
 	int textW=0 ;
-	for (size_t i=0;i<tl.size();i++) if ((int)tl[i].size()*16>textW) textW=tl[i].size()*16 ;
+	for (size_t i=0;i<tl.size();i++) if (TextLen(tl[i])*16>textW) textW=TextLen(tl[i])*16 ;
 	for (size_t i=0;i<lines.size();i++)
-		if ((int)lines[i].size()*16>textW) textW=lines[i].size()*16 ;
+		if (TextLen(lines[i])*16>textW) textW=TextLen(lines[i])*16 ;
 	int bw[4], btnW=0 ;
 	for (int i=0;i<buttonCount_;i++) {
-		bw[i]=((int)label_[button_[i]].size()+2)*16 ;
+		bw[i]=(TextLen(label_[button_[i]])+2)*16 ;
 		if (bw[i]<96) bw[i]=96 ;
 		btnW+=bw[i]+(i?GAP:0) ;
 	}
@@ -156,19 +157,19 @@ void MessageBox::drawShapes() {
 	GUIColor acc=ColorOf(CD_HILITE2), dim=Mix(bg,fg,40) ;
 	int ty=y+PAD ;
 	for (size_t i=0;i<tl.size();i++) {
-		DrawText(x+(w-(int)tl[i].size()*16)/2,ty,tl[i].c_str(),acc,1) ;
+		DrawText(x+(w-TextLen(tl[i])*16)/2,ty,tl[i].c_str(),acc,1) ;
 		ty+=LINE ;
 	}
 	if (!tl.empty()) ty+=8 ;
 	for (size_t i=0;i<lines.size();i++) {
-		DrawText(x+(w-(int)lines[i].size()*16)/2,ty,lines[i].c_str(),fg,1) ;
+		DrawText(x+(w-TextLen(lines[i])*16)/2,ty,lines[i].c_str(),fg,1) ;
 		ty+=LINE ;
 	}
 	// todo centrado: título, texto y botones
 	int bx=x+(w-btnW)/2, by=y+h-PAD-BH ;
 	for (int i=0;i<buttonCount_;i++) {
 		const std::string &t=label_[button_[i]] ;
-		int tx=bx+(bw[i]-(int)t.size()*16)/2, tyb=by+(BH-16)/2 ;
+		int tx=bx+(bw[i]-TextLen(t)*16)/2, tyb=by+(BH-16)/2 ;
 		if (i==selected_) {
 			FillRect(bx,by,bw[i],BH,acc,6) ;
 			DrawText(tx,tyb,t.c_str(),bg,1) ;
