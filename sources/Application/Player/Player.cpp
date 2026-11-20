@@ -6,6 +6,7 @@ extern double g_renderedSamples;   // AudioOut.cpp
 #include "Services/Audio/AudioDriver.h"
 #include "Application/Model/Config.h"
 #include <math.h>
+#include <stdarg.h>
 #include <unistd.h>
 #include <fstream>
 #include "System/FileSystem/FileSystem.h"
@@ -1501,6 +1502,22 @@ void Player::linkStart() {
 // (instrumentos incluidos); la fase se corrige solo con el largo de la
 // rebanada, poquito a poco (máximo 3%), así no cambia cómo suena nada: solo
 // se recorre cuándo arrancan las notas. Devuelve false mientras espera el compás
+// trk2als: el hilo del audio no escribe en el log (si la tarjeta está ocupada
+// copiando samples, escribir lo detenía y se oían huecos): deja la línea y
+// la interfaz la escribe (LinkPoll)
+static char g_linkDbg[4][320];
+static volatile int g_linkDbgW = 0, g_linkDbgR = 0;
+static void linkDbg(const char *fmt, ...) {
+    int next = (g_linkDbgW + 1) % 4;
+    if (next == g_linkDbgR) return;   // lleno: se pierde esta línea
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(g_linkDbg[g_linkDbgW], sizeof(g_linkDbg[0]), fmt, ap);
+    va_end(ap);
+    __sync_synchronize();
+    g_linkDbgW = next;
+}
+
 bool Player::linkSlice(SyncMaster *sync) {
     double beat, tempo;
     bool playing;
@@ -1522,7 +1539,7 @@ bool Player::linkSlice(SyncMaster *sync) {
     double err = (beat - linkOrigin_) - linkSlices_ / 24.0;   // + = vamos atrás
     if (err > 1.0 || err < -1.0) {   // saltó (alguien movió la sesión): se reengancha
         if (getenv("TRK_LINKDBG"))
-            Trace::Log("LINK", "REENGANCHE: error %+.3f tiempos", err);
+            linkDbg("REENGANCHE: error %+.3f tiempos", err);
         linkOrigin_ = beat - linkSlices_ / 24.0;
         err = 0;
         linkInteg_ = 0;
@@ -1538,7 +1555,7 @@ bool Player::linkSlice(SyncMaster *sync) {
     static int dbg = -1;   // TRK_LINKDBG=1 ("Probar Link"): cómo va, una vez por tiempo
     if (dbg < 0) dbg = getenv("TRK_LINKDBG") ? 1 : 0;
     if (dbg && linkSlices_ % 24 == 0)
-        Trace::Log("LINK", "t=%.0f tempo=%.2f error=%+.4f corr=%+.4f integ=%+.5f sr=%.0f medido=%.0f "
+        linkDbg("t=%.0f tempo=%.2f error=%+.4f corr=%+.4f integ=%+.5f sr=%.0f medido=%.0f "
                    "adelanto=%.1fms latencia=%.1fms fila=%d huecos=%d apps=%d",
                    linkSlices_ / 24.0, tempo, err, c, linkInteg_, sr, real,
                    LinkBridge::FilterAheadMs(), linkLatency() * 1000.0,
@@ -1566,6 +1583,11 @@ static int linkOffsetFile(bool write, int value) {
 }
 
 void Player::LinkPoll() {
+    while (g_linkDbgR != g_linkDbgW) {   // lo que dejó el hilo del audio
+        Trace::Log("LINK", "%s", g_linkDbg[g_linkDbgR]);
+        __sync_synchronize();
+        g_linkDbgR = (g_linkDbgR + 1) % 4;
+    }
     if (!project_) {   // sin proyecto (en la lista de proyectos): Link apagado
         if (LinkBridge::Enabled()) LinkBridge::Enable(false);
         return;
