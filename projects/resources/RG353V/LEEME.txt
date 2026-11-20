@@ -58,6 +58,7 @@ Sonidos (presets) y su pre-escucha
     - si no: un kit toca un compás con sus pads (bombo, hat, caja...) al
       tempo del proyecto; un sample o multicapa toca su sample principal
   Ejemplo:  presets/Kits/Cumbia/KIT 1/preview.wav
+  X prende o apaga la pre-escucha (se queda así para todos los proyectos).
 
 Si algo falla
   chancho6/log.txt tiene lo que dijo el programa.

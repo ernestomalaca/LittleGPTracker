@@ -19,6 +19,24 @@
 
 static const char *previewTmp = "root:presetpreview.wav" ;
 
+// trk2als: la pre-escucha se prende y apaga con X; vale para todos los
+// proyectos (chancho6/preescucha.txt). Prendida de entrada
+static int previewOn = -1 ;
+static bool previewEnabled() {
+	if (previewOn < 0) {
+		std::ifstream i(Path("bin:preescucha.txt").GetPath().c_str()) ;
+		int v = 1 ;
+		if (!(i >> v)) v = 1 ;
+		previewOn = v ? 1 : 0 ;
+	}
+	return previewOn == 1 ;
+}
+static void setPreviewEnabled(bool on) {
+	previewOn = on ? 1 : 0 ;
+	std::ofstream o(Path("bin:preescucha.txt").GetPath().c_str()) ;
+	o << previewOn << "\n" ;
+}
+
 #ifdef SDL2
 static Uint32 previewWake(Uint32, void *) {
 	SDL_Event e ;
@@ -52,6 +70,17 @@ PresetDialog::PresetDialog(View &view, bool forSave, int kind)
 		load() ;
 	}
 	buildTree() ;
+	// si la carpeta no es de ninguna categoría a la vista (p. ej. la raíz sin
+	// sueltos), se abre la primera categoría
+	if (!tree_.empty()) {
+		const std::string &p = tree_[treeSel_].path ;
+		bool inside = p.empty() ? folder_.empty()
+		              : (folder_ == p || folder_.compare(0, p.size() + 1, p + "/") == 0) ;
+		if (!inside) {
+			folder_ = p ;
+			load() ;
+		}
+	}
 	// sin nada que elegir a la derecha, se empieza por las carpetas
 	bool any = false ;
 	for (size_t i = 0; i < entries_.size(); i++) if (entries_[i].kind != K_UP) any = true ;
@@ -209,7 +238,7 @@ void PresetDialog::goBack() {
 
 void PresetDialog::schedulePreview() {
 	stopPreview() ;
-	if (forSave_ || col_ != 1 || entries_.empty()) return ;
+	if (forSave_ || col_ != 1 || entries_.empty() || !previewEnabled()) return ;
 	if (entries_[selected_].kind != K_PRESET) return ;
 	previewAt_ = SDL_GetTicks() + PREVIEW_WAIT ;
 #ifdef SDL2
@@ -524,6 +553,9 @@ void PresetDialog::drawShapes() {
 		DrawText(32, BY + 11, col_ == 0 ? "A o derecha entra   B cancela" : "A elige / entra   izquierda o B atrás", dim, 0) ;
 	} else {
 		DrawText(32, BY + 11, col_ == 0 ? "A o derecha entra   B cierra" : "A entra / carga   izquierda o B atrás", dim, 0) ;
+		// la pre-escucha: X la cambia
+		const char *pv = previewEnabled() ? "X escucha: sí" : "X escucha: no" ;
+		DrawText(616 - 12 - 8 * TextLen(pv), BY + 11, pv, previewEnabled() ? acc : dim, 0) ;
 	}
 }
 
@@ -540,6 +572,12 @@ void PresetDialog::ProcessButtonMask(unsigned short mask, bool pressed) {
 	if (!pressed) return ;   // soltar el botón que abrió la ventana no cuenta
 	isDirty_ = true ;
 	int n = (int)entries_.size() ;
+	if (mask == EPBM_X && !forSave_) {   // pre-escucha sí / no
+		setPreviewEnabled(!previewEnabled()) ;
+		if (previewEnabled()) schedulePreview() ;
+		else stopPreview() ;
+		return ;
+	}
 	if (col_ == 0) {   // las categorías
 		if (mask & EPBM_B) {   // ya afuera: se cierra
 			stopPreview() ;
