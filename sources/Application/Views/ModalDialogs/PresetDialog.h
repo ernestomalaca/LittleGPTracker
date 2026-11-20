@@ -50,6 +50,11 @@ public:
 	// trk2als: "Kit vacío" / "Importar .sf2" / "Sample vacío" en cada categoría
 	void SetEmptyOptions(bool on) { emptyOptions_ = on ; load() ; }
 	void SetLauncher(PresetLauncher *l) { launcher_ = l ; }
+	// trk2als: elegir un archivo de la samplelib para el instrumento toInstr
+	// (el sample de un pad, el del instrumento, un loop o un .sf2). A lo
+	// importa y cierra con 1. current: el índice del pool que tiene ahora
+	enum { PICK_NONE = 0, PICK_WAV, PICK_LOOP, PICK_SF2, PICK_ANY } ;
+	void SetPick(int mode, int toInstr, int currentPoolIndex = -1) ;
 private:
 	enum Kind { K_UP, K_HERE, K_FOLDER, K_PRESET, K_EMPTY, K_NEWDIR } ;
 public:
@@ -95,5 +100,9 @@ private:
 	unsigned long previewAt_ ;   // cuándo arranca la muestra (0 = nada)
 	std::string playing_ ;       // lo que está sonando
 	PresetLauncher *launcher_ ;
+	int pick_ ;
+	int pickInstr_ ;
+	std::string pickCurrent_ ;   // el archivo que tiene (nombre del navegador)
+	int pickWhat() ;
 } ;
 #endif

@@ -304,7 +304,9 @@ void SongView::pickAudio(int cell) {
     pickClip_ = clip;
     pickCell_ = (cell >= 0) ? cell : int(viewData_->GetCurrentSongPointer() - viewData_->song_->data_);
     viewData_->currentInstrument_ = clip;
-    DoModal(new ImportSampleDialog(*this, true), AudioPickCallback);
+    PresetDialog *pd = new PresetDialog(*this);   // trk2als: el navegador nuevo (loops a tempo)
+    pd->SetPick(PresetDialog::PICK_LOOP, clip);
+    DoModal(pd, AudioPickCallback);
 }
 
 void SongView::OnAudioPicked(bool imported) {
@@ -1658,7 +1660,9 @@ void SongView::OnTrackBrowser(int code, const std::string &name) {
         if (owner < 0) return;
         viewData_->currentInstrument_ = owner;
         beginSoundChange(ch);
-        DoModal(new ImportSampleDialog(*this, false, true), TrackSf2Callback);
+        PresetDialog *pd = new PresetDialog(*this);   // trk2als: el navegador nuevo, solo .sf2
+        pd->SetPick(PresetDialog::PICK_SF2, owner);
+        DoModal(pd, TrackSf2Callback);
         return;
     }
     // cancelar: si la pista era nueva, se quita

@@ -379,8 +379,15 @@ Path InstrumentPresets::LibPath(const std::string &name) {
 
 bool InstrumentPresets::LibExists() { return LibPath(LibFolder()).Exists() ; }
 
+static bool isSf2(const std::string &n) {
+	if (n.size() < 5) return false ;
+	std::string e = n.substr(n.size() - 4) ;
+	for (size_t i = 0; i < e.size(); i++) e[i] = tolower(e[i]) ;
+	return e == ".sf2" ;
+}
+
 void InstrumentPresets::ListLib(const std::string &folder, std::vector<std::string> &folders,
-                                std::vector<std::string> &wavs) {
+                                std::vector<std::string> &wavs, int what) {
 	folders.clear() ;
 	wavs.clear() ;
 	Path root = LibPath(folder) ;
@@ -394,7 +401,7 @@ void InstrumentPresets::ListLib(const std::string &folder, std::vector<std::stri
 		std::string n = p.GetName() ;
 		if (n.empty() || n[0] == '.') continue ;
 		if (p.IsDirectory()) folders.push_back(n) ;
-		else if (isWav(n)) wavs.push_back(n) ;
+		else if (((what & LIB_WAV) && isWav(n)) || ((what & LIB_SF2) && isSf2(n))) wavs.push_back(n) ;
 	}
 	delete dir ;
 	std::sort(folders.begin(), folders.end()) ;
@@ -406,15 +413,16 @@ void InstrumentPresets::ListLib(const std::string &folder, std::vector<std::stri
 static std::map<std::string, int> libCount ;
 void InstrumentPresets::ForgetLibCounts() { libCount.clear() ; }
 
-int InstrumentPresets::CountLib(const std::string &folder) {
+int InstrumentPresets::CountLib(const std::string &folder, int what) {
 	std::map<std::string, int> &cache = libCount ;
-	std::map<std::string, int>::iterator c = cache.find(folder) ;
+	std::string key = std::string(1, char('0' + what)) + folder ;
+	std::map<std::string, int>::iterator c = cache.find(key) ;
 	if (c != cache.end()) return c->second ;
 	std::vector<std::string> folders, wavs ;
-	ListLib(folder, folders, wavs) ;
+	ListLib(folder, folders, wavs, what) ;
 	int n = (int)wavs.size() ;
-	for (size_t i = 0; i < folders.size(); i++) n += CountLib(folder + "/" + folders[i]) ;
-	cache[folder] = n ;
+	for (size_t i = 0; i < folders.size(); i++) n += CountLib(folder + "/" + folders[i], what) ;
+	cache[key] = n ;
 	return n ;
 }
 

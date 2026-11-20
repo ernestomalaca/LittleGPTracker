@@ -5,6 +5,7 @@
 #include "Application/Player/Player.h"
 #include "Application/Utils/Latin1.h"
 #include "NewProjectDialog.h"
+#include "ImportSampleDialog.h"
 #include "System/FileSystem/FileSystem.h"
 #include <stdio.h>
 #include <string.h>
@@ -71,6 +72,8 @@ PresetDialog::PresetDialog(View &view, bool forSave, int kind)
     : ModalView(view), forSave_(forSave), kind_(kind), selected_(0), top_(0),
       emptyOptions_(false), col_(1), treeSel_(0), treeTop_(0), previewAt_(0) {
 	launcher_ = 0 ;
+	pick_ = PICK_NONE ;
+	pickInstr_ = -1 ;
 	InstrumentPresets::ForgetLibCounts() ;   // por si se agregaron samples (p. ej. desde chancho.local)
 	folder_ = InstrumentPresets::LastFolder() ;   // se abre donde se quedó
 	if (kind_ >= 0) {   // solo un tipo: en su carpeta (Kits...) si la hay
@@ -108,6 +111,46 @@ PresetDialog::PresetDialog(View &view, bool forSave, int kind)
 	col_ = any ? 1 : 0 ;
 }
 
+// la última carpeta de la samplelib (aparte de la de los presets)
+static std::string &pickLast() {
+	static std::string last ;
+	return last ;
+}
+
+int PresetDialog::pickWhat() {
+	using namespace InstrumentPresets ;
+	return pick_ == PICK_SF2 ? LIB_SF2 : pick_ == PICK_ANY ? (LIB_WAV | LIB_SF2) : LIB_WAV ;
+}
+
+void PresetDialog::SetPick(int mode, int toInstr, int current) {
+	pick_ = mode ;
+	pickInstr_ = toInstr ;
+	pickCurrent_.clear() ;
+	// el archivo que tiene ahora, si viene de la samplelib: palomita y flechas
+	SamplePool *pool = SamplePool::GetInstance() ;
+	if (current >= 0 && current < pool->GetNameListSize()) {
+		std::string src = pool->SourcePath(current) ;
+		std::string lib = InstrumentPresets::LibPath(InstrumentPresets::LibFolder()).GetPath() ;
+		if (src.size() > lib.size() && src.compare(0, lib.size() + 1, lib + "/") == 0)
+			pickCurrent_ = InstrumentPresets::LibFolder() + src.substr(lib.size()) ;
+	}
+	folder_ = pickLast() ;
+	if (!InstrumentPresets::IsLib(folder_) || !InstrumentPresets::LibPath(folder_).Exists())
+		folder_ = InstrumentPresets::LibFolder() ;
+	if (!pickCurrent_.empty())   // se abre donde está lo que tiene
+		folder_ = pickCurrent_.substr(0, pickCurrent_.rfind('/')) ;
+	load() ;
+	if (entries_.empty() && folder_ != InstrumentPresets::LibFolder()) {   // ya no hay nada ahí
+		folder_ = InstrumentPresets::LibFolder() ;
+		load() ;
+	}
+	buildTree() ;
+	for (size_t i = 0; i < entries_.size(); i++)
+		if (entries_[i].kind == K_PRESET && full(entries_[i].name) == pickCurrent_) selected_ = int(i) ;
+	if (selected_ >= LIST_ROWS) top_ = selected_ - LIST_ROWS + 1 ;
+	col_ = entries_.empty() ? 0 : 1 ;
+}
+
 PresetDialog::~PresetDialog() {
 	stopPreview() ;
 }
@@ -131,6 +174,27 @@ static int depthOf(const std::string &f) {
 // actual (con sus subcarpetas)
 void PresetDialog::buildTree() {
 	tree_.clear() ;
+	if (pick_) {   // trk2als: la samplelib: su raíz y sus carpetas de arriba
+		Node n ;
+		std::string lf = InstrumentPresets::LibFolder() ;
+		n.path = lf ; n.label = "Librería" ; n.depth = 0 ;
+		tree_.push_back(n) ;
+		std::vector<std::string> folders, files ;
+		InstrumentPresets::ListLib(lf, folders, files, pickWhat()) ;
+		for (size_t i = 0; i < folders.size(); i++) {
+			if (!InstrumentPresets::CountLib(lf + "/" + folders[i], pickWhat())) continue ;
+			n.path = lf + "/" + folders[i] ; n.label = folders[i] ; n.depth = 0 ;
+			tree_.push_back(n) ;
+		}
+		treeSel_ = 0 ;
+		size_t best = 0 ;
+		for (size_t i = 0; i < tree_.size(); i++) {
+			const std::string &p = tree_[i].path ;
+			bool prefix = folder_ == p || folder_.compare(0, p.size() + 1, p + "/") == 0 ;
+			if (prefix && p.size() + 1 > best) { best = p.size() + 1 ; treeSel_ = int(i) ; }
+		}
+		return ;
+	}
 	std::vector<std::string> folders, presets ;
 	InstrumentPresets::ListFolder("", folders, presets) ;
 	std::string topSel = folder_.substr(0, folder_.find('/')) ;
@@ -172,17 +236,21 @@ void PresetDialog::load() {
 	Entry e ;
 	e.ptype = -1 ; e.zones = 0 ;
 	if (InstrumentPresets::IsLib(folder_)) {   // trk2als: dentro de la samplelib
-		InstrumentPresets::ListLib(folder_, folders, presets) ;
+		int what = pick_ ? pickWhat() : (int)InstrumentPresets::LIB_WAV ;
+		InstrumentPresets::ListLib(folder_, folders, presets, what) ;
 		for (size_t i = 0; i < folders.size(); i++) {
 			e.kind = K_FOLDER ;
 			e.name = folders[i] + "/" ;
-			e.zones = InstrumentPresets::CountLib(full(folders[i])) ;
+			e.zones = InstrumentPresets::CountLib(full(folders[i]), what) ;
 			if (e.zones) entries_.push_back(e) ;   // carpetas sin .wav: no estorban
 		}
 		for (size_t i = 0; i < presets.size(); i++) {   // cada .wav: como un preset de sample
 			e.kind = K_PRESET ;
 			e.name = presets[i] ;
-			e.ptype = InstrumentPresets::PK_SAMPLE ;
+			std::string low = presets[i] ;
+			for (size_t k = 0; k < low.size(); k++) low[k] = tolower(low[k]) ;
+			bool sf2 = low.size() > 4 && low.compare(low.size() - 4, 4, ".sf2") == 0 ;
+			e.ptype = sf2 ? InstrumentPresets::PK_MULTI : InstrumentPresets::PK_SAMPLE ;
 			e.zones = 0 ;
 			entries_.push_back(e) ;
 		}
@@ -262,6 +330,7 @@ static std::string SoundLauncherShort(const std::string &n) {
 
 // trk2als: el sonido que ya tiene la pista: palomita (y en sus carpetas)
 bool PresetDialog::isCurrent(const Entry &e) {
+	if (pick_) return e.kind == K_PRESET && !pickCurrent_.empty() && full(e.name) == pickCurrent_ ;
 	if (!launcher_ || e.kind != K_PRESET) return false ;
 	std::string cur = launcher_->LaunchCurrent() ;
 	if (cur.empty()) return false ;
@@ -270,8 +339,8 @@ bool PresetDialog::isCurrent(const Entry &e) {
 }
 
 bool PresetDialog::holdsCurrent(const std::string &folder) {
-	if (!launcher_ || folder.empty()) return false ;
-	std::string cur = launcher_->LaunchCurrent() ;
+	if (folder.empty() || (!launcher_ && !pick_)) return false ;
+	std::string cur = pick_ ? pickCurrent_ : launcher_->LaunchCurrent() ;
 	return cur.size() > folder.size() && cur.compare(0, folder.size(), folder) == 0 && cur[folder.size()] == '/' ;
 }
 
@@ -304,7 +373,7 @@ int PresetDialog::countSounds(const std::string &f) {
 // trk2als: atrás (← o B): a la carpeta de arriba, o a las categorías
 void PresetDialog::goBack() {
 	stopPreview() ;
-	if (depthOf(folder_) >= 2) {
+	if (depthOf(folder_) >= 2 && !(pick_ && folder_ == InstrumentPresets::LibFolder())) {
 		size_t slash = folder_.find_last_of('/') ;
 		std::string child = folder_.substr(slash + 1) + "/" ;
 		folder_ = folder_.substr(0, slash) ;
@@ -321,7 +390,7 @@ void PresetDialog::goBack() {
 void PresetDialog::schedulePreview() {
 	stopPreview() ;
 	if (forSave_ || col_ != 1 || entries_.empty() || !previewEnabled()) return ;
-	if (launcher_ && launcher_->LaunchPlaying()) return ;   // la pista es la pre-escucha
+	if (!pick_ && launcher_ && launcher_->LaunchPlaying()) return ;   // la pista es la pre-escucha
 	if (entries_[selected_].kind != K_PRESET) return ;
 	previewAt_ = SDL_GetTicks() + PREVIEW_WAIT ;
 #ifdef SDL2
@@ -417,6 +486,13 @@ static bool kitPreview(const InstrumentPresets::Info &info, int tempo, const std
 
 void PresetDialog::startPreview() {
 	if (entries_.empty() || entries_[selected_].kind != K_PRESET) return ;
+	if (pick_) {   // trk2als: el archivo (un loop, a tempo y en fase; un .sf2, su C3)
+		SampleFilePreview(InstrumentPresets::LibPath(full(entries_[selected_].name)), viewData_, pickInstr_,
+		                  pick_ == PICK_LOOP) ;
+		playing_ = entries_[selected_].name ;
+		isDirty_ = true ;
+		return ;
+	}
 	std::string name = full(entries_[selected_].name) ;
 	InstrumentPresets::Info info ;
 	if (!InstrumentPresets::Describe(name, info)) return ;
@@ -516,9 +592,11 @@ void PresetDialog::drawShapes() {
 	GUIColor colBg = Mix(bg, fg, 4), selBg = Mix(bg, acc, 18) ;
 
 	// título y dónde estamos
-	const char *t = forSave_ ? "GUARDAR EN" : (kind_ == InstrumentPresets::PK_KIT ? "KITS" : "SONIDOS") ;
+	const char *t = pick_ == PICK_SF2 ? "SOUNDFONTS" : pick_ == PICK_LOOP ? "LOOPS" : pick_ ? "SAMPLES" :
+	                forSave_ ? "GUARDAR EN" : (kind_ == InstrumentPresets::PK_KIT ? "KITS" : "SONIDOS") ;
 	DrawText(32, 24, t, acc, 1) ;
 	std::string where = folder_.empty() ? std::string("sueltos") : folder_ ;
+	if (pick_ && InstrumentPresets::IsLib(where)) where = where.substr(where.find('/') + 1) ;   // "Librería/Drums"
 	for (size_t i = 0; (i = where.find('/', i)) != std::string::npos; i += 3) where.replace(i, 1, " / ") ;
 	if (TextLen(where) > 40) where = ".." + where.substr(where.size() - 38) ;
 	DrawText(PX + PW - 24 - 8 * TextLen(where), 28, where.c_str(), dim, 0) ;
@@ -581,9 +659,9 @@ void PresetDialog::drawShapes() {
 			else if (e.ptype == InstrumentPresets::PK_MULTI) snprintf(b, sizeof(b), "multicapa · %d zonas", e.zones) ;
 			else snprintf(b, sizeof(b), "sample") ;
 			sub = b ;
-			if (InstrumentPresets::IsLib(folder_)) {   // un .wav de la samplelib
+			if (InstrumentPresets::IsLib(folder_)) {   // un archivo de la samplelib
 				if (name.size() > 4) name = name.substr(0, name.size() - 4) ;
-				sub = "sample · librería" ;
+				sub = e.ptype == InstrumentPresets::PK_MULTI ? "soundfont" : pick_ ? "sample" : "sample · librería" ;
 			}
 		} else if (e.kind == K_FOLDER || e.kind == K_NEWDIR) {
 			// una carpetita, del color de su categoría
@@ -604,7 +682,7 @@ void PresetDialog::drawShapes() {
 				sub = b ;
 				if (holdsCurrent(full(name))) {   // aquí adentro está lo que suena: cuál
 					folderHolds = true ;
-					sub += std::string(" · ") + SoundLauncherShort(launcher_->LaunchCurrent()) ;
+					sub += std::string(" · ") + SoundLauncherShort(pick_ ? pickCurrent_ : launcher_->LaunchCurrent()) ;
 				}
 			}
 			if (e.kind == K_NEWDIR) sub = "una subcategoría aquí" ;
@@ -690,7 +768,8 @@ void PresetDialog::drawShapes() {
 			DrawText(ax - 16 - 8 * TextLen(pv), BY + 11, pv, previewEnabled() ? acc : dim, 0) ;
 		}
 	} else {
-		DrawText(32, BY + 11, col_ == 0 ? "A o derecha entra   B cierra" : "A entra / carga   izquierda o B atrás", dim, 0) ;
+		DrawText(32, BY + 11, col_ == 0 ? "A o derecha entra   B cierra"
+		                      : pick_ ? "A elige   izquierda o B atrás" : "A entra / carga   izquierda o B atrás", dim, 0) ;
 		// la pre-escucha: X la cambia
 		const char *pv = previewEnabled() ? "X escucha: sí" : "X escucha: no" ;
 		DrawText(616 - 12 - 8 * TextLen(pv), BY + 11, pv, previewEnabled() ? acc : dim, 0) ;
@@ -779,6 +858,17 @@ void PresetDialog::ProcessButtonMask(unsigned short mask, bool pressed) {
 		case K_PRESET:
 			stopPreview() ;
 			chosen_ = full(e.name) ;
+			if (pick_) {   // trk2als: se importa y listo
+				pickLast() = folder_ ;
+				std::string msg ;
+				if (SampleFileImport(InstrumentPresets::LibPath(chosen_), viewData_, pickInstr_, msg)) {
+					if (!msg.empty()) View::SetNotification(msg.c_str()) ;
+					EndModal(1) ;
+				} else {
+					View::SetNotification(msg.c_str()) ;
+				}
+				return ;
+			}
 			if (launcher_) {
 				// trk2als: como un clip: se lanza y el navegador sigue; A sobre
 				// el que ya está (sonando o por entrar) cierra

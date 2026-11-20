@@ -9,6 +9,8 @@
 #include <string>
 #include "Application/Instruments/SF2Import.h"
 #include "System/io/Status.h"
+#include "System/Console/Trace.h"
+#include "Application/Views/ViewData.h"
 
 #define LIST_SIZE 15
 #define LIST_WIDTH 28
@@ -124,7 +126,9 @@ void ImportSampleDialog::OnFocus() {
 	toInstr_=viewData_->currentInstrument_ ;
 } ;
 
-void ImportSampleDialog::preview(Path &element) {
+// trk2als: la pre-escucha de un archivo (también la usa el navegador nuevo):
+// un .sf2 suena su C3; un loop, al tempo y en fase con la canción
+void SampleFilePreview(Path element, ViewData *viewData_, int toInstr_, bool audioOnly_) {
 	// trk2als: de un .sf2 se escucha su sample del C3 (se escribe aparte)
 	if (element.Matches("*.sf2")) {
 		Path tmp("root:sf2preview.wav") ;
@@ -172,59 +176,62 @@ void ImportSampleDialog::preview(Path &element) {
 	player->StartStreaming(element) ;
 }
 
+void ImportSampleDialog::preview(Path &element) {
+	SampleFilePreview(element, viewData_, toInstr_, audioOnly_) ;
+}
+
 void ImportSampleDialog::endPreview() {
 	Player::GetInstance()->StopStreaming() ;
 }
 
-void ImportSampleDialog::import(Path &element) {
-
-	// trk2als: un .sf2 se convierte: sus samples a .wav y el instrumento a
-	// zonas (el primer instrumento que trae; lo ideal es un .sf2 de uno solo)
+// trk2als: lo que hace "importar" (también desde el navegador nuevo): un .sf2
+// se convierte en zonas; un .wav entra al pool (por referencia) y queda como
+// el sample del instrumento. false con el porqué en err
+bool SampleFileImport(Path element, ViewData *viewData_, int toInstr_, std::string &err) {
+	I_Instrument *instr=viewData_->project_->GetInstrumentBank()->GetInstrument(toInstr_) ;
+	if (!instr || instr->GetType()!=IT_SAMPLE) { err="no es un instrumento de samples" ; return false ; }
 	if (element.Matches("*.sf2")) {
-		I_Instrument *instr=viewData_->project_->GetInstrumentBank()->GetInstrument(toInstr_) ;
-		if (instr->GetType()!=IT_SAMPLE) return ;
 		std::string msg ;
 		Status::Set("Convirtiendo %s", element.GetName().c_str()) ;
 		bool ok=SF2Import(element.GetPath().c_str(),0,(SampleInstrument *)instr,msg) ;
-		endPreview() ;
 		if (ok) {
 			char buf[64] ;
 			snprintf(buf,sizeof(buf),"%s: %d zonas",msg.c_str(),((SampleInstrument *)instr)->ZoneCount()) ;
-			View::SetNotification(buf) ;
-			EndModal(1) ;
-		} else {
-			View::SetNotification(msg.c_str()) ;
-		}
-		return ;
+			err=buf ;   // (es el aviso, no un error)
+		} else err=msg ;
+		return ok ;
 	}
+	int sampleID=SamplePool::GetInstance()->ImportSample(element) ;
+	if (sampleID<0) {
+		err=(sampleID == -SLOAD_ERR_MAX_SAMPLES) ? "Ya no caben más samples"
+		   : (sampleID == -SLOAD_ERR_MAX_SOUNDFONTS) ? "Ya no caben más soundfonts"
+		   : (sampleID == -SLOAD_ERR_INVALID_DIR) ? "Carpeta no válida"
+		   : "No se pudo abrir el archivo" ;
+		Trace::Error(err.c_str()) ;
+		return false ;
+	}
+	// trk2als: el instrumento se compromete con este sample
+	((SampleInstrument *)instr)->AssignSample(sampleID) ;
+	return true ;
+}
 
-	SamplePool *pool=SamplePool::GetInstance() ;
-	int sampleID=pool->ImportSample(element) ;
-	if (sampleID>=0) {
-		I_Instrument *instr=viewData_->project_->GetInstrumentBank()->GetInstrument(toInstr_) ;
-		if (instr->GetType()==IT_SAMPLE) {
-			SampleInstrument *sinstr=(SampleInstrument *)instr ;
-			sinstr->AssignSample(sampleID) ;
-			// trk2als: el instrumento se compromete con este sample. Antes saltaba
-			// al siguiente instrumento libre para importar muchos de un jalón
-		};
-		endPreview() ;
+void ImportSampleDialog::import(Path &element) {
+	std::string msg ;
+	bool ok=SampleFileImport(element,viewData_,toInstr_,msg) ;
+	endPreview() ;
+	if (ok) {
+		if (!msg.empty()) View::SetNotification(msg.c_str()) ;
 		EndModal(1) ;
 		return ;
+	}
+	if (element.Matches("*.sf2")) {
+		View::SetNotification(msg.c_str()) ;
 	} else {
-        const char *err_str = (sampleID == -SLOAD_ERR_MAX_SAMPLES)
-                                  ? "Maximum number of samples exceeded"
-                              : (sampleID == -SLOAD_ERR_MAX_SOUNDFONTS)
-                                  ? "Maximum number of SoundFonts exceeded"
-                              : (sampleID == -SLOAD_ERR_INVALID_DIR)
-                                  ? "Invalid directory"
-                                  : "Unable to open file";
-        Trace::Error(err_str);
-        MessageBox *mb = new MessageBox(*this, err_str);
-        View::DoModal(mb);
-	};
+		MessageBox *mb = new MessageBox(*this, msg.c_str());
+		View::DoModal(mb);
+	}
 	isDirty_=true ;
-} ;
+}
 
 void ImportSampleDialog::ProcessButtonMask(unsigned short mask,bool pressed) {
 

@@ -34,9 +34,11 @@ namespace InstrumentPresets {
 	bool IsLib(const std::string &name) ;         // ¿es la librería o algo dentro?
 	Path LibPath(const std::string &name) ;       // la ruta real
 	bool LibExists() ;
+	// what: LIB_WAV, LIB_SF2 o los dos (qué archivos cuentan)
+	enum { LIB_WAV = 1, LIB_SF2 = 2 } ;
 	void ListLib(const std::string &folder, std::vector<std::string> &folders,
-	             std::vector<std::string> &wavs) ;
-	int CountLib(const std::string &folder) ;     // .wav adentro (con subcarpetas)
+	             std::vector<std::string> &files, int what = LIB_WAV) ;
+	int CountLib(const std::string &folder, int what = LIB_WAV) ;   // archivos adentro (con subcarpetas)
 	void ForgetLibCounts() ;                      // al abrir el navegador: se vuelven a contar
 	bool Exists(const std::string &name) ;
 	// guarda el instrumento (sobrescribe si ya existe). false si falló

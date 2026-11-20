@@ -6,6 +6,12 @@
 #include "System/FileSystem/FileSystem.h"
 #include <string>
 
+class ViewData ;
+// trk2als: escuchar / importar un archivo de la samplelib (lo usan este
+// diálogo y el navegador nuevo)
+void SampleFilePreview(Path element, ViewData *vd, int toInstr, bool audioOnly) ;
+bool SampleFileImport(Path element, ViewData *vd, int toInstr, std::string &msg) ;
+
 class ImportSampleDialog:public ModalView {
 public:
 	// audioOnly (trk2als): para un loop de una pista de audio: sin SoundFonts y

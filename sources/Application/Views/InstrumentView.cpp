@@ -1011,8 +1011,11 @@ void InstrumentView::processButtonMask(unsigned short mask,bool pressed) {
 					 } else { ;
 						// Go to import sample
 
-						 ImportSampleDialog *isd=new ImportSampleDialog(*this,false,sfMode_) ;
-                         DoModal(isd, ImportSampleDialogCallback);
+						// trk2als: el navegador nuevo (la samplelib, con pre-escucha)
+						 PresetDialog *pd=new PresetDialog(*this) ;
+						 pd->SetPick(sfMode_?PresetDialog::PICK_SF2:PresetDialog::PICK_ANY,
+						             viewData_->currentInstrument_,v.GetInt()) ;
+                         DoModal(pd, ImportSampleDialogCallback);
                      }
                     break ;
 				 }
@@ -2523,7 +2526,12 @@ void InstrumentView::openPadBrowser() {
 	padImport_=true ;
 	padImportPrev_=si->FindVariable(SIP_SAMPLE)->GetInt() ;
 	padBusy_=true ;   // el navegador cambia 'sample' del instrumento
-	DoModal(new ImportSampleDialog(*this,false,false,true),PadImportCallback) ;
+	// trk2als: el navegador nuevo; se abre donde está el sample del pad
+	PresetDialog *pd=new PresetDialog(*this) ;
+	std::string cur=si->PadSample(padNote()) ;
+	pd->SetPick(PresetDialog::PICK_WAV,viewData_->currentInstrument_,
+	            cur.empty()?-1:SamplePool::GetInstance()->IndexOf(cur.c_str())) ;
+	DoModal(pd,PadImportCallback) ;
 }
 
 // A suena el pad (en uno vacío abre el navegador; A,A en el sample también);
