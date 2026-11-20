@@ -17,6 +17,20 @@
 #define PD_EMPTY_KIT 2
 #define PD_EMPTY_SAMPLE 3
 #define PD_IMPORT_SF2 4
+#define PD_CLOSED 5      // trk2als: se cerró después de lanzar (no hay nada más que hacer)
+
+// trk2als: lanzar presets como clips: A lo carga en la pista por detrás y
+// entra en el 1 siguiente; el navegador sigue abierto (salvo "cerrar al cargar")
+class PresetLauncher {
+public:
+	enum State { LS_NONE = 0, LS_LOADING, LS_WAITING, LS_SOUNDING } ;
+	virtual ~PresetLauncher() {}
+	virtual void Launch(const std::string &name) = 0 ;
+	// cómo va ese preset; permille: lo leído (LOADING) o lo que va del compás (WAITING)
+	virtual int LaunchState(const std::string &name, int &permille) = 0 ;
+	virtual bool LaunchPlaying() = 0 ;   // ¿la música está andando? (entonces no hay pre-escucha)
+} ;
+
 class PresetDialog : public ModalView {
 public:
 	// kind: -1 = todos; si no, solo presets de ese tipo
@@ -33,6 +47,7 @@ public:
 	std::string GetFolder() { return folder_ ; }
 	// trk2als: "Kit vacío" / "Importar .sf2" / "Sample vacío" en cada categoría
 	void SetEmptyOptions(bool on) { emptyOptions_ = on ; load() ; }
+	void SetLauncher(PresetLauncher *l) { launcher_ = l ; }
 private:
 	enum Kind { K_UP, K_HERE, K_FOLDER, K_PRESET, K_EMPTY, K_NEWDIR } ;
 public:
@@ -74,5 +89,6 @@ private:
 	int treeTop_ ;
 	unsigned long previewAt_ ;   // cuándo arranca la muestra (0 = nada)
 	std::string playing_ ;       // lo que está sonando
+	PresetLauncher *launcher_ ;
 } ;
 #endif

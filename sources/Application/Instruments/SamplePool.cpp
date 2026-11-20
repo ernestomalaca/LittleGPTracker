@@ -455,10 +455,10 @@ static std::string resolveKey(const std::string &key) {
 	return Path(key.c_str()).GetPath() ;
 }
 
-int SamplePool::loadAs(const char *path, const std::string &name) {
+int SamplePool::loadAs(const char *path, const std::string &name, WavFile *pre) {
 	if (count_ == MAX_PIG_SAMPLES) return -1 ;
-	Trace::Log("loadSample", "%s (ref)", path) ;
-	WavFile *wave = WavFile::Open(path) ;
+	Trace::Log("loadSample", "%s (ref%s)", path, pre ? ", leído antes" : "") ;
+	WavFile *wave = pre ? pre : WavFile::Open(path) ;
 	if (!wave) {
 		Trace::Error("Failed to load samples %s", path) ;
 		return -1 ;
@@ -467,26 +467,42 @@ int SamplePool::loadAs(const char *path, const std::string &name) {
 	names_[count_] = (char *)SYS_MALLOC(name.length() + 1) ;
 	strcpy(names_[count_], name.c_str()) ;
 	count_++ ;
-	wave->GetBuffer(0, wave->GetSize(-1)) ;
-	wave->Close() ;
+	if (!pre) {
+		wave->GetBuffer(0, wave->GetSize(-1)) ;
+		wave->Close() ;
+	}
 	return count_ - 1 ;
 }
 
-int SamplePool::Acquire(const Path &srcIn) {
+int SamplePool::Acquire(const Path &src) { return acquire(src, 0) ; }
+
+int SamplePool::AdoptLoaded(const Path &src, WavFile *wav) {
+	if (!wav) return Acquire(src) ;
+	return acquire(src, wav) ;
+}
+
+bool SamplePool::HasSource(const Path &srcIn) {
+	Path src(srcIn) ;
+	std::string key = refKey(src.GetPath()) ;
+	for (int i = 0; i < count_; i++) if (refs_[i] == key) return true ;
+	return false ;
+}
+
+int SamplePool::acquire(const Path &srcIn, WavFile *pre) {
 	Path src(srcIn) ;
 	std::string full = src.GetPath() ;
 	std::string key = refKey(full) ;
 	std::string name = src.GetName() ;
 	// el mismo archivo ya está
 	for (int i = 0; i < count_; i++)
-		if (refs_[i] == key) return i ;
+		if (refs_[i] == key) { delete pre ; return i ; }
 	// ya está en la carpeta del proyecto (o es una copia de antes, del mismo nombre)
 	std::string projSamples = Path("samples:").GetPath() ;
 	while (!projSamples.empty() && projSamples[projSamples.size() - 1] == '/') projSamples.erase(projSamples.size() - 1) ;
 	bool inProject = full.compare(0, projSamples.size() + 1, projSamples + "/") == 0 ;
 	int idx = IndexOf(name.c_str()) ;
-	if (idx >= 0 && refs_[idx].empty()) return idx ;
-	if (inProject) return LoadProjectSample(name.c_str()) ;
+	if (idx >= 0 && refs_[idx].empty()) { delete pre ; return idx ; }
+	if (inProject) { delete pre ; return LoadProjectSample(name.c_str()) ; }
 	// otro sample se llama igual: este entra con otro nombre
 	if (idx >= 0) {
 		std::string base = name, ext ;
@@ -499,7 +515,7 @@ int SamplePool::Acquire(const Path &srcIn) {
 			if (IndexOf(alt.c_str()) < 0) { name = alt ; break ; }
 		}
 	}
-	int at = loadAs(full.c_str(), name) ;
+	int at = loadAs(full.c_str(), name, pre) ;
 	if (at < 0) return -1 ;
 	refs_[at] = key ;
 	SetChanged() ;

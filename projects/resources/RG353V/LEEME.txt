@@ -60,6 +60,18 @@ Sonidos (presets) y su pre-escucha
   Ejemplo:  presets/Kits/Cumbia/KIT 1/preview.wav
   X prende o apaga la pre-escucha (se queda así para todos los proyectos).
 
+Lanzar sonidos a la pista (como clips)
+  Desde la cabecera de una pista MIDI, A sobre un sonido lo lanza a la
+  pista: su barrita avanza mientras se leen los samples y luego mientras
+  espera el 1 del compás; ahí entra. Sin música, entra en cuanto se leyó.
+  Con la música andando no hay pre-escucha: la pista es la pre-escucha.
+  - El navegador sigue abierto para probar otro (gana el último que lances).
+  - A sobre el que ya está en la pista (palomita) cierra el navegador.
+  - B cierra y deja el último que entró.
+  - Y: "cerrar al cargar" sí / no (se recuerda). Con sí, A lanza y cierra;
+    la barrita sigue en la cabecera de la pista.
+  - Select+L deshace todo lo que probaste en esa visita de una vez.
+
 Samples: se usan desde donde están (como Live)
   Cargar un sonido de la librería o de un preset ya no copia sus .wav al
   proyecto: se leen de donde están y el proyecto anota sus rutas en

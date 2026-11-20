@@ -716,6 +716,8 @@ void AppWindow::onUpdate() {
         _currentView->SetDirty(true);
         Redraw();
     }
+    // trk2als: un sonido lanzado sigue su camino aunque se esté en otra pantalla
+    if (_songView && _currentView != _songView) _songView->Tick();
     // trk2als: pruebas: TRK_PRESETS=1 abre el navegador de sonidos al empezar
     {
         static bool once = false;

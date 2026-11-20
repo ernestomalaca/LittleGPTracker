@@ -64,6 +64,12 @@ SongView::SongView(GUIWindow &w, ViewData *viewData, const char *song)
     pendingTypeCh_ = -1;
     presetCh_ = -1;
     newTrack_ = false;
+    lJob_ = 0;
+    lCh_ = lSoundCh_ = -1;
+    lPhase_ = 0;
+    lVisitUndo_ = false;
+    lPrevStep_ = -1;
+    lStep15At_ = lLastDraw_ = 0;
     pickClip_ = pickCell_ = -1;
     newSlotCell_ = -1;
     pendingType_ = 0;
@@ -95,6 +101,7 @@ SongView::SongView(GUIWindow &w, ViewData *viewData, const char *song)
  ****************/
 
 SongView::~SongView() {
+    InstrumentPresets::PreloadRelease(lJob_);
     if (clipboard_.data_ != 0)
         SYS_FREE((void *)clipboard_.data_);
 };
@@ -1563,6 +1570,9 @@ void SongView::openTrackBrowser(int ch, bool isNew) {
     newTrack_ = isNew;
     PresetDialog *d = new PresetDialog(*this);
     d->SetEmptyOptions(true);
+    d->SetLauncher(this);   // trk2als: A lanza el sonido a la pista (entra en el 1)
+    lVisitUndo_ = false;    // lo que se pruebe en esta visita se deshace de una vez
+    lSounding_.clear();
     DoModal(d, TrackPresetCallback);
 }
 
@@ -1611,6 +1621,19 @@ void SongView::OnSf2Done(bool ok) {
 void SongView::OnTrackBrowser(int code, const std::string &name) {
     Project *project = viewData_->project_;
     int ch = presetCh_;
+    if (code == PD_CLOSED) {   // trk2als: se cerró después de lanzar (o sin lanzar nada)
+        if (newTrack_) {        // pista nueva y no se lanzó nada: fuera
+            project->DeleteTrack(ch);
+            newTrack_ = false;
+            clampTrackCursor();
+        } else if (project->TrackExists(ch)) {
+            headerMode_ = false;   // de la cabecera a los clips de la pista
+            viewData_->songX_ = ch;
+            clampTrackCursor();
+        }
+        isDirty_ = true;
+        return;
+    }
     if (code == 1) {
         newTrack_ = false;
         LoadTrackPreset(name);
@@ -1772,6 +1795,7 @@ void SongView::ApplyTrackType(int channel, int code, bool) {
     if (code == TTD_DELETE) {
         // trk2als: también con la música andando (Player::RemoveTrack)
         std::string name = project->GetTrackName(channel);
+        launchTrackRemoved(channel);
         Player::GetInstance()->RemoveTrack(channel);
         snprintf(msg, sizeof(msg), "pista %s borrada", name.c_str());
         View::SetNotification(msg);
@@ -2598,6 +2622,12 @@ void SongView::drawBlockGrid() {
         GUIColor ncol = here ? bg : (player->IsChannelMuted(i) ? dim : fg);
         DrawText(x + 5, HY + 5, trackKind(project, i), ncol, 1);
         if (player->IsChannelMuted(i)) DrawText(x + COLW - GAP - 12, HY + 7, "M", ColorOf(CD_MUTE), 0);
+        if (lPhase_ && i == lCh_) {   // trk2als: un sonido lanzado: cargando / esperando el 1
+            int pm = lPhase_ == 1 ? InstrumentPresets::PreloadPermille(lJob_) : player->BarStep() * 1000 / 16;
+            int bw = COLW - GAP - 8;
+            FillRect(x + 4, HY + HH - 2, bw, 2, Mix(bg, fg, 25));
+            if (bw * pm / 1000 > 0) FillRect(x + 4, HY + HH - 2, bw * pm / 1000, 2, hi2);
+        }
     }
 
     // escenas y celdas
@@ -2728,4 +2758,169 @@ void SongView::drawBlockGrid() {
             FillRect(x + 3, VY + VH - 3 - hh, w - 6, hh, v >= 10 ? ColorOf(CD_MUTE) : tc, 2);
         }
     }
+}
+
+/************************************************************
+ trk2als: lanzar un sonido a la pista desde el navegador, como un clip:
+ sus samples se leen por detrás (todo sigue andando) y el cambio entra en
+ el 1 del compás siguiente (sin música: en cuanto está leído)
+ ************************************************************/
+
+#ifdef SDL2
+static volatile bool launchWakeSet = false;
+static Uint32 launchWake(Uint32, void *) {
+    launchWakeSet = false;
+    SDL_Event e;
+    memset(&e, 0, sizeof(e));
+    e.type = SDL_WINDOWEVENT;
+    e.window.event = SDL_WINDOWEVENT_EXPOSED;
+    SDL_PushEvent(&e);
+    return 0;
+}
+static void launchWakeSoon() {
+    if (launchWakeSet) return;
+    launchWakeSet = true;
+    if (!SDL_AddTimer(10, launchWake, 0)) launchWakeSet = false;
+}
+#else
+static void launchWakeSoon() {}
+#endif
+
+bool SongView::LaunchPlaying() { return Player::GetInstance()->IsRunning(); }
+
+void SongView::Launch(const std::string &name) {
+    Project *project = viewData_->project_;
+    int ch = presetCh_;
+    int owner = project->GetTrackInstrument(ch);
+    if (name.empty() || owner < 0 || owner >= MAX_SAMPLEINSTRUMENT_COUNT) return;
+    InstrumentPresets::PreloadRelease(lJob_);   // si había otro en camino: gana este
+    lJob_ = InstrumentPresets::StartPreload(name);
+    if (!lJob_) {
+        lPhase_ = 0;
+        View::SetNotification("No se pudo cargar el preset");
+        return;
+    }
+    newTrack_ = false;   // ya tiene sonido: cerrar no la quita
+    lName_ = name;
+    lCh_ = ch;
+    lPhase_ = 1;
+    lPrevStep_ = -1;
+    lStep15At_ = 0;
+    isDirty_ = true;
+    launchWakeSoon();
+}
+
+int SongView::LaunchState(const std::string &name, int &permille) {
+    permille = 0;
+    if (lPhase_ && name == lName_ && lCh_ == presetCh_) {
+        if (lPhase_ == 1) {
+            permille = InstrumentPresets::PreloadPermille(lJob_);
+            return LS_LOADING;
+        }
+        permille = Player::GetInstance()->BarStep() * 1000 / 16;
+        return LS_WAITING;
+    }
+    if (!lSounding_.empty() && name == lSounding_ && lSoundCh_ == presetCh_) return LS_SOUNDING;
+    return LS_NONE;
+}
+
+void SongView::launchCancel() {
+    InstrumentPresets::PreloadRelease(lJob_);
+    lJob_ = 0;
+    lPhase_ = 0;
+}
+
+void SongView::launchTrackRemoved(int ch) {
+    if (lPhase_ && lCh_ == ch) launchCancel();
+    else if (lPhase_ && lCh_ > ch) lCh_--;
+    if (lSoundCh_ == ch) { lSounding_.clear(); lSoundCh_ = -1; }
+    else if (lSoundCh_ > ch) lSoundCh_--;
+}
+
+bool SongView::Tick() {
+    if (!lPhase_) return false;
+    unsigned long now = SDL_GetTicks();
+    bool redraw = false;
+    launchWakeSoon();
+    if (lPhase_ == 1 && InstrumentPresets::PreloadDone(lJob_)) {
+        bool ok = InstrumentPresets::PreloadAdopt(lJob_);
+        if (!ok) {
+            // el pool se llenó con los samples de sonidos de antes: se quitan
+            // los que nadie usa y otra vez (lo que se podía deshacer se pierde)
+            viewData_->project_->PurgeInstruments(true);
+            for (size_t i = 0; i < sesUndo_.size(); i++) sesUndo_[i].instrTrack = -1;
+            for (size_t i = 0; i < sesRedo_.size(); i++) sesRedo_[i].instrTrack = -1;
+            ok = InstrumentPresets::PreloadAdopt(lJob_);
+        }
+        if (!ok) {
+            launchCancel();
+            View::SetNotification("Ya no caben más samples en el proyecto");
+            isDirty_ = true;
+            return true;
+        }
+        lPhase_ = 2;
+        lPrevStep_ = -1;
+        lStep15At_ = 0;
+        redraw = true;
+    }
+    if (lPhase_ == 2) {
+        Player *pl = Player::GetInstance();
+        if (!pl->IsRunning()) {
+            launchApply();
+            return true;
+        }
+        // el 1: se ve empezar el último 1/16 del compás y se aplica justo
+        // antes de que termine (lo que suena ahí apenas se recorta)
+        int step = pl->BarStep();
+        if (step == 15 && lPrevStep_ >= 0 && lPrevStep_ != 15) lStep15At_ = now;
+        int tempo = viewData_->project_->GetTempo();
+        unsigned long stepMs = tempo > 0 ? 15000 / tempo : 125;
+        unsigned long margin = 35;
+        bool due = lStep15At_ && now + margin >= lStep15At_ + stepMs;
+        bool late = lStep15At_ && step != 15;   // ya pasó el 1: cuanto antes
+        lPrevStep_ = step;
+        if (due || late) {
+            launchApply();
+            return true;
+        }
+    }
+    if (redraw || now - lLastDraw_ >= 60) {
+        lLastDraw_ = now;
+        return true;
+    }
+    return false;
+}
+
+void SongView::launchApply() {
+    Project *project = viewData_->project_;
+    int ch = lCh_;
+    std::string name = lName_;
+    InstrumentPresets::PreloadRelease(lJob_);
+    lJob_ = 0;
+    lPhase_ = 0;
+    int owner = project->TrackExists(ch) ? project->GetTrackInstrument(ch) : -1;
+    if (owner < 0 || owner >= MAX_SAMPLEINSTRUMENT_COUNT) return;
+    SampleInstrument *si = (SampleInstrument *)project->GetInstrumentBank()->GetInstrument(owner);
+    unsigned long t0 = SDL_GetTicks();
+    if (!lVisitUndo_) {   // un solo deshacer por visita al navegador
+        beginSoundChange(ch);
+        lVisitUndo_ = true;
+    } else {
+        Player::GetInstance()->HoldTrack(ch, true);
+    }
+    bool ok = InstrumentPresets::Load(si, name);
+    endSoundChange(ch);
+    Trace::Log("PRESET", "%s: entró en la pista %d (paso %d del compás), pista callada %lu ms", name.c_str(),
+               ch + 1, Player::GetInstance()->BarStep(), (unsigned long)SDL_GetTicks() - t0);
+    if (!ok) {
+        View::SetNotification("No se pudo cargar el preset");
+        isDirty_ = true;
+        return;
+    }
+    std::string shortName = name.substr(name.rfind('/') == std::string::npos ? 0 : name.rfind('/') + 1);
+    project->SetTrackName(ch, shortName.c_str());
+    lSounding_ = name;
+    lSoundCh_ = ch;
+    if (!HasModal()) View::SetNotification((shortName + " cargado").c_str());
+    isDirty_ = true;
 }

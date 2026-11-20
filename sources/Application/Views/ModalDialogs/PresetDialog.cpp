@@ -37,6 +37,23 @@ static void setPreviewEnabled(bool on) {
 	o << previewOn << "\n" ;
 }
 
+// trk2als: Y: cerrar el navegador al lanzar un sonido (se recuerda, como la pre-escucha)
+static int autoCloseOn = -1 ;
+static bool autoClose() {
+	if (autoCloseOn < 0) {
+		std::ifstream i(Path("bin:autocerrar.txt").GetPath().c_str()) ;
+		int v = 0 ;
+		if (!(i >> v)) v = 0 ;
+		autoCloseOn = v ? 1 : 0 ;
+	}
+	return autoCloseOn == 1 ;
+}
+static void setAutoClose(bool on) {
+	autoCloseOn = on ? 1 : 0 ;
+	std::ofstream o(Path("bin:autocerrar.txt").GetPath().c_str()) ;
+	o << autoCloseOn << "\n" ;
+}
+
 #ifdef SDL2
 static Uint32 previewWake(Uint32, void *) {
 	SDL_Event e ;
@@ -51,6 +68,7 @@ static Uint32 previewWake(Uint32, void *) {
 PresetDialog::PresetDialog(View &view, bool forSave, int kind)
     : ModalView(view), forSave_(forSave), kind_(kind), selected_(0), top_(0),
       emptyOptions_(false), col_(1), treeSel_(0), treeTop_(0), previewAt_(0) {
+	launcher_ = 0 ;
 	folder_ = InstrumentPresets::LastFolder() ;   // se abre donde se quedó
 	if (kind_ >= 0) {   // solo un tipo: en su carpeta (Kits...) si la hay
 		const char *kf = InstrumentPresets::KindFolder(kind_) ;
@@ -239,6 +257,7 @@ void PresetDialog::goBack() {
 void PresetDialog::schedulePreview() {
 	stopPreview() ;
 	if (forSave_ || col_ != 1 || entries_.empty() || !previewEnabled()) return ;
+	if (launcher_ && launcher_->LaunchPlaying()) return ;   // la pista es la pre-escucha
 	if (entries_[selected_].kind != K_PRESET) return ;
 	previewAt_ = SDL_GetTicks() + PREVIEW_WAIT ;
 #ifdef SDL2
@@ -515,16 +534,41 @@ void PresetDialog::drawShapes() {
 				sub = e.zones == PD_EMPTY_KIT ? "armarlo pad por pad" :
 				      e.zones == PD_IMPORT_SF2 ? "un soundfont de la samplelib" : "eliges el sample tú" ;
 		}
+		// trk2als: lanzado a la pista: cargando / esperando el 1 / sonando
+		int lst = PresetLauncher::LS_NONE, lpm = 0 ;
+		if (launcher_ && e.kind == K_PRESET) lst = launcher_->LaunchState(full(e.name), lpm) ;
+		if (lst == PresetLauncher::LS_LOADING) sub = "cargando..." ;
+		else if (lst == PresetLauncher::LS_WAITING) sub = "entra en el 1" ;
+		else if (lst == PresetLauncher::LS_SOUNDING) sub = "en la pista" ;
+		if (lst != PresetLauncher::LS_NONE) {
+			GUIColor lc = lst == PresetLauncher::LS_SOUNDING ? fg : acc ;
+			if (!sel) FrameRect(LX, y, LW, RH - 6, lst == PresetLauncher::LS_SOUNDING ? dim : acc, 8, 2) ;
+			if (lst != PresetLauncher::LS_SOUNDING) {
+				// la barrita, como la de un clip: lo que falta se va acortando
+				int bx = sx + ss + 14, bw = LX + LW - 56 - bx, by = y + RH - 11 ;
+				int done = bw * lpm / 1000 ;
+				FillRect(bx, by, bw, 3, Mix(bg, fg, 18), 1) ;
+				if (done > 0) FillRect(bx, by, done, 3, lc, 1) ;
+			}
+		}
 		int nx = sx + ss + 14 ;
 		int room = (LX + LW - 50 - nx) / 16 ;
 		if (TextLen(name) > room) name = name.substr(0, room - 2) + ".." ;
 		DrawText(nx, y + 7, name.c_str(), fg, 1) ;
 		DrawText(nx, y + 29, sub.c_str(), dim, 0) ;
+		if (lst == PresetLauncher::LS_SOUNDING && !(sel && col_ == 1)) {   // en la pista: el play de los clips
+			int tx = LX + LW - 30, ty = y + 15 ;
+			for (int k = 0; k < 9; k++) FillRect(tx + k, ty + k / 2, 1, 10 - (k / 2) * 2, fg) ;
+		}
 		if (sel && col_ == 1) {
 			int cx = LX + LW - 42, cy = y + 9 ;
 			bool sounding = e.kind == K_PRESET && playing_ == e.name ;
 			FillRect(cx, cy, 30, 30, acc, 15) ;
-			if (sounding) {   // sonando: dos barritas
+			if (lst == PresetLauncher::LS_SOUNDING || lst == PresetLauncher::LS_LOADING || lst == PresetLauncher::LS_WAITING) {
+				// ya está en la pista (o va): A cierra, una palomita
+				for (int k = 0; k < 5; k++) FillRect(cx + 8 + k, cy + 14 + k, 3, 3, bg) ;
+				for (int k = 0; k < 9; k++) FillRect(cx + 12 + k, cy + 18 - k, 3, 3, bg) ;
+			} else if (sounding) {   // sonando: dos barritas
 				FillRect(cx + 9, cy + 8, 4, 14, bg) ;
 				FillRect(cx + 17, cy + 8, 4, 14, bg) ;
 			} else {
@@ -551,6 +595,15 @@ void PresetDialog::drawShapes() {
 		DrawText(616 - 12 - 8 * 18, BY + 11, "A carga   B atrás", fg, 0) ;
 	} else if (forSave_) {
 		DrawText(32, BY + 11, col_ == 0 ? "A o derecha entra   B cancela" : "A elige / entra   izquierda o B atrás", dim, 0) ;
+	} else if (launcher_) {
+		DrawText(32, BY + 11, col_ == 0 ? "A o derecha entra   B cierra" : "A lanza, otra vez cierra   B atrás", dim, 0) ;
+		const char *ac = autoClose() ? "Y cierra: sí" : "Y cierra: no" ;
+		int ax = 616 - 12 - 8 * TextLen(ac) ;
+		DrawText(ax, BY + 11, ac, autoClose() ? acc : dim, 0) ;
+		if (!launcher_->LaunchPlaying()) {   // sin música: la pre-escucha de siempre
+			const char *pv = previewEnabled() ? "X escucha: sí" : "X escucha: no" ;
+			DrawText(ax - 16 - 8 * TextLen(pv), BY + 11, pv, previewEnabled() ? acc : dim, 0) ;
+		}
 	} else {
 		DrawText(32, BY + 11, col_ == 0 ? "A o derecha entra   B cierra" : "A entra / carga   izquierda o B atrás", dim, 0) ;
 		// la pre-escucha: X la cambia
@@ -572,6 +625,10 @@ void PresetDialog::ProcessButtonMask(unsigned short mask, bool pressed) {
 	if (!pressed) return ;   // soltar el botón que abrió la ventana no cuenta
 	isDirty_ = true ;
 	int n = (int)entries_.size() ;
+	if (mask == EPBM_Y && launcher_ && !forSave_) {   // cerrar al cargar: sí / no
+		setAutoClose(!autoClose()) ;
+		return ;
+	}
 	if (mask == EPBM_X && !forSave_) {   // pre-escucha sí / no
 		setPreviewEnabled(!previewEnabled()) ;
 		if (previewEnabled()) schedulePreview() ;
@@ -581,7 +638,7 @@ void PresetDialog::ProcessButtonMask(unsigned short mask, bool pressed) {
 	if (col_ == 0) {   // las categorías
 		if (mask & EPBM_B) {   // ya afuera: se cierra
 			stopPreview() ;
-			EndModal(0) ;
+			EndModal(launcher_ ? PD_CLOSED : 0) ;
 			return ;
 		}
 		int tn = (int)tree_.size() ;
@@ -637,6 +694,19 @@ void PresetDialog::ProcessButtonMask(unsigned short mask, bool pressed) {
 		case K_PRESET:
 			stopPreview() ;
 			chosen_ = full(e.name) ;
+			if (launcher_) {
+				// trk2als: como un clip: se lanza y el navegador sigue; A sobre
+				// el que ya está (sonando o por entrar) cierra
+				int pm ;
+				int st = launcher_->LaunchState(chosen_, pm) ;
+				if (st == PresetLauncher::LS_NONE) {
+					InstrumentPresets::LastFolder() = folder_ ;
+					launcher_->Launch(chosen_) ;
+					if (!autoClose()) return ;
+				}
+				EndModal(PD_CLOSED) ;
+				return ;
+			}
 			InstrumentPresets::LastFolder() = folder_ ;
 			EndModal(1) ;
 			return ;

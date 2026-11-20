@@ -59,6 +59,11 @@ public:
   // Acquire: el sample de esa ruta (si ya está, el mismo; si otro sample se
   // llama igual, entra con otro nombre: "Kick (2).wav"). Índice, o <0
   int Acquire(const Path &src);
+  // trk2als: lo mismo con el sample ya leído en otro hilo (wav pasa al pool;
+  // si no hace falta, se borra). -1 si ya no cabe (wav sigue siendo de quien llama)
+  int AdoptLoaded(const Path &src, WavFile *wav);
+  // ¿ya está el sample de esa ruta (referencia) en el pool?
+  bool HasSource(const Path &src);
   bool IsReference(int i) { return i >= 0 && i < count_ && !refs_[i].empty(); }
   std::string SourcePath(int i);   // el archivo de verdad (proyecto o referencia)
   void SaveRefs();                 // project:samples.ref
@@ -76,7 +81,8 @@ protected:
   SoundSource *wav_[MAX_PIG_SAMPLES];
   std::string refs_[MAX_PIG_SAMPLES];   // trk2als: "" = en el proyecto; si no, su ruta
   std::vector<std::string> missing_;
-  int loadAs(const char *path, const std::string &name);
+  int loadAs(const char *path, const std::string &name, WavFile *pre = 0);
+  int acquire(const Path &src, WavFile *pre);
 };
 
 #endif

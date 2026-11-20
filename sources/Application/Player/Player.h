@@ -193,6 +193,9 @@ protected:
 	bool retrigAllImmediate_ ;
 	unsigned char retrigPos_ ;
 	int metroStep_ ; // trk2als: pasos desde que arrancó (metrónomo)
+public:
+	int BarStep() const { return metroStep_ % 16 ; }   // trk2als: el 1/16 del compás que suena (0 = el 1)
+private:
 
 	// trk2als: notas con nudge o subdivididas: golpes programados a destiempo
 	struct TimedHit {

@@ -56,6 +56,18 @@ namespace InstrumentPresets {
 	} ;
 	void Capture(SampleInstrument *instr, Snapshot &out) ;
 	void Restore(SampleInstrument *instr, const Snapshot &s) ;
+	// trk2als: leer los samples de un preset en otro hilo, sin tocar nada del
+	// proyecto (la interfaz y el audio siguen). Cuando Done(), Adopt() los
+	// pasa al pool (rápido) y luego Load() ya no lee nada.
+	struct Preload ;
+	Preload *StartPreload(const std::string &name) ;   // 0 si el preset no sirve
+	bool PreloadDone(Preload *p) ;
+	int PreloadPermille(Preload *p) ;                   // cuánto lleva leído (0..1000)
+	const std::string &PreloadName(Preload *p) ;
+	// pasa lo leído al pool; false si no cupo (lo que no entró se descarta)
+	bool PreloadAdopt(Preload *p) ;
+	// ya no se necesita: si el hilo sigue, él lo borra al terminar
+	void PreloadRelease(Preload *p) ;
 	// nombre sugerido para guardar: el del sample, sin extensión
 	std::string SuggestedName(SampleInstrument *instr) ;
 }

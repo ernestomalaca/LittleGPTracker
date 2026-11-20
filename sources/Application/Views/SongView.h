@@ -8,10 +8,11 @@
 #include <map>
 #include "Application/Model/Clip.h"
 #include "Application/Instruments/InstrumentPresets.h"
+#include "Application/Views/ModalDialogs/PresetDialog.h"
 
 class SongView;
 
-class SongView : public View {
+class SongView : public View, public PresetLauncher {
   public:
     SongView(GUIWindow &w, ViewData *viewData, const char *song);
     ~SongView();
@@ -25,6 +26,11 @@ class SongView : public View {
     virtual void AnimationUpdate();
     virtual void OnPlayerUpdate(PlayerEventType, unsigned int tick = 0);
     virtual void OnFocus();
+    virtual bool Tick();
+    // trk2als: lanzar sonidos desde el navegador (como clips)
+    virtual void Launch(const std::string &name);
+    virtual int LaunchState(const std::string &name, int &permille);
+    virtual bool LaunchPlaying();
 
   protected:
     void processNormalButtonMask(unsigned int mask);
@@ -98,6 +104,22 @@ class SongView : public View {
     void OnAudioPicked(bool imported);
     int pickClip_, pickCell_;
     int pendingTypeCh_, pendingType_; // .cambio que espera confirmación
+    void launchTrackRemoved(int ch);   // trk2als: se borró una pista: lo lanzado se ajusta
+  private:
+    // trk2als: el sonido lanzado: se lee por detrás y entra en el 1
+    InstrumentPresets::Preload *lJob_;
+    std::string lName_;          // lo que se está cargando o espera el 1
+    int lCh_;
+    int lPhase_;                 // 0 nada, 1 leyendo, 2 esperando el 1
+    std::string lSounding_;      // lo último que entró (para marcarlo en el navegador)
+    int lSoundCh_;
+    bool lVisitUndo_;            // ya se guardó el deshacer de esta visita al navegador
+    int lPrevStep_;
+    unsigned long lStep15At_;
+    unsigned long lLastDraw_;
+    void launchApply();
+    void launchCancel();
+  public:
   private:
     bool headerMode_; // .el cursor está en la cabecera de las columnas
     bool rowMode_;   // trk2als: el cursor en la columna de filas (como LSDJ)

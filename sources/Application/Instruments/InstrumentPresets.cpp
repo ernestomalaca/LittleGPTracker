@@ -454,6 +454,121 @@ static void *prepareThread(void *arg) {
 }
 #endif
 
+// --- trk2als: lectura por detrás ---------------------------------------------
+struct InstrumentPresets::Preload {
+	std::string name ;
+	std::vector<std::string> paths ;     // lo que falta leer
+	std::vector<long> sizes ;
+	std::vector<WavFile *> wavs ;
+	long total ;
+	volatile long done ;                 // bytes leídos
+	volatile bool finished ;
+	bool released ;
+	SDL_mutex *m ;
+} ;
+
+static void preloadFree(InstrumentPresets::Preload *p) {
+	for (size_t i = 0; i < p->wavs.size(); i++) delete p->wavs[i] ;
+	SDL_DestroyMutex(p->m) ;
+	delete p ;
+}
+
+static void *preloadThread(void *arg) {
+	InstrumentPresets::Preload *p = (InstrumentPresets::Preload *)arg ;
+#if defined(__linux__)
+	pid_t tid = (pid_t)syscall(SYS_gettid) ;
+	setpriority(PRIO_PROCESS, tid, 19) ;
+#endif
+	int slow = getenv("TRK_SLOWPREP") ? atoi(getenv("TRK_SLOWPREP")) : 0 ;   // pruebas
+	for (size_t i = 0; i < p->paths.size(); i++) {
+		if (slow) usleep(slow * 1000 / (p->paths.size() ? p->paths.size() : 1)) ;
+		WavFile *w = WavFile::Open(p->paths[i].c_str()) ;
+		if (w) {
+			w->GetBuffer(0, w->GetSize(-1)) ;
+			w->Close() ;
+		}
+		p->wavs[i] = w ;
+		p->done += p->sizes[i] ;
+	}
+	SDL_LockMutex(p->m) ;
+	p->finished = true ;
+	bool orphan = p->released ;
+	SDL_UnlockMutex(p->m) ;
+	if (orphan) preloadFree(p) ;
+	return 0 ;
+}
+
+InstrumentPresets::Preload *InstrumentPresets::StartPreload(const std::string &name) {
+	Info info ;
+	if (!Describe(name, info)) return 0 ;
+	Preload *p = new Preload ;
+	p->name = name ;
+	p->total = 0 ;
+	p->done = 0 ;
+	p->finished = false ;
+	p->released = false ;
+	p->m = SDL_CreateMutex() ;
+	SamplePool *pool = SamplePool::GetInstance() ;
+	std::vector<std::string> files(info.zoneFiles) ;
+	if (!info.sample.empty()) files.push_back(info.sample) ;
+	for (size_t i = 0; i < files.size(); i++) {
+		Path src(info.dir + "/" + files[i]) ;
+		if (!src.Exists() || pool->HasSource(src)) continue ;
+		std::string full = src.GetPath() ;
+		if (std::find(p->paths.begin(), p->paths.end(), full) != p->paths.end()) continue ;
+		long sz = 1 ;
+		I_File *f = FileSystem::GetInstance()->Open(full.c_str(), (char *)"r") ;
+		if (f) { f->Seek(0, SEEK_END) ; sz = f->Tell() ; f->Close() ; delete f ; if (sz < 1) sz = 1 ; }
+		p->paths.push_back(full) ;
+		p->sizes.push_back(sz) ;
+		p->total += sz ;
+	}
+	p->wavs.resize(p->paths.size(), (WavFile *)0) ;
+	if (p->paths.empty()) { p->finished = true ; return p ; }
+#if defined(__linux__)
+	pthread_t th ;
+	if (pthread_create(&th, 0, preloadThread, p) == 0) {
+		pthread_detach(th) ;
+		return p ;
+	}
+#endif
+	preloadThread(p) ;   // sin hilos: aquí mismo
+	return p ;
+}
+
+bool InstrumentPresets::PreloadDone(Preload *p) { return p && p->finished ; }
+
+int InstrumentPresets::PreloadPermille(Preload *p) {
+	if (!p) return 0 ;
+	if (p->finished || p->total <= 0) return 1000 ;
+	long v = (long)((double)p->done * 1000.0 / (double)p->total) ;
+	return v > 999 ? 999 : (int)v ;
+}
+
+const std::string &InstrumentPresets::PreloadName(Preload *p) { return p->name ; }
+
+bool InstrumentPresets::PreloadAdopt(Preload *p) {
+	if (!p || !p->finished) return false ;
+	SamplePool *pool = SamplePool::GetInstance() ;
+	bool ok = true ;
+	for (size_t i = 0; i < p->paths.size(); i++) {
+		if (!p->wavs[i]) continue ;   // no se pudo leer: Load avisa
+		int at = pool->AdoptLoaded(Path(p->paths[i]), p->wavs[i]) ;
+		if (at < 0) { ok = false ; continue ; }   // sigue siendo nuestro: se borra al soltar
+		p->wavs[i] = 0 ;   // ya es del pool (o se borró por repetido)
+	}
+	return ok ;
+}
+
+void InstrumentPresets::PreloadRelease(Preload *p) {
+	if (!p) return ;
+	SDL_LockMutex(p->m) ;
+	bool fin = p->finished ;
+	p->released = true ;
+	SDL_UnlockMutex(p->m) ;
+	if (fin) preloadFree(p) ;
+}
+
 bool InstrumentPresets::Prepare(const std::string &name) {
 #if defined(__linux__)
 	PrepareJob job ;
