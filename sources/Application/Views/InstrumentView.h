@@ -1,6 +1,7 @@
 #ifndef _INSTRUMENT_VIEW_H_
 #define _INSTRUMENT_VIEW_H_
 
+#include "Application/Views/SoundLauncher.h"
 #include "Application/FX/FxPrinter.h"
 #include "BaseClasses/FieldView.h"
 #include "Foundation/Observable.h"
@@ -12,7 +13,7 @@
 
 class SampleInstrument ;
 
-class InstrumentView: public FieldView, public I_Observer {
+class InstrumentView: public FieldView, public I_Observer, public LaunchHost {
 public:
 	InstrumentView(GUIWindow &w,ViewData *data) ;
 	virtual ~InstrumentView() ;
@@ -94,6 +95,12 @@ public:
 	void OnPresetFolder(const std::string &folder) ;
 	void OnPadImport(bool ok) ;
 	void OnKitLoad(const std::string &name) ;
+	void OnBrowserClosed(bool kit) ;   // trk2als: se cerró un navegador que lanza
+	// trk2als: los sonidos lanzados desde aquí (entran en el 1)
+	virtual void LaunchBefore(int instrument, int track, bool firstOfVisit) ;
+	virtual void LaunchAfter(int instrument, int track, const std::string &name, bool ok) ;
+	virtual void LaunchPurged() ;
+	virtual void LaunchNotify(const char *msg) ;
 private:
 	// trk2als: editor de kits: una rejilla de 4x4 pads (como el Move); los
 	// campos editan el pad elegido y se escriben en 's pads' / 's zones'

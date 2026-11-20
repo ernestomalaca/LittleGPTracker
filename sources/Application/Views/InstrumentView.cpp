@@ -178,6 +178,8 @@ void ImportSampleDialogCallback(View &v, ModalView &dialog) {
 static void KitLoadCallback(View &v, ModalView &dialog) {
     if (dialog.GetReturnCode()==1)
         ((InstrumentView &)v).OnKitLoad(((PresetDialog &)dialog).GetSelected());
+    else if (dialog.GetReturnCode()==PD_CLOSED)
+        ((InstrumentView &)v).OnBrowserClosed(true);
 }
 
 static void PadImportCallback(View &v, ModalView &dialog) {
@@ -270,6 +272,8 @@ private:
 static void PresetLoadCallback(View &v, ModalView &dialog) {
 	if (dialog.GetReturnCode()==1) {
 		((InstrumentView &)v).OnPresetLoad(((PresetDialog &)dialog).GetSelected()) ;
+	} else if (dialog.GetReturnCode()==PD_CLOSED) {
+		((InstrumentView &)v).OnBrowserClosed(false) ;
 	}
 }
 
@@ -1853,7 +1857,47 @@ void InstrumentView::Update(Observable &o,I_ObservableData *d) {
 
 void InstrumentView::openPresetLoad() {
 	PresetDialog *pd=new PresetDialog(*this) ;
+	// trk2als: como en la cabecera de la pista: A lanza y entra en el 1
+	SoundLauncher *l=SoundLauncher::Current() ;
+	if (l && current_ && current_->GetType()==IT_SAMPLE) {
+		l->Open(viewData_->currentInstrument_,this) ;
+		pd->SetLauncher(l) ;
+	}
 	DoModal(pd,PresetLoadCallback) ;
+}
+
+void InstrumentView::OnBrowserClosed(bool kit) {
+	lastFocusID_=kit?SIP_SAMPLE:IV_PRESET_LOAD ;
+	padShown_=-1 ;
+	onInstrumentChange() ;
+	isDirty_=true ;
+}
+
+void InstrumentView::LaunchBefore(int,int track,bool) {
+	padBusy_=true ;   // el kit se reescribe: los campos no se reconstruyen a medias
+	if (track>=0) Player::GetInstance()->HoldTrack(track,true) ;
+}
+
+void InstrumentView::LaunchAfter(int instrument,int track,const std::string &name,bool ok) {
+	if (track>=0) Player::GetInstance()->HoldTrack(track,false) ;
+	padBusy_=false ;
+	if (instrument==viewData_->currentInstrument_) {
+		padShown_=-1 ;
+		onInstrumentChange() ;
+	}
+	if (ok && !HasModal()) {
+		std::string shortName=name.substr(name.rfind('/')==std::string::npos?0:name.rfind('/')+1) ;
+		View::SetNotification((shortName+" cargado").c_str()) ;
+	}
+	isDirty_=true ;
+}
+
+// se quitaron samples sin uso: lo que guardaba el deshacer del kit (con
+// índices de samples) ya no sirve
+void InstrumentView::LaunchPurged() {
+	kitUndo_.clear() ;
+	kitRedo_.clear() ;
+	kitOwner_=0 ;
 }
 
 void InstrumentView::openPresetSave() {
@@ -2370,6 +2414,9 @@ void InstrumentView::kitTake(std::vector<std::string> &snap) {
 			char b[16] ; snprintf(b,sizeof(b),"%d",v.GetInt()) ; snap.push_back(b) ;
 		} else snap.push_back(v.GetString()) ;
 	}
+	// trk2als: y el nombre de la pista (deshacer un cambio de kit lo regresa)
+	int tr=ownerTrack(viewData_) ;
+	if (tr>=0) snap.push_back(viewData_->project_->GetTrackName(tr)) ;
 }
 
 void InstrumentView::kitRestore(const std::vector<std::string> &snap) {
@@ -2383,6 +2430,8 @@ void InstrumentView::kitRestore(const std::vector<std::string> &snap) {
 		else if (strcmp(v.GetString(),snap[k].c_str())) v.SetString(snap[k].c_str()) ;
 	}
 	si->SetZones(si->FindVariable(SIP_S_ZONES)->GetString()) ;
+	int tr=ownerTrack(viewData_) ;
+	if (tr>=0 && k<snap.size()) viewData_->project_->SetTrackName(tr,snap[k].c_str()) ;
 	padBusy_=false ;
 	refreshKit() ;
 	kitTake(kitState_) ;
@@ -2510,7 +2559,13 @@ bool InstrumentView::processKit(unsigned short mask) {
 	FourCC id=((UIIntVarField *)f)->GetVariableID() ;
 	if (id==SIP_SAMPLE) {   // el nombre del kit: A cambia de kit (solo kits)
 		if (mask==EPBM_A) {
-			DoModal(new PresetDialog(*this,false,InstrumentPresets::PK_KIT),KitLoadCallback) ;
+			PresetDialog *pd=new PresetDialog(*this,false,InstrumentPresets::PK_KIT) ;
+			SoundLauncher *l=SoundLauncher::Current() ;   // trk2als: lanza y entra en el 1
+			if (l) {
+				l->Open(viewData_->currentInstrument_,this) ;
+				pd->SetLauncher(l) ;
+			}
+			DoModal(pd,KitLoadCallback) ;
 			return true ;
 		}
 		return (mask&EPBM_A)!=0 && !(mask&EPBM_B) ;   // A + flechas: nada (no es un sample)
@@ -2879,3 +2934,5 @@ void InstrumentView::drawAutoMarks() {
 		FillRect((p._x+vf.GetDrawnLength())*16+3,p._y*16-1,6,6,hi,3) ;
 	}
 }
+
+void InstrumentView::LaunchNotify(const char *msg) { View::SetNotification(msg) ; isDirty_=true ; }

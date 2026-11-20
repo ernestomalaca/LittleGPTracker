@@ -9,10 +9,11 @@
 #include "Application/Model/Clip.h"
 #include "Application/Instruments/InstrumentPresets.h"
 #include "Application/Views/ModalDialogs/PresetDialog.h"
+#include "Application/Views/SoundLauncher.h"
 
 class SongView;
 
-class SongView : public View, public PresetLauncher {
+class SongView : public View, public LaunchHost {
   public:
     SongView(GUIWindow &w, ViewData *viewData, const char *song);
     ~SongView();
@@ -27,11 +28,12 @@ class SongView : public View, public PresetLauncher {
     virtual void OnPlayerUpdate(PlayerEventType, unsigned int tick = 0);
     virtual void OnFocus();
     virtual bool Tick();
-    // trk2als: lanzar sonidos desde el navegador (como clips)
-    virtual void Launch(const std::string &name);
-    virtual int LaunchState(const std::string &name, int &permille);
-    virtual bool LaunchPlaying();
-    virtual std::string LaunchCurrent();
+    // trk2als: lanzar sonidos desde el navegador (como clips): lo que pasa
+    // alrededor del cambio cuando lo lanzó la Session
+    virtual void LaunchBefore(int instrument, int track, bool firstOfVisit);
+    virtual void LaunchAfter(int instrument, int track, const std::string &name, bool ok);
+    virtual void LaunchPurged();
+    virtual void LaunchNotify(const char *msg);
 
   protected:
     void processNormalButtonMask(unsigned int mask);
@@ -108,17 +110,7 @@ class SongView : public View, public PresetLauncher {
     void launchTrackRemoved(int ch);   // trk2als: se borró una pista: lo lanzado se ajusta
   private:
     // trk2als: el sonido lanzado: se lee por detrás y entra en el 1
-    InstrumentPresets::Preload *lJob_;
-    std::string lName_;          // lo que se está cargando o espera el 1
-    int lCh_;
-    int lPhase_;                 // 0 nada, 1 leyendo, 2 esperando el 1
-    std::string trackPreset_[SONG_CHANNEL_COUNT];   // el preset (con su carpeta) que tiene cada pista
-    bool lVisitUndo_;            // ya se guardó el deshacer de esta visita al navegador
-    int lPrevStep_;
-    unsigned long lStep15At_;
-    unsigned long lLastDraw_;
-    void launchApply();
-    void launchCancel();
+    SoundLauncher *launcher_;   // el de todo el proyecto (también lo usa el instrumento)
   public:
   private:
     bool headerMode_; // .el cursor está en la cabecera de las columnas
