@@ -416,6 +416,7 @@ void InstrumentPresets::Restore(SampleInstrument *instr, const Snapshot &s) {
 // tarjeta con prioridad normal dejaba al audio sin turno (huecos). La
 // interfaz espera a que termine.
 extern volatile bool g_importGentle ;
+int g_prepareHeld = -1 ;   // para el log: cuántas veces se soltó el candado
 struct PrepareJob { std::string name ; bool ok ; } ;
 
 static bool prepareNow(const std::string &name) {
@@ -463,6 +464,7 @@ bool InstrumentPresets::Prepare(const std::string &name) {
 		int held = ms->ReleaseAll() ;   // el audio sigue mientras se lee
 		pthread_join(th, 0) ;
 		ms->Reacquire(held) ;
+		g_prepareHeld = held ;
 		return job.ok ;
 	}
 #endif

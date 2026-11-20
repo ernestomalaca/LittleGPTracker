@@ -200,16 +200,25 @@ bool PlayerMixer::IsChannelMuted(int channel) {
      return channel_[Phys(channel)]->IsMuted() ;
 }
 
+// trk2als: con el candado: el audio lee la ruta mientras mezcla, y la
+// pre-escucha arranca desde el Tick (sin botón, sin candado): cambiarla a
+// la vez rompía la memoria (double free)
 void PlayerMixer::StartStreaming(const Path &path) {
+	Lock() ;
 	fileStreamer_.Start(path) ;
+	Unlock() ;
 } ;
 
 void PlayerMixer::StartStreaming(const Path &path, double speed, double delaySecs, double startFrac, bool loop) {
+	Lock() ;
 	fileStreamer_.Start(path,speed,delaySecs,startFrac,loop) ;
+	Unlock() ;
 } ;
 
 void PlayerMixer::StopStreaming() {
+	Lock() ;
 	fileStreamer_.Stop() ;
+	Unlock() ;
 } ;
 
 void PlayerMixer::OnPlayerStart() {

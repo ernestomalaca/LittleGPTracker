@@ -63,6 +63,8 @@ public:
 	int ReleaseAll() ;        // suelta el candado si es de este hilo (devuelve cuántas veces)
 	void Reacquire(int n) ;
 	unsigned long BuffersMixed() const { return mixed_ ; }
+	// lo más que el audio esperó el candado / tardó en mezclar desde la última vez (ms)
+	void TakeMax(unsigned &wait, unsigned &work) { wait = maxWait_ ; work = maxWork_ ; maxWait_ = 0 ; maxWork_ = 0 ; }
 
 protected:
 	void toggleRendering(bool enable) ;
@@ -76,6 +78,7 @@ private:
   int depth_;
   SDL_threadID owner_;
   volatile unsigned long mixed_;
+  volatile unsigned maxWait_, maxWork_;
   bool isRendering_;
 } ;
 #endif

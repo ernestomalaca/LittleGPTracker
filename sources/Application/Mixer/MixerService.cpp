@@ -8,7 +8,7 @@
 #include "Services/Midi/MidiService.h"
 #include "System/Console/Trace.h"
 
-MixerService::MixerService() : out_(0), sync_(0), depth_(0), owner_(0), mixed_(0), isRendering_(false) {
+MixerService::MixerService() : out_(0), sync_(0), depth_(0), owner_(0), mixed_(0), maxWait_(0), maxWork_(0), isRendering_(false) {
     mode_ = MSRM_PLAYBACK;
 };
 
@@ -129,13 +129,19 @@ unsigned int MixerService::GetMasterPeakLevel() const {
 void MixerService::Update(Observable &o, I_ObservableData *d) {
     AudioDriver::Event *event = (AudioDriver::Event *)d;
     if (event->type_ == AudioDriver::Event::ADET_BUFFERNEEDED) {
+        Uint32 a = SDL_GetTicks();
         Lock();
+        Uint32 b = SDL_GetTicks();
         mixed_++;
         SetChanged();
         NotifyObservers();
 
         out_->Trigger();
         Unlock();
+        Uint32 c = SDL_GetTicks();
+        // trk2als: para el log: lo más que esperó el candado y lo más que tardó en mezclar
+        if (b - a > maxWait_) maxWait_ = b - a;
+        if (c - b > maxWork_) maxWork_ = c - b;
     }
 }
 
