@@ -97,6 +97,9 @@ public:
 	int Phys(int track) { return (track >= 0 && track < SONG_CHANNEL_COUNT) ? map_[track] : track ; }
 	void RemoveTrack(int track) ;   // con el lock tomado
 	void ResetMap() ;               // todo quieto: cada pista en su canal
+	// trk2als: la pista no toca notas nuevas mientras su instrumento se reescribe
+	void Hold(int track, bool on) { hold_[Phys(track)] = on ; }
+	bool hold_[SONG_CHANNEL_COUNT] ;
 private:
 
 	// store trigger notes, 0xFF = none

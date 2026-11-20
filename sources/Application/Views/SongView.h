@@ -7,6 +7,7 @@
 #include "BaseClasses/View.h"
 #include <map>
 #include "Application/Model/Clip.h"
+#include "Application/Instruments/InstrumentPresets.h"
 
 class SongView;
 
@@ -85,6 +86,7 @@ class SongView : public View {
     void openTrackBrowser(int ch, bool isNew);
     void OnTrackBrowser(int code, const std::string &name);
     void askDeleteTrack(int ch);
+    void OnSf2Done(bool ok);
     void goToInstrument(int ch);
     void pickAudio(int cell = -1);
     void placeAudio();
@@ -150,7 +152,15 @@ class SongView : public View {
     struct SesSnap {
         std::vector<unsigned char> grid;
         std::map<int, Clip> clips;
+        // trk2als: el sonido de una pista (cargar preset / kit vacío / ...)
+        int instrTrack;
+        std::string trackName;
+        InstrumentPresets::Snapshot instr;
+        SesSnap() : instrTrack(-1) {}
     };
+    void snapInstr(SesSnap &s, int track);
+    void beginSoundChange(int track);   // a la historia, y la pista en espera
+    void endSoundChange(int track);
     void takeSesSnap(SesSnap &s);
     void restoreSesSnap(const SesSnap &s);
     void checkHistory();

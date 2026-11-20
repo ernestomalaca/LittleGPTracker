@@ -94,6 +94,9 @@ public:
     int Phys(int track) ;
     // trk2als: borra la pista (también con la música andando)
     void RemoveTrack(int track) ;
+    // trk2als: callar la pista y no tocar notas nuevas (on) mientras se
+    // cambia su instrumento; off: vuelve a tocar
+    void HoldTrack(int track, bool on) ;
 
 	void StartStreaming(const Path &path) ;
 	void PreviewNote(int channel, I_Instrument *instr, int note) ;   // trk2als: tocar una nota con la canción parada

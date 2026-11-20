@@ -378,3 +378,34 @@ bool InstrumentPresets::Describe(const std::string &name, Info &out) {
 	out.kind = kit ? PK_KIT : (out.zones ? PK_MULTI : PK_SAMPLE) ;
 	return true ;
 }
+
+void InstrumentPresets::Capture(SampleInstrument *instr, Snapshot &out) {
+	out.params.clear() ;
+	out.sample = instr->GetSampleIndex() ;
+	IteratorPtr<Variable> it(instr->GetIterator()) ;
+	for (it->Begin(); !it->IsDone(); it->Next()) {
+		Variable &v = it->CurrentItem() ;
+		if (!strcmp(v.GetName(), "sample") || skipParam(v.GetName())) continue ;
+		out.params.push_back(std::make_pair(std::string(v.GetName()), std::string(v.GetString()))) ;
+	}
+}
+
+void InstrumentPresets::Restore(SampleInstrument *instr, const Snapshot &s) {
+	if (s.sample >= 0) {
+		instr->AssignSample(s.sample) ;
+		instr->RefreshSample() ;
+	} else {
+		instr->FindVariable(SIP_SAMPLE)->SetInt(-1) ;
+	}
+	std::string zones ;
+	for (size_t i = 0; i < s.params.size(); i++) {
+		const std::string &n = s.params[i].first ;
+		if (n == "s zones") { zones = s.params[i].second ; continue ; }
+		IteratorPtr<Variable> it(instr->GetIterator()) ;
+		for (it->Begin(); !it->IsDone(); it->Next()) {
+			Variable &var = it->CurrentItem() ;
+			if (n == var.GetName()) { var.SetString(s.params[i].second.c_str()) ; break ; }
+		}
+	}
+	instr->SetZones(zones) ;
+}

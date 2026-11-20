@@ -886,6 +886,46 @@ void SongView::restoreSesSnap(const SesSnap &s) {
     memcpy(song->data_, &s.grid[0], s.grid.size());
     for (std::map<int, Clip>::const_iterator it = s.clips.begin(); it != s.clips.end(); ++it)
         song->clips_->Get(it->first) = it->second;
+    // trk2als: el sonido de la pista, como estaba
+    Project *project = viewData_->project_;
+    if (s.instrTrack >= 0 && project->TrackExists(s.instrTrack)) {
+        int owner = project->GetTrackInstrument(s.instrTrack);
+        if (owner >= 0 && owner < MAX_SAMPLEINSTRUMENT_COUNT) {
+            SampleInstrument *si = (SampleInstrument *)project->GetInstrumentBank()->GetInstrument(owner);
+            InstrumentPresets::Restore(si, s.instr);
+            project->SetTrackName(s.instrTrack, s.trackName.c_str());
+        }
+    }
+}
+
+void SongView::snapInstr(SesSnap &s, int track) {
+    Project *project = viewData_->project_;
+    s.instrTrack = -1;
+    if (!project->TrackExists(track)) return;
+    int owner = project->GetTrackInstrument(track);
+    if (owner < 0 || owner >= MAX_SAMPLEINSTRUMENT_COUNT) return;
+    SampleInstrument *si = (SampleInstrument *)project->GetInstrumentBank()->GetInstrument(owner);
+    InstrumentPresets::Capture(si, s.instr);
+    s.trackName = project->GetTrackName(track);
+    s.instrTrack = track;
+}
+
+// trk2als: antes de cambiar el sonido de una pista: va a la historia (Select+L
+// lo regresa) y la pista se calla mientras su instrumento se reescribe
+void SongView::beginSoundChange(int track) {
+    SesSnap before;
+    takeSesSnap(before);
+    snapInstr(before, track);
+    sesUndo_.push_back(before);
+    if (sesUndo_.size() > 48) sesUndo_.erase(sesUndo_.begin());
+    sesRedo_.clear();
+    Player::GetInstance()->HoldTrack(track, true);
+}
+
+void SongView::endSoundChange(int track) {
+    Player::GetInstance()->HoldTrack(track, false);
+    takeSesSnap(sesNow_);
+    sesNowValid_ = true;
 }
 
 void SongView::checkHistory() {
@@ -905,15 +945,19 @@ bool SongView::Undo(bool redo) {
         View::SetNotification(redo ? "nada que rehacer" : "nada que deshacer");
         return true;
     }
+    int it = from.back().instrTrack;
+    if (it >= 0) Player::GetInstance()->HoldTrack(it, true);
     MixerService::GetInstance()->Lock();
     SesSnap now;
     takeSesSnap(now);
+    if (it >= 0) snapInstr(now, it);
     to.push_back(now);
     restoreSesSnap(from.back());
     from.pop_back();
     takeSesSnap(sesNow_);
     sesNowValid_ = true;
     MixerService::GetInstance()->Unlock();
+    if (it >= 0) Player::GetInstance()->HoldTrack(it, false);
     clipboard_.active_ = false;
     viewMode_ = VM_NORMAL;
     View::SetNotification(redo ? "rehecho" : "deshecho");
@@ -1535,24 +1579,32 @@ void SongView::goToInstrument(int ch) {
 }
 
 static void TrackSf2Callback(View &v, ModalView &dialog) {
-    SongView &sv = (SongView &)v;
-    Project *project = sv.viewData_->project_;
-    int ch = sv.presetCh_;
-    if (dialog.GetReturnCode() == 1) {
+    ((SongView &)v).OnSf2Done(dialog.GetReturnCode() == 1);
+}
+
+void SongView::OnSf2Done(bool ok) {
+    Project *project = viewData_->project_;
+    int ch = presetCh_;
+    if (ok) {
         int owner = project->GetTrackInstrument(ch);
         if (owner >= 0) {
             SampleInstrument *si = (SampleInstrument *)project->GetInstrumentBank()->GetInstrument(owner);
             std::string n = si->ZoneSetName();
             if (n.empty()) n = "Multicapa";
             project->SetTrackName(ch, n.c_str());
-            sv.SetNotification((n + " cargado").c_str());
+            View::SetNotification((n + " cargado").c_str());
         }
-    } else if (sv.newTrack_) {
-        project->DeleteTrack(ch);   // la pista nueva se queda sin nada: fuera
-        sv.clampTrackCursor();
+        endSoundChange(ch);
+    } else {
+        Player::GetInstance()->HoldTrack(ch, false);
+        if (!sesUndo_.empty()) sesUndo_.pop_back();   // no cambió nada
+        if (newTrack_) {
+            project->DeleteTrack(ch);   // la pista nueva se queda sin nada: fuera
+            clampTrackCursor();
+        }
     }
-    sv.newTrack_ = false;
-    sv.SetDirty(true);
+    newTrack_ = false;
+    isDirty_ = true;
 }
 
 void SongView::OnTrackBrowser(int code, const std::string &name) {
@@ -1572,8 +1624,10 @@ void SongView::OnTrackBrowser(int code, const std::string &name) {
         newTrack_ = false;
         int owner = project->GetTrackInstrument(ch);
         if (owner < 0) return;
+        beginSoundChange(ch);
         project->GetInstrumentBank()->GetInstrument(owner)->Purge();
         project->SetTrackName(ch, "Sample");
+        endSoundChange(ch);
         View::SetNotification("sample vacío: A en sample elige el archivo");
         goToInstrument(ch);
         return;
@@ -1582,6 +1636,7 @@ void SongView::OnTrackBrowser(int code, const std::string &name) {
         int owner = project->GetTrackInstrument(ch);
         if (owner < 0) return;
         viewData_->currentInstrument_ = owner;
+        beginSoundChange(ch);
         DoModal(new ImportSampleDialog(*this, false, true), TrackSf2Callback);
         return;
     }
@@ -1620,7 +1675,10 @@ void SongView::LoadTrackPreset(const std::string &name) {
     if (name.empty() || owner < 0 || owner >= MAX_SAMPLEINSTRUMENT_COUNT) return;
     SampleInstrument *si =
         (SampleInstrument *)project->GetInstrumentBank()->GetInstrument(owner);
-    if (!InstrumentPresets::Load(si, name)) {
+    beginSoundChange(ch);
+    bool ok = InstrumentPresets::Load(si, name);
+    endSoundChange(ch);
+    if (!ok) {
         View::SetNotification("No se pudo cargar el preset");
         return;
     }
@@ -1658,8 +1716,10 @@ void SongView::ApplyTrackType(int channel, int code, bool) {
             SampleInstrument *si =
                 (SampleInstrument *)project->GetInstrumentBank()->GetInstrument(owner);
             if (si->GetType() != IT_SAMPLE) return;
+            beginSoundChange(channel);
             si->MakeEmptyKit();
             project->SetTrackName(channel, "Kit");
+            endSoundChange(channel);
             View::SetNotification("kit nuevo: A+flechas elige el pad");
         }
         viewData_->currentInstrument_ = owner;

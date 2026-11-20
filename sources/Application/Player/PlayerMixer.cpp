@@ -19,6 +19,7 @@ PlayerMixer::PlayerMixer() {
 		channel_[i] = new PlayerChannel(i);
 		isChannelPlaying_[i] = false;
 		map_[i] = i;
+		hold_[i] = false;
     }
 }
 
@@ -158,6 +159,7 @@ void PlayerMixer::Update(Observable &o,I_ObservableData *d) {
 
 void PlayerMixer::StartInstrument(int channel,I_Instrument *instrument,unsigned char note,bool newInstrument)  {
 	int p=Phys(channel) ;
+	if (hold_[p]) return ;
 	channel_[p]->StartInstrument(instrument,note,newInstrument) ;
 	lastInstrument_[p]=instrument ;
 	notes_[p]=note ;
@@ -166,6 +168,7 @@ void PlayerMixer::StartInstrument(int channel,I_Instrument *instrument,unsigned 
 
 void PlayerMixer::StartVoice(int channel,I_Instrument *instrument,int voice,unsigned char note,int velocity) {
 	int p=Phys(channel) ;
+	if (hold_[p]) return ;
 	channel_[p]->StartVoice(instrument,voice,note,velocity) ;
 	lastInstrument_[p]=instrument ;
 }

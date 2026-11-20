@@ -1689,3 +1689,17 @@ void Player::RemoveTrack(int ch) {
     project_->DeleteTrack(ch);   // la canción, sus clips y su instrumento
     mixer_->Unlock();
 }
+
+void Player::HoldTrack(int ch, bool on) {
+    if (ch < 0 || ch >= SONG_CHANNEL_COUNT) return;
+    mixer_->Lock();
+    if (on) {
+        mixer_->ChokeChannel(ch);
+        mixer_->StopInstrument(ch);
+        timed_[ch].clear();
+        clearAutomation(ch);
+        TablePlayback::GetTablePlayback(ch).Stop();
+    }
+    mixer_->Hold(ch, on);
+    mixer_->Unlock();
+}

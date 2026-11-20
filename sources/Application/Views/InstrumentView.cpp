@@ -884,6 +884,13 @@ void InstrumentView::fillMidiParameters() {
 
 // trk2als: ¿el instrumento que se ve es el de una pista? Entonces solo se
 // cambia desde la cabecera de la pista, en la Song
+// trk2als: la pista que toca este instrumento (-1 si ninguna)
+static int ownerTrack(ViewData *vd) {
+	for (int ch=0;ch<SONG_CHANNEL_COUNT;ch++)
+		if (vd->project_->GetTrackInstrument(ch)==vd->currentInstrument_) return ch ;
+	return -1 ;
+}
+
 bool InstrumentView::ownedByTrack() {
 	Project *p=viewData_->project_ ;
 	for (int ch=0;ch<SONG_CHANNEL_COUNT;ch++) {
@@ -1879,7 +1886,11 @@ void InstrumentView::OnPresetFolder(const std::string &folder) {
 
 void InstrumentView::OnPresetLoad(const std::string &name) {
 	if (name.empty() || !current_ || current_->GetType()!=IT_SAMPLE) return ;
-	if (InstrumentPresets::Load((SampleInstrument *)current_,name)) {
+	int tr=ownerTrack(viewData_) ;   // la pista se calla mientras se reescribe
+	if (tr>=0) Player::GetInstance()->HoldTrack(tr,true) ;
+	bool loaded=InstrumentPresets::Load((SampleInstrument *)current_,name) ;
+	if (tr>=0) Player::GetInstance()->HoldTrack(tr,false) ;
+	if (loaded) {
 		std::string msg="Preset "+name+" cargado" ;
 		View::SetNotification(msg.c_str()) ;
 	} else {
@@ -2464,7 +2475,10 @@ void InstrumentView::openPadBrowser() {
 void InstrumentView::OnKitLoad(const std::string &name) {
 	if (name.empty() || !current_ || current_->GetType()!=IT_SAMPLE) return ;
 	padBusy_=true ;
+	int tr=ownerTrack(viewData_) ;
+	if (tr>=0) Player::GetInstance()->HoldTrack(tr,true) ;
 	bool ok=InstrumentPresets::Load((SampleInstrument *)current_,name) ;
+	if (tr>=0) Player::GetInstance()->HoldTrack(tr,false) ;
 	padBusy_=false ;
 	std::string shortName=name.substr(name.rfind('/')==std::string::npos?0:name.rfind('/')+1) ;
 	if (ok && ownedByTrack()) viewData_->project_->SetTrackName(viewData_->songX_,shortName.c_str()) ;
