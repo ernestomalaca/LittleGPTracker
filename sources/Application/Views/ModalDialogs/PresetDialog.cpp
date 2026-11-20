@@ -1,3 +1,4 @@
+#include "Application/Instruments/SamplePool.h"
 #include "PresetDialog.h"
 #include "Application/Instruments/InstrumentPresets.h"
 #include "Application/Instruments/WavFile.h"
@@ -209,6 +210,21 @@ void PresetDialog::load() {
 	}
 	selected_ = 0 ;
 	top_ = 0 ;
+}
+
+// trk2als: el sonido que ya tiene la pista: palomita (y en sus carpetas)
+bool PresetDialog::isCurrent(const Entry &e) {
+	if (!launcher_ || e.kind != K_PRESET) return false ;
+	std::string cur = launcher_->LaunchCurrent() ;
+	if (cur.empty()) return false ;
+	if (cur.find('/') == std::string::npos) return cur == e.name ;
+	return cur == full(e.name) ;
+}
+
+bool PresetDialog::holdsCurrent(const std::string &folder) {
+	if (!launcher_ || folder.empty()) return false ;
+	std::string cur = launcher_->LaunchCurrent() ;
+	return cur.size() > folder.size() && cur.compare(0, folder.size(), folder) == 0 && cur[folder.size()] == '/' ;
 }
 
 static void NewFolderCallback(View &v, ModalView &dialog) {
@@ -436,6 +452,14 @@ static int folderKind(const std::string &f) {
 	return -1 ;
 }
 
+// trk2als: una palomita en un circulito (el sonido que tiene la pista)
+void PresetDialog::checkBadge(int bx, int by, GUIColor fg, GUIColor bg) {
+	FillRect(bx - 2, by - 2, 19, 19, bg, 9) ;
+	FillRect(bx, by, 15, 15, fg, 7) ;
+	for (int k = 0; k < 3; k++) FillRect(bx + 3 + k, by + 7 + k, 2, 2, bg) ;
+	for (int k = 0; k < 6; k++) FillRect(bx + 5 + k, by + 9 - k, 2, 2, bg) ;
+}
+
 void PresetDialog::drawShapes() {
 	const int PX = 8, PY = 8, PW = 624, PH = 464 ;
 	DrawPanel(PX, PY, PW, PH) ;
@@ -471,10 +495,11 @@ void PresetDialog::drawShapes() {
 			x += 22 ;
 		}
 		if (n.depth > 0) x += 12 ;   // las de adentro, corridas
-		int room = (TX + TW - 10 - x) / 16 ;
+		int room = (TX + TW - (holdsCurrent(n.path) ? 30 : 10) - x) / 16 ;
 		if (TextLen(label) > room) label = label.substr(0, room > 2 ? room - 2 : 1) + ".." ;
 		GUIColor c = sel ? (col_ == 0 ? bg : acc) : (n.depth == 0 ? fg : dim) ;
 		DrawText(x, y + 1, label.c_str(), c, 1) ;
+		if (holdsCurrent(n.path)) checkBadge(TX + TW - 26, y + 2, sel && col_ == 0 ? bg : fg, sel && col_ == 0 ? acc : colBg) ;
 	}
 
 	// la lista
@@ -500,6 +525,7 @@ void PresetDialog::drawShapes() {
 			GUIColor c1 = kindColor(e.ptype, false), c2 = kindColor(e.ptype, true) ;
 			FillRect(sx, sy, ss, ss, c1, 7) ;
 			FillRect(sx + 13, sy + 13, ss - 13, ss - 13, c2, 9) ;
+			if (isCurrent(e)) checkBadge(sx + ss - 15, sy + ss - 15, fg, bg) ;   // el que tiene la pista
 			char b[32] ;
 			if (e.ptype == InstrumentPresets::PK_KIT) snprintf(b, sizeof(b), "%d pads", e.zones) ;
 			else if (e.ptype == InstrumentPresets::PK_MULTI) snprintf(b, sizeof(b), "multicapa · %d zonas", e.zones) ;
@@ -519,6 +545,7 @@ void PresetDialog::drawShapes() {
 				FillRect(sx, sy + 10, ss, ss - 12, c1, 6) ;
 				FillRect(sx, sy + 10, ss, 5, c2, 2) ;
 				name = name.substr(0, name.size() - 1) ;
+				if (holdsCurrent(full(name))) checkBadge(sx + ss - 15, sy + ss - 15, fg, bg) ;   // aquí adentro está
 				char b[24] ;
 				snprintf(b, sizeof(b), e.zones == 1 ? "1 sonido" : "%d sonidos", e.zones) ;
 				sub = b ;

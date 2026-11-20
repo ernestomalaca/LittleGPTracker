@@ -29,6 +29,8 @@ public:
 	// cómo va ese preset; permille: lo leído (LOADING) o lo que va del compás (WAITING)
 	virtual int LaunchState(const std::string &name, int &permille) = 0 ;
 	virtual bool LaunchPlaying() = 0 ;   // ¿la música está andando? (entonces no hay pre-escucha)
+	// el sonido que tiene la pista ("Kits/Cumbia/KIT 1", o solo "KIT 1" si no se sabe de dónde)
+	virtual std::string LaunchCurrent() = 0 ;
 } ;
 
 class PresetDialog : public ModalView {
@@ -59,6 +61,9 @@ private:
 		int ptype ;     // tipo de preset (kit, multicapa, sample)
 		int zones ;
 	} ;
+	bool isCurrent(const Entry &e) ;
+	bool holdsCurrent(const std::string &folder) ;
+	void checkBadge(int x, int y, GUIColor fg, GUIColor bg) ;
 	struct Node {       // la columna de carpetas
 		std::string path ;
 		std::string label ;

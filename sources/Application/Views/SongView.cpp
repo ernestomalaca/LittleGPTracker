@@ -65,7 +65,7 @@ SongView::SongView(GUIWindow &w, ViewData *viewData, const char *song)
     presetCh_ = -1;
     newTrack_ = false;
     lJob_ = 0;
-    lCh_ = lSoundCh_ = -1;
+    lCh_ = -1;
     lPhase_ = 0;
     lVisitUndo_ = false;
     lPrevStep_ = -1;
@@ -1572,7 +1572,6 @@ void SongView::openTrackBrowser(int ch, bool isNew) {
     d->SetEmptyOptions(true);
     d->SetLauncher(this);   // trk2als: A lanza el sonido a la pista (entra en el 1)
     lVisitUndo_ = false;    // lo que se pruebe en esta visita se deshace de una vez
-    lSounding_.clear();
     DoModal(d, TrackPresetCallback);
 }
 
@@ -1745,6 +1744,7 @@ void SongView::LoadTrackPreset(const std::string &name) {
     }
     std::string shortName = name.substr(name.rfind('/') == std::string::npos ? 0 : name.rfind('/') + 1);
     project->SetTrackName(ch, shortName.c_str());
+    trackPreset_[ch] = name;
     View::SetNotification((shortName + (cleaned ? " cargado\nse quitaron samples que nadie usaba" : " cargado")).c_str());
     headerMode_ = false;   // trk2als: de la cabecera al primer clip de la pista
     viewData_->songX_ = ch;
@@ -2788,6 +2788,19 @@ static void launchWakeSoon() {}
 
 bool SongView::LaunchPlaying() { return Player::GetInstance()->IsRunning(); }
 
+// trk2als: el sonido que tiene la pista: el preset con su carpeta si se cargó
+// en esta sesión (y la pista sigue llamándose así); si no, solo su nombre
+std::string SongView::LaunchCurrent() {
+    int ch = presetCh_;
+    Project *project = viewData_->project_;
+    if (ch < 0 || ch >= SONG_CHANNEL_COUNT || !project->TrackExists(ch)) return "";
+    std::string tn = project->GetTrackName(ch);
+    const std::string &full = trackPreset_[ch];
+    std::string leaf = full.substr(full.rfind('/') == std::string::npos ? 0 : full.rfind('/') + 1);
+    if (!full.empty() && leaf == tn) return full;
+    return tn;
+}
+
 void SongView::Launch(const std::string &name) {
     Project *project = viewData_->project_;
     int ch = presetCh_;
@@ -2820,7 +2833,11 @@ int SongView::LaunchState(const std::string &name, int &permille) {
         permille = Player::GetInstance()->BarStep() * 1000 / 16;
         return LS_WAITING;
     }
-    if (!lSounding_.empty() && name == lSounding_ && lSoundCh_ == presetCh_) return LS_SOUNDING;
+    std::string cur = LaunchCurrent();
+    if (!cur.empty()) {
+        std::string leaf = name.substr(name.rfind('/') == std::string::npos ? 0 : name.rfind('/') + 1);
+        if (cur == name || (cur.find('/') == std::string::npos && cur == leaf)) return LS_SOUNDING;
+    }
     return LS_NONE;
 }
 
@@ -2833,8 +2850,8 @@ void SongView::launchCancel() {
 void SongView::launchTrackRemoved(int ch) {
     if (lPhase_ && lCh_ == ch) launchCancel();
     else if (lPhase_ && lCh_ > ch) lCh_--;
-    if (lSoundCh_ == ch) { lSounding_.clear(); lSoundCh_ = -1; }
-    else if (lSoundCh_ > ch) lSoundCh_--;
+    for (int i = ch; i < SONG_CHANNEL_COUNT - 1; i++) trackPreset_[i] = trackPreset_[i + 1];
+    trackPreset_[SONG_CHANNEL_COUNT - 1].clear();
 }
 
 bool SongView::Tick() {
@@ -2919,8 +2936,7 @@ void SongView::launchApply() {
     }
     std::string shortName = name.substr(name.rfind('/') == std::string::npos ? 0 : name.rfind('/') + 1);
     project->SetTrackName(ch, shortName.c_str());
-    lSounding_ = name;
-    lSoundCh_ = ch;
+    trackPreset_[ch] = name;
     if (!HasModal()) View::SetNotification((shortName + " cargado").c_str());
     isDirty_ = true;
 }

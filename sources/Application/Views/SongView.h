@@ -31,6 +31,7 @@ class SongView : public View, public PresetLauncher {
     virtual void Launch(const std::string &name);
     virtual int LaunchState(const std::string &name, int &permille);
     virtual bool LaunchPlaying();
+    virtual std::string LaunchCurrent();
 
   protected:
     void processNormalButtonMask(unsigned int mask);
@@ -111,8 +112,7 @@ class SongView : public View, public PresetLauncher {
     std::string lName_;          // lo que se está cargando o espera el 1
     int lCh_;
     int lPhase_;                 // 0 nada, 1 leyendo, 2 esperando el 1
-    std::string lSounding_;      // lo último que entró (para marcarlo en el navegador)
-    int lSoundCh_;
+    std::string trackPreset_[SONG_CHANNEL_COUNT];   // el preset (con su carpeta) que tiene cada pista
     bool lVisitUndo_;            // ya se guardó el deshacer de esta visita al navegador
     int lPrevStep_;
     unsigned long lStep15At_;
