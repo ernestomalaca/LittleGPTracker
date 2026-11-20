@@ -47,6 +47,12 @@ class AppWindow : public GUIWindow, I_Observer, Status {
     void AddRect(int x, int y, int w, int h, GUIColor color, int radius = 0,
                  int thick = 0);
     void AddText(int x, int y, const char *text, GUIColor color, int scale = 1);
+    // trk2als: capas para las ventanas (0 = la pantalla, 1 = su ventana, 2 =
+    // la ventana de la ventana...). Cada capa va encima de la anterior, con
+    // su texto de rejilla debajo
+    int ShapeLayer() { return _layer; }
+    void SetShapeLayer(int l) { _layer = l < 0 ? 0 : (l > 3 ? 3 : l); }
+    void TrimShapeLayers(int keep);   // borra las capas más hondas que 'keep'
     GUIColor GetColor(ColorDefinition cd);
 
   protected: // GUIWindow implementation
@@ -119,6 +125,11 @@ class AppWindow : public GUIWindow, I_Observer, Status {
                   scale(1), color(0, 0, 0) {}
     };
     std::vector<Shape> _shapes;
+    std::vector<Shape> _layers[4];   // [0] no se usa: es _shapes
+    int _layer;
+    std::vector<Shape> &target() { return _layer == 0 ? _shapes : _layers[_layer]; }
+    void markCells(std::vector<Shape> &v);
+    void paintShapes(std::vector<Shape> &v);
     bool _shapeCells[1200];     // celdas tapadas por figuras en este cuadro
     bool _prevShapeCells[1200]; // ... y en el anterior (hay que redibujarlas)
     // trk2als: pantalla de arranque (Chancho 6); SPLASH en config.xml (ms, 0 = sin)
@@ -141,6 +152,7 @@ class AppWindow : public GUIWindow, I_Observer, Status {
     void hideHelp();
     bool _shapesDirty;          // las figuras cambiaron: redibujar sus celdas
     bool _prevShapesOn;
+    bool _prevViewShapesOn;
 
     static GUIColor backgroundColor_;
     static GUIColor normalColor_;

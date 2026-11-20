@@ -4,6 +4,8 @@
 #include "Application/Views/BaseClasses/ModalView.h"
 #include "System/FileSystem/FileSystem.h"
 #include "System/Errors/Result.h"
+#include <vector>
+#include <string>
 
 class SelectProjectDialog:public ModalView {
 public:
@@ -14,6 +16,7 @@ public:
 	virtual void OnPlayerUpdate(PlayerEventType ,unsigned int currentTick) ;
 	virtual void OnFocus() ;
 	virtual void ProcessButtonMask(unsigned short mask,bool pressed) ;
+	virtual bool UsesShapes() { return SupportsShapes() ; }
 
 	Result OnNewProject(std::string &name) ;
     Result OnDeleteProject(const Path &projectPath);
@@ -24,6 +27,9 @@ public:
   protected:
     void warpToNextProject(int amount) ;
 	void setCurrentFolder(Path &path) ;
+	void drawGrid() ;
+	void drawShapes() ;
+	int pageSize() ;
 
 private:
   T_SimpleList<Path> content_;
@@ -34,6 +40,8 @@ private:
   Path selection_;
   static Path lastFolder_;
   static int lastProject_;
+  static std::string lastName_;   // trk2als: la lista va por fecha: se busca por nombre
+  std::vector<long> times_;       // trk2als: cuándo se usó cada uno (0 = carpeta)
 } ;
 
 #endif

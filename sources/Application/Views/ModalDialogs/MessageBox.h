@@ -32,7 +32,15 @@ public:
 	virtual void OnPlayerUpdate(PlayerEventType ,unsigned int currentTick) ;
 	virtual void OnFocus() ;
 	virtual void ProcessButtonMask(unsigned short mask,bool pressed) ;
+	virtual bool UsesShapes() { return SupportsShapes() ; }
+	// trk2als: título en el color de acento (si no, la primera línea de un
+	// mensaje de varias líneas hace de título) y nombres propios a los botones
+	MessageBox &Title(const char *t) { title_=t ; return *this ; }
+	MessageBox &Label(int which,const char *text) ;
 private:
+	void drawShapes() ;
+	std::string title_ ;
+	std::string label_[MBL_LAST] ;
 	std::string message_ ;	
 	int button_[4] ;
 	int buttonCount_ ;

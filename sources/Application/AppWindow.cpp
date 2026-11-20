@@ -17,6 +17,9 @@
 #include "Views/UIController.h"
 #include <string.h>
 #include <stdlib.h>
+#if defined(__unix__) || defined(__APPLE__)
+#include <utime.h>
+#endif
 #include "Resources/hdfont.h"
 #include "Application/Model/Config.h"
 
@@ -165,6 +168,8 @@ AppWindow::AppWindow(I_GUIWindowImp &imp) : GUIWindow(imp) {
     memset(_prevShapeCells, 0, sizeof(_prevShapeCells));
     _shapesDirty = true;
     _prevShapesOn = false;
+    _prevViewShapesOn = false;
+    _layer = 0;
     memset(_charScreen, ' ', 1200);
     memset(_preScreen, ' ', 1200);
     memset(_charScreenProp, 0, 1200);
@@ -279,28 +284,22 @@ void AppWindow::Flush() {
 
     // trk2als: celdas tapadas por figuras. Las figuras no se dibujan si hay un
     // diálogo encima o si la plataforma no sabe dibujarlas.
+    // trk2als: celdas tapadas por figuras. Las de la pantalla no se dibujan si
+    // hay una ventana de rejilla encima (las ventanas con figuras sí las dejan
+    // ver) o si la plataforma no sabe dibujarlas.
     bool shapesOn = !_shapes.empty() && SupportsShapes() && _currentView &&
-                    !_currentView->HasModal();
+                    _currentView->ModalChainShapes();
+    bool layersOn = false;
+    if (SupportsShapes())
+        for (int l = 1; l < 4; l++) if (!_layers[l].empty()) layersOn = true;
     memset(_shapeCells, 0, sizeof(_shapeCells));
-    if (shapesOn) {
-        for (size_t i = 0; i < _shapes.size(); i++) {
-            Shape &sh = _shapes[i];
-            int w = sh.w, h = sh.h;
-            if (sh.type == 1) {
-                w = (sh.scale > 0 ? 16 * sh.scale : 8) * (int)sh.text.size();
-                h = sh.scale > 0 ? 16 * sh.scale : 12;
-            }
-            int cx0 = MAX(0, sh.x / 16), cy0 = MAX(0, sh.y / 16);
-            int cx1 = MIN(39, (sh.x + w - 1) / 16), cy1 = MIN(29, (sh.y + h - 1) / 16);
-            for (int cy = cy0; cy <= cy1; cy++)
-                for (int cx = cx0; cx <= cx1; cx++)
-                    _shapeCells[cx + 40 * cy] = true;
-        }
-    }
+    if (shapesOn) markCells(_shapes);
+    if (layersOn) for (int l = 1; l < 4; l++) markCells(_layers[l]);
+    bool anyOn = shapesOn || layersOn;
 
     // Las celdas tapadas solo se redibujan si las figuras cambiaron o si cambió
     // el texto de alguna de ellas (entonces se repinta todo el bloque de figuras)
-    if (shapesOn != _prevShapesOn) _shapesDirty = true;
+    if (anyOn != _prevShapesOn || shapesOn != _prevViewShapesOn) _shapesDirty = true;
     if (!_shapesDirty) {
         for (int cell = 0; cell < 1200; cell++) {
             if ((_shapeCells[cell] || _prevShapeCells[cell]) &&
@@ -352,20 +351,8 @@ void AppWindow::Flush() {
         pos._x = 0;
     }
 
-    if (shapesOn && _shapesDirty) {
-        for (size_t i = 0; i < _shapes.size(); i++) {
-            Shape &sh = _shapes[i];
-            if (sh.type == 0) {
-                GUIRect r(sh.x, sh.y, sh.x + sh.w, sh.y + sh.h);
-                if (sh.thick > 0)
-                    GUIWindow::FrameRoundRect(r, sh.radius, sh.thick, sh.color);
-                else
-                    GUIWindow::FillRoundRect(r, sh.radius, sh.color);
-            } else {
-                GUIPoint p(sh.x, sh.y);
-                GUIWindow::BlendText(sh.text.c_str(), p, sh.color, sh.scale);
-            }
-        }
+    if (anyOn && _shapesDirty) {
+        if (shapesOn) paintShapes(_shapes);
         // el texto de la rejilla que cae sobre figuras, encima de ellas
         for (int cell = 0; cell < 1200; cell++) {
             if (!_shapeCells[cell]) continue;
@@ -384,9 +371,11 @@ void AppWindow::Flush() {
                 GUIWindow::BlendText(str, p, fg, 1);
             }
         }
+        // las ventanas con figuras, encima de todo lo de abajo
+        if (layersOn) for (int l = 1; l < 4; l++) paintShapes(_layers[l]);
     }
     // trk2als: la ayuda va encima de todo (rejilla y figuras)
-    if (_overlayOn && (_overlayDirty || count > 0 || (shapesOn && _shapesDirty))) {
+    if (_overlayOn && (_overlayDirty || count > 0 || (anyOn && _shapesDirty))) {
         for (size_t i = 0; i < _overlay.size(); i++) {
             Shape &sh = _overlay[i];
             if (sh.type == 0) {
@@ -404,7 +393,8 @@ void AppWindow::Flush() {
     }
     memcpy(_prevShapeCells, _shapeCells, sizeof(_shapeCells));
     _shapesDirty = false;
-    _prevShapesOn = shapesOn;
+    _prevShapesOn = anyOn;
+    _prevViewShapesOn = shapesOn;
 
     long flushEnd = System::GetInstance()->GetClock();
     GUIWindow::Flush();
@@ -426,6 +416,13 @@ void AppWindow::LoadProject(const Path &p) {
 
     Path::SetAlias("project", _root.GetPath().c_str());
     Path::SetAlias("samples", "project:samples");
+#if defined(__unix__) || defined(__APPLE__)
+    {   // trk2als: la carpeta recuerda cuándo se abrió (el navegador dice "hace 3 horas")
+        Path r(_root);
+        std::string c = r.GetCanonicalPath();
+        utime(c.c_str(), NULL);
+    }
+#endif
 
     // Load the sample pool
 
@@ -836,6 +833,7 @@ void AppWindow::Update(Observable &o, I_ObservableData *d) {
             break;
         }
         _shapes.clear(); // trk2als: las figuras son de la pantalla anterior
+        TrimShapeLayers(0);
         _shapesDirty = true;
         _currentView->SetFocus(*vt);
         _isDirty = true;
@@ -942,8 +940,49 @@ GUIColor AppWindow::GetColor(ColorDefinition cd) {
 bool AppWindow::SupportsShapes() { return GUIWindow::SupportsShapes(); }
 
 void AppWindow::ClearShapes() {
-    _shapes.clear();
+    target().clear();
     _shapesDirty = true;
+}
+
+void AppWindow::TrimShapeLayers(int keep) {
+    for (int l = keep + 1; l < 4; l++) {
+        if (!_layers[l].empty()) {
+            _layers[l].clear();
+            _shapesDirty = true;
+        }
+    }
+}
+
+void AppWindow::markCells(std::vector<Shape> &v) {
+    for (size_t i = 0; i < v.size(); i++) {
+        Shape &sh = v[i];
+        int w = sh.w, h = sh.h;
+        if (sh.type == 1) {
+            w = (sh.scale > 0 ? 16 * sh.scale : 8) * (int)sh.text.size();
+            h = sh.scale > 0 ? 16 * sh.scale : 12;
+        }
+        int cx0 = MAX(0, sh.x / 16), cy0 = MAX(0, sh.y / 16);
+        int cx1 = MIN(39, (sh.x + w - 1) / 16), cy1 = MIN(29, (sh.y + h - 1) / 16);
+        for (int cy = cy0; cy <= cy1; cy++)
+            for (int cx = cx0; cx <= cx1; cx++)
+                _shapeCells[cx + 40 * cy] = true;
+    }
+}
+
+void AppWindow::paintShapes(std::vector<Shape> &v) {
+    for (size_t i = 0; i < v.size(); i++) {
+        Shape &sh = v[i];
+        if (sh.type == 0) {
+            GUIRect r(sh.x, sh.y, sh.x + sh.w, sh.y + sh.h);
+            if (sh.thick > 0)
+                GUIWindow::FrameRoundRect(r, sh.radius, sh.thick, sh.color);
+            else
+                GUIWindow::FillRoundRect(r, sh.radius, sh.color);
+        } else {
+            GUIPoint p(sh.x, sh.y);
+            GUIWindow::BlendText(sh.text.c_str(), p, sh.color, sh.scale);
+        }
+    }
 }
 
 void AppWindow::AddRect(int x, int y, int w, int h, GUIColor color, int radius,
@@ -953,7 +992,7 @@ void AppWindow::AddRect(int x, int y, int w, int h, GUIColor color, int radius,
     sh.x = x; sh.y = y; sh.w = w; sh.h = h;
     sh.radius = radius; sh.thick = thick;
     sh.color = color;
-    _shapes.push_back(sh);
+    target().push_back(sh);
     _shapesDirty = true;
 }
 
@@ -964,7 +1003,7 @@ void AppWindow::AddText(int x, int y, const char *text, GUIColor color, int scal
     sh.text = text;
     sh.scale = scale;
     sh.color = color;
-    _shapes.push_back(sh);
+    target().push_back(sh);
     _shapesDirty = true;
 }
 

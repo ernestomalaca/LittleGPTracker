@@ -36,6 +36,14 @@ void ModalView::SetWindow(int width, int height) {
     if (top_ < 2) {
         top_ = 2;
     }
+    if (SupportsShapes()) {
+        // trk2als: borde claro redondeado, como la ventana de ayuda
+        ClearRect(-2, -2, width + 4, height + 4);
+        int x = (left_ - 2) * 16 + 4, y = (top_ - 2) * 16 + 4;
+        FrameRect(x, y, (width + 4) * 16 - 8, (height + 4) * 16 - 8,
+                  ColorOf(CD_NORMAL), 6, 3);
+        return;
+    }
     ClearRect(-1, -1, width + 2, height + 2);
 
     SetColor(CD_BORDER);
@@ -52,3 +60,12 @@ void ModalView::SetWindow(int width, int height) {
         DrawString(width + 1, i - 1, line, props);
     }
 };
+
+void ModalView::DrawPanel(int x, int y, int w, int h) {
+    left_ = top_ = 0;
+    int cx0 = x / 16, cy0 = y / 16;
+    int cx1 = (x + w - 1) / 16, cy1 = (y + h - 1) / 16;
+    View::ClearRect(cx0, cy0, cx1 - cx0 + 1, cy1 - cy0 + 1);
+    FillRect(x, y, w, h, ColorOf(CD_BACKGROUND), 6);
+    FrameRect(x, y, w, h, ColorOf(CD_NORMAL), 6, 3);
+}

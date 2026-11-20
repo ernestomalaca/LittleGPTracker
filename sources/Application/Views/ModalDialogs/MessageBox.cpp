@@ -4,9 +4,9 @@
 #include <string.h>
 
 static const char *buttonText[MBL_LAST] = {
-	"Ok",
-	"Yes",
-	"Cancel",
+	"Va",
+	"Si",
+	"Cancelar",
 	"No"
 } ;
 
@@ -23,12 +23,19 @@ MessageBox::MessageBox(View &view,const char *message,int btnFlags):
 	}
 	selected_=buttonCount_-1 ;
 	NAssert(buttonCount_!=0) ;
+	for (int i=0;i<MBL_LAST;i++) label_[i]=buttonText[i] ;
 } ;
+
+MessageBox &MessageBox::Label(int which,const char *text) {
+	if (which>=0 && which<MBL_LAST) label_[which]=text ;
+	return *this ;
+}
 
 MessageBox::~MessageBox() {
 } ;
 
 void MessageBox::DrawView() {
+	if (SupportsShapes()) { drawShapes() ; return ; }
 // message size (trk2als: puede tener varias líneas, separadas por '\n')
 	std::vector<std::string> lines ;
 	{
@@ -66,7 +73,7 @@ void MessageBox::DrawView() {
 	int offset=width/(buttonCount_+1) ;
 
 	for (int i=0;i<buttonCount_;i++) {
-		const char *text=buttonText[button_[i]] ;
+		const char *text=label_[button_[i]].c_str() ;
 		x=offset*(i+1)-strlen(text)/2 ;
 		props.invert_=(i==selected_)?true:false ;
 		DrawString(x,y,text,props) ;
@@ -82,13 +89,14 @@ void MessageBox::ProcessButtonMask(unsigned short mask,bool pressed) {
 	if (mask&EPBM_A) {
 		EndModal(button_[selected_]) ;
 	}
-	if (mask&EPBM_LEFT) {
+	// trk2als: izquierda / derecha como se ven los botones
+	if (mask&EPBM_RIGHT) {
 		selected_=(selected_+1) ;
 		if (selected_>=buttonCount_) {
 			selected_=0 ;
 		}
 	} 
-	if (mask&EPBM_RIGHT) {
+	if (mask&EPBM_LEFT) {
 		selected_=(selected_-1) ;
 		if (selected_<0) {
 			selected_=buttonCount_-1 ;
@@ -97,3 +105,66 @@ void MessageBox::ProcessButtonMask(unsigned short mask,bool pressed) {
 	isDirty_=true ;
 } ;
 
+
+// trk2als: la ventana como la de la ayuda: fondo oscuro, borde claro, el
+// título en el color de acento, el texto en claro y los botones como
+// pastillas (la elegida, rellena)
+void MessageBox::drawShapes() {
+	std::vector<std::string> lines ;
+	{
+		std::string rest=message_ ;
+		size_t nl ;
+		while ((nl=rest.find('\n'))!=std::string::npos) {
+			lines.push_back(rest.substr(0,nl)) ;
+			rest=rest.substr(nl+1) ;
+		}
+		lines.push_back(rest) ;
+	}
+	std::string title=title_ ;
+	if (title.empty() && lines.size()>1) {
+		title=lines[0] ;
+		lines.erase(lines.begin()) ;
+	}
+	const int PAD=32, LINE=24, BH=36, GAP=16 ;
+	int textW=(int)title.size()*16 ;
+	for (size_t i=0;i<lines.size();i++)
+		if ((int)lines[i].size()*16>textW) textW=lines[i].size()*16 ;
+	int bw[4], btnW=0 ;
+	for (int i=0;i<buttonCount_;i++) {
+		bw[i]=((int)label_[button_[i]].size()+2)*16 ;
+		if (bw[i]<96) bw[i]=96 ;
+		btnW+=bw[i]+(i?GAP:0) ;
+	}
+	int w=(textW>btnW?textW:btnW)+2*PAD ;
+	if (w<352) w=352 ;
+	if (w>624) w=624 ;
+	int h=PAD+(title.empty()?0:LINE+8)+(int)lines.size()*LINE+16+BH+PAD ;
+	int x=(640-w)/2, y=(480-h)/2 ;
+	DrawPanel(x,y,w,h) ;
+
+	GUIColor bg=ColorOf(CD_BACKGROUND), fg=ColorOf(CD_NORMAL) ;
+	GUIColor acc=ColorOf(CD_HILITE2), dim=Mix(bg,fg,40) ;
+	int ty=y+PAD ;
+	if (!title.empty()) {
+		DrawText(x+PAD,ty,title.c_str(),acc,1) ;
+		ty+=LINE+8 ;
+	}
+	for (size_t i=0;i<lines.size();i++) {
+		DrawText(x+PAD,ty,lines[i].c_str(),fg,1) ;
+		ty+=LINE ;
+	}
+	// los botones, a la derecha como en las ventanas de siempre
+	int bx=x+w-PAD-btnW, by=y+h-PAD-BH ;
+	for (int i=0;i<buttonCount_;i++) {
+		const std::string &t=label_[button_[i]] ;
+		int tx=bx+(bw[i]-(int)t.size()*16)/2, tyb=by+(BH-16)/2 ;
+		if (i==selected_) {
+			FillRect(bx,by,bw[i],BH,acc,6) ;
+			DrawText(tx,tyb,t.c_str(),bg,1) ;
+		} else {
+			FrameRect(bx,by,bw[i],BH,dim,6,2) ;
+			DrawText(tx,tyb,t.c_str(),fg,1) ;
+		}
+		bx+=bw[i]+GAP ;
+	}
+}

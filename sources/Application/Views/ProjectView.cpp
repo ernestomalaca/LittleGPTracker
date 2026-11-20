@@ -281,8 +281,10 @@ void ProjectView::Update(Observable &,I_ObservableData *data) {
 			break ;
 		case ACTION_PURGE_INSTRUMENT:
 		{
-            MessageBox *mb = new MessageBox(*this, "Purge unused samples?",
-                                            MBBF_YES | MBBF_NO);
+            MessageBox *mb = new MessageBox(
+                *this, "Limpiar los samples?\nSe borran los que\nningun instrumento usa",
+                MBBF_YES | MBBF_NO);
+            mb->Label(MBL_YES, "Limpiar");
             DoModal(mb,PurgeCallback) ;
 			break ;
 		}
@@ -334,13 +336,16 @@ void ProjectView::Update(Observable &,I_ObservableData *data) {
         }
         case ACTION_LOAD: {
             MessageBox *mb = new MessageBox(
-                *this, "Load song and lose changes ?", MBBF_YES | MBBF_NO);
+                *this, "Cambiamos de cancion?\nLo que no guardaste\nse queda en el camino", MBBF_YES | MBBF_NO);
+            mb->Label(MBL_YES, "Cambiar").Label(MBL_NO, "Sigo aqui");
             DoModal(mb, LoadCallback);
             break;
         }
         case ACTION_QUIT: {
-            MessageBox *mb = new MessageBox(*this, "Quit and lose faith ?",
-                                            MBBF_YES | MBBF_NO);
+            // trk2als: con sabor de aquí
+            MessageBox *mb = new MessageBox(
+                *this, "Zarpamos?\nLo que no guardaste\nse lo lleva la marea", MBBF_YES | MBBF_NO);
+            mb->Label(MBL_YES, "Zarpar").Label(MBL_NO, "Me quedo");
             DoModal(mb, QuitCallback);
             break;
         }

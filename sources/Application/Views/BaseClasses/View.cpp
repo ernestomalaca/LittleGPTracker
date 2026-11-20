@@ -204,18 +204,29 @@ void View::DoModal(ModalView *view,ModalViewCallback cb) {
 } ;
 
 void View::Redraw() {
+	AppWindow &aw=(AppWindow &)w_ ;
+	int layer=aw.ShapeLayer() ;
 	if (modalView_) {
 		if (isDirty_) {
 			ClearShapes() ;
 			DrawView() ;
 		}
+		// trk2als: la ventana dibuja sus figuras en su propia capa, encima
+		aw.SetShapeLayer(layer+1) ;
 		modalView_->Redraw() ;
+		aw.SetShapeLayer(layer) ;
 	} else {
 		ClearShapes() ;   // trk2als: cada vista vuelve a poner sus figuras
 		DrawView() ;
+		aw.TrimShapeLayers(layer) ;   // las ventanas que ya se cerraron
 	}
 	isDirty_=false ;
 } ;
+
+bool View::ModalChainShapes() {
+	if (!modalView_) return true ;
+	return modalView_->UsesShapes() && modalView_->ModalChainShapes() ;
+}
 
 void View::SetDirty(bool isDirty) {
 	isDirty_=true ;

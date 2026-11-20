@@ -11,6 +11,8 @@ class ModalView : public View {
 
     bool IsFinished();
     int GetReturnCode();
+    // trk2als: la ventana se dibuja toda con figuras (no con la rejilla)
+    virtual bool UsesShapes() { return false; }
 
   protected:
     void SetWindow(int width, int height);
@@ -18,6 +20,9 @@ class ModalView : public View {
     virtual void DrawString(int x, int y, const char *txt,
                             GUITextProperties &props);
     void EndModal(int returnCode);
+    // trk2als: el recuadro como el de la ayuda (fondo oscuro, borde claro),
+    // en pixeles; borra la rejilla de abajo
+    void DrawPanel(int x, int y, int w, int h);
 
   private:
     bool finished_;

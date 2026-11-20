@@ -137,6 +137,9 @@ class View : public Observable {
     // trk2als: pinceles, en pixeles de 640x480 (una celda de texto = 16x16)
     bool SupportsShapes();
     bool HasModal() { return modalView_ != 0; };
+    // trk2als: todas las ventanas abiertas se dibujan con figuras (dejan ver
+    // las figuras de la pantalla)
+    bool ModalChainShapes();
     void ClearShapes();
     void FillRect(int x, int y, int w, int h, GUIColor c, int radius = 0);
     void FrameRect(int x, int y, int w, int h, GUIColor c, int radius = 0,
