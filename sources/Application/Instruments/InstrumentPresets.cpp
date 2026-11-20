@@ -412,9 +412,16 @@ void InstrumentPresets::Restore(SampleInstrument *instr, const Snapshot &s) {
 	instr->SetZones(zones) ;
 }
 
-bool InstrumentPresets::Prepare(const std::string &name) {
-	Info info ;
-	if (!Describe(name, info)) return false ;
+// trk2als: Prepare corre en un hilo de baja prioridad (de CPU y de disco),
+// que el sistema atiende después del audio: en la consola, copiar a la
+// tarjeta con prioridad normal dejaba al audio sin turno (huecos). La
+// interfaz espera a que termine.
+extern volatile bool g_importGentle ;
+struct PrepareJob { std::string name ; bool ok ; } ;
+
+static bool prepareNow(const std::string &name) {
+	InstrumentPresets::Info info ;
+	if (!InstrumentPresets::Describe(name, info)) return false ;
 	SamplePool *pool = SamplePool::GetInstance() ;
 	std::vector<std::string> files(info.zoneFiles) ;
 	if (!info.sample.empty()) files.push_back(info.sample) ;
@@ -425,4 +432,37 @@ bool InstrumentPresets::Prepare(const std::string &name) {
 		if (pool->ImportSample(src) < 0) return false ;
 	}
 	return true ;
+}
+
+#if defined(__linux__)
+#include <pthread.h>
+#include <sys/resource.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+static void *prepareThread(void *arg) {
+	PrepareJob *job = (PrepareJob *)arg ;
+	pid_t tid = (pid_t)syscall(SYS_gettid) ;
+	setpriority(PRIO_PROCESS, tid, 19) ;                       // CPU: lo último
+#ifdef SYS_ioprio_set
+	syscall(SYS_ioprio_set, 1 /*IOPRIO_WHO_PROCESS*/, tid, 3 << 13 /*IDLE*/) ;   // disco: lo último
+#endif
+	g_importGentle = true ;
+	job->ok = prepareNow(job->name) ;
+	g_importGentle = false ;
+	return 0 ;
+}
+#endif
+
+bool InstrumentPresets::Prepare(const std::string &name) {
+#if defined(__linux__)
+	PrepareJob job ;
+	job.name = name ;
+	job.ok = false ;
+	pthread_t th ;
+	if (pthread_create(&th, 0, prepareThread, &job) == 0) {
+		pthread_join(th, 0) ;
+		return job.ok ;
+	}
+#endif
+	return prepareNow(name) ;
 }

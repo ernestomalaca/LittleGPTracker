@@ -171,6 +171,10 @@ if (wave) {
 }
 
 #define IMPORT_CHUNK_SIZE 65536   // trk2als: antes 1000 bytes por escritura
+#include <unistd.h>
+// trk2als: mientras suena la música, la copia va con pausitas para no
+// acaparar la tarjeta (InstrumentPresets::Prepare lo prende)
+volatile bool g_importGentle = false ;
 
 /*
   Returns a nonnegative int or an element of
@@ -215,6 +219,7 @@ int SamplePool::ImportSample(Path &path) {
 		fin->Read(buffer,1,count) ;
 		fout->Write(buffer,1,count) ;
 		size-=count ;
+		if (g_importGentle) usleep(2000) ;
 	} ;
 
 	fin->Close() ;
