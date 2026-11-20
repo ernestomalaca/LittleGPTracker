@@ -48,6 +48,7 @@ private:
 	} ;
 	void load() ;
 	void buildTree() ;
+	void goBack() ;
 	bool folderOk(const std::string &f) ;
 	std::string full(const std::string &n) ;
 	void drawGrid() ;

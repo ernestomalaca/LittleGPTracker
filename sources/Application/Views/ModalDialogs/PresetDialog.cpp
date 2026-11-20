@@ -85,17 +85,7 @@ void PresetDialog::buildTree() {
 	for (size_t i = 0; i < folders.size(); i++) {
 		if (!folderOk(folders[i])) continue ;
 		n.path = folders[i] ; n.label = folders[i] ; n.depth = 0 ;
-		tree_.push_back(n) ;
-		if (folders[i] == topSel) {
-			std::vector<std::string> sub, sp ;
-			InstrumentPresets::ListFolder(folders[i], sub, sp) ;
-			for (size_t k = 0; k < sub.size(); k++) {
-				std::string p = folders[i] + "/" + sub[k] ;
-				if (!folderOk(p)) continue ;
-				n.path = p ; n.label = sub[k] ; n.depth = 1 ;
-				tree_.push_back(n) ;
-			}
-		}
+		tree_.push_back(n) ;   // trk2als: solo las categorías; lo de adentro, a la derecha
 	}
 	// el elegido: la carpeta actual o su antepasado más cercano en el árbol
 	treeSel_ = 0 ;
@@ -120,7 +110,7 @@ void PresetDialog::load() {
 		entries_.push_back(e) ;
 	}
 	// trk2als: la opción vacía de la categoría (Kits, Multicapa, Samples)
-	if (emptyOptions_ && !forSave_ && !folder_.empty()) {
+	if (emptyOptions_ && !forSave_ && depthOf(folder_) == 1) {
 		std::string cat = folder_.substr(0, folder_.find('/')) ;
 		int code = 0 ;
 		if (cat == InstrumentPresets::KindFolder(InstrumentPresets::PK_KIT)) code = PD_EMPTY_KIT ;
@@ -133,14 +123,8 @@ void PresetDialog::load() {
 			entries_.push_back(e) ;
 		}
 	}
-	// lo que está más hondo que el árbol se recorre desde la lista
-	bool deep = depthOf(folder_) >= 2 ;
-	if (depthOf(folder_) >= 3) {
-		e.kind = K_UP ;
-		e.name = ".." ;
-		entries_.push_back(e) ;
-	}
-	if (deep || (forSave_ && depthOf(folder_) >= 1)) {
+	// las subcategorías (en la raíz, las categorías están a la izquierda)
+	if (depthOf(folder_) >= 1) {
 		for (size_t i = 0; i < folders.size(); i++) {
 			if (!folderOk(full(folders[i]))) continue ;
 			e.kind = K_FOLDER ;
@@ -162,11 +146,21 @@ void PresetDialog::load() {
 	}
 	selected_ = 0 ;
 	top_ = 0 ;
-	if (!forSave_) {   // de entrada en el primer preset (no en ".." ni en la vacía)
-		for (size_t i = 0; i < entries_.size(); i++) {
-			if (entries_[i].kind == K_PRESET) { selected_ = int(i) ; break ; }
-		}
+}
+
+// trk2als: atrás (← o B): a la carpeta de arriba, o a las categorías
+void PresetDialog::goBack() {
+	stopPreview() ;
+	if (depthOf(folder_) >= 2) {
+		size_t slash = folder_.find_last_of('/') ;
+		std::string child = folder_.substr(slash + 1) + "/" ;
+		folder_ = folder_.substr(0, slash) ;
+		load() ;
+		for (size_t i = 0; i < entries_.size(); i++)
+			if (entries_[i].kind == K_FOLDER && entries_[i].name == child) selected_ = int(i) ;
+		return ;
 	}
+	col_ = 0 ;
 }
 
 // --- la muestra ------------------------------------------------------------
@@ -363,6 +357,7 @@ void PresetDialog::drawShapes() {
 	const char *t = forSave_ ? "GUARDAR EN" : (kind_ == InstrumentPresets::PK_KIT ? "KITS" : "SONIDOS") ;
 	DrawText(32, 24, t, acc, 1) ;
 	std::string where = folder_.empty() ? std::string("sueltos") : folder_ ;
+	for (size_t i = 0; (i = where.find('/', i)) != std::string::npos; i += 3) where.replace(i, 1, " / ") ;
 	if (TextLen(where) > 40) where = ".." + where.substr(where.size() - 38) ;
 	DrawText(PX + PW - 24 - 8 * TextLen(where), 28, where.c_str(), dim, 0) ;
 
@@ -464,11 +459,11 @@ void PresetDialog::drawShapes() {
 		std::string s = "sonando: " + playing_ ;
 		FillRect(24, BY, 592, 34, Mix(bg, acc, 14), 6) ;
 		DrawText(36, BY + 11, s.c_str(), acc, 0) ;
-		DrawText(616 - 12 - 8 * 21, BY + 11, "A carga   B cierra", fg, 0) ;
+		DrawText(616 - 12 - 8 * 18, BY + 11, "A carga   B atrás", fg, 0) ;
 	} else if (forSave_) {
 		DrawText(32, BY + 11, "<> columnas   A elige   B cancela", dim, 0) ;
 	} else {
-		DrawText(32, BY + 11, "<> columnas   A carga   B cierra   al detenerte suena", dim, 0) ;
+		DrawText(32, BY + 11, col_ == 0 ? "A o derecha entra   B cierra" : "A entra / carga   izquierda o B atrás", dim, 0) ;
 	}
 }
 
@@ -485,21 +480,18 @@ void PresetDialog::ProcessButtonMask(unsigned short mask, bool pressed) {
 	if (!pressed) return ;   // soltar el botón que abrió la ventana no cuenta
 	isDirty_ = true ;
 	int n = (int)entries_.size() ;
-	if (mask & EPBM_B) {
-		stopPreview() ;
-		EndModal(0) ;
-		return ;
-	}
-	if (col_ == 0) {   // las carpetas
+	if (col_ == 0) {   // las categorías
+		if (mask & EPBM_B) {   // ya afuera: se cierra
+			stopPreview() ;
+			EndModal(0) ;
+			return ;
+		}
 		int tn = (int)tree_.size() ;
 		if (tn == 0) { if (mask & EPBM_A) EndModal(0) ; return ; }
 		if (mask == EPBM_UP || mask == EPBM_DOWN) {
 			treeSel_ = (treeSel_ + (mask == EPBM_UP ? tn - 1 : 1)) % tn ;
-			std::string keep = tree_[treeSel_].path ;
-			folder_ = keep ;
+			folder_ = tree_[treeSel_].path ;
 			load() ;
-			buildTree() ;   // se abre la de arriba que toca
-			for (size_t i = 0; i < tree_.size(); i++) if (tree_[i].path == keep) treeSel_ = int(i) ;
 			stopPreview() ;
 			return ;
 		}
@@ -510,27 +502,22 @@ void PresetDialog::ProcessButtonMask(unsigned short mask, bool pressed) {
 		return ;
 	}
 	// la lista
-	if (n == 0) { if (mask == EPBM_LEFT) col_ = 0 ; return ; }
-	if (mask == EPBM_LEFT) { col_ = 0 ; stopPreview() ; return ; }
+	if (mask == EPBM_B || mask == EPBM_LEFT) { goBack() ; return ; }
+	if (n == 0) return ;
 	if (mask == EPBM_UP) { selected_ = (selected_ + n - 1) % n ; schedulePreview() ; return ; }
 	if (mask == EPBM_DOWN) { selected_ = (selected_ + 1) % n ; schedulePreview() ; return ; }
 	if (mask == EPBM_L) { selected_ = selected_ >= LIST_ROWS ? selected_ - LIST_ROWS : 0 ; schedulePreview() ; return ; }
 	if (mask == EPBM_R) { selected_ = selected_ + LIST_ROWS < n ? selected_ + LIST_ROWS : n - 1 ; schedulePreview() ; return ; }
+	if (mask == EPBM_RIGHT && entries_[selected_].kind == K_FOLDER) mask = EPBM_A ;   // → entra
 	if (mask == EPBM_A) {
 		Entry &e = entries_[selected_] ;
 		switch (e.kind) {
-		case K_UP: {
-			size_t slash = folder_.find_last_of('/') ;
-			folder_ = (slash == std::string::npos) ? "" : folder_.substr(0, slash) ;
-			load() ;
-			buildTree() ;
-			schedulePreview() ;
+		case K_UP:
+			goBack() ;
 			break ;
-		}
 		case K_FOLDER:
 			folder_ = full(e.name.substr(0, e.name.size() - 1)) ;
 			load() ;
-			buildTree() ;
 			schedulePreview() ;
 			break ;
 		case K_HERE:
