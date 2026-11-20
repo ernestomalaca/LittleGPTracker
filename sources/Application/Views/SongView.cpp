@@ -1677,14 +1677,30 @@ void SongView::LoadTrackPreset(const std::string &name) {
         (SampleInstrument *)project->GetInstrumentBank()->GetInstrument(owner);
     beginSoundChange(ch);
     bool ok = InstrumentPresets::Load(si, name);
+    bool cleaned = false;
+    SamplePool *pool = SamplePool::GetInstance();
+    if (!ok && pool->GetNameListSize() >= MAX_PIG_SAMPLES - 16) {
+        // trk2als: el pool se llenó con los samples de los sonidos de antes:
+        // se quitan los que ya nadie usa y se intenta otra vez. Lo que se
+        // podía deshacer de sonidos se pierde (sus samples ya no están)
+        MixerService::GetInstance()->Lock();
+        project->PurgeInstruments(true);
+        MixerService::GetInstance()->Unlock();
+        for (size_t i = 0; i + 1 < sesUndo_.size(); i++) sesUndo_[i].instrTrack = -1;   // la última (el sonido de antes) sí sigue
+        for (size_t i = 0; i < sesRedo_.size(); i++) sesRedo_[i].instrTrack = -1;
+        cleaned = true;
+        ok = InstrumentPresets::Load(si, name);
+    }
     endSoundChange(ch);
     if (!ok) {
-        View::SetNotification("No se pudo cargar el preset");
+        View::SetNotification(pool->GetNameListSize() >= MAX_PIG_SAMPLES - 16
+            ? "Ya no caben más samples en el proyecto"
+            : "No se pudo cargar el preset");
         return;
     }
     std::string shortName = name.substr(name.rfind('/') == std::string::npos ? 0 : name.rfind('/') + 1);
     project->SetTrackName(ch, shortName.c_str());
-    View::SetNotification((shortName + " cargado").c_str());
+    View::SetNotification((shortName + (cleaned ? " cargado\nse quitaron samples que nadie usaba" : " cargado")).c_str());
     headerMode_ = false;   // trk2als: de la cabecera al primer clip de la pista
     viewData_->songX_ = ch;
     clampTrackCursor();

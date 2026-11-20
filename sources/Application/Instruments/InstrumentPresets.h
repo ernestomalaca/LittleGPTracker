@@ -47,9 +47,8 @@ namespace InstrumentPresets {
 	// trk2als: una foto del instrumento en memoria (para deshacer un cambio
 	// de sonido); los samples siguen en el pool
 	struct Snapshot {
-		int sample ;
+		std::string sample ;   // por nombre: el índice cambia si se limpia el pool
 		std::vector<std::pair<std::string, std::string> > params ;
-		Snapshot() : sample(-1) {}
 	} ;
 	void Capture(SampleInstrument *instr, Snapshot &out) ;
 	void Restore(SampleInstrument *instr, const Snapshot &s) ;

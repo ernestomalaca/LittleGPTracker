@@ -281,7 +281,7 @@ void SamplePool::PurgeSample(int i) {
 	//delete wav
 	SAFE_DELETE(wav_[i]) ;
 	// delete name entry
-	SAFE_DELETE(names_[i]) ;
+	SAFE_FREE(names_[i]) ;   // trk2als: se pidió con SYS_MALLOC
 
 	// delete file
 	FileSystem::GetInstance()->Delete(path.GetPath().c_str()) ;

@@ -7,7 +7,9 @@
 #include "Application/Model/Song.h"
 #include "Foundation/Observable.h"
 
-#define MAX_PIG_SAMPLES MAX_SAMPLEINSTRUMENT_COUNT
+// trk2als: antes 128 (como los instrumentos); los kits traen 12-16 samples
+// cada uno y con varios kits cargados el pool se llenaba
+#define MAX_PIG_SAMPLES 255
 
 enum SamplePoolEventType {
 	SPET_INSERT,

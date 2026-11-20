@@ -490,6 +490,14 @@ void Project::PurgeInstruments(bool removeFromDisk) {
 				int index=si->GetSampleIndex() ;
                 if (index >= 0)
                     used[index] = true;
+				// trk2als: y los de sus zonas (los pads de un kit, las capas)
+				if (si->IsZoned()) {
+					const std::vector<ZoneSource::Zone> &zs=si->Zones() ;
+					for (size_t z=0;z<zs.size();z++) {
+						int k=SamplePool::GetInstance()->IndexOf(zs[z].name.c_str()) ;
+						if (k>=0 && k<MAX_PIG_SAMPLES) used[k]=true ;
+					}
+				}
             };
         }
 

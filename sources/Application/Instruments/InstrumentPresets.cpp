@@ -381,7 +381,8 @@ bool InstrumentPresets::Describe(const std::string &name, Info &out) {
 
 void InstrumentPresets::Capture(SampleInstrument *instr, Snapshot &out) {
 	out.params.clear() ;
-	out.sample = instr->GetSampleIndex() ;
+	int idx = instr->GetSampleIndex() ;
+	out.sample = idx >= 0 ? SamplePool::GetInstance()->GetNameList()[idx] : "" ;
 	IteratorPtr<Variable> it(instr->GetIterator()) ;
 	for (it->Begin(); !it->IsDone(); it->Next()) {
 		Variable &v = it->CurrentItem() ;
@@ -391,8 +392,9 @@ void InstrumentPresets::Capture(SampleInstrument *instr, Snapshot &out) {
 }
 
 void InstrumentPresets::Restore(SampleInstrument *instr, const Snapshot &s) {
-	if (s.sample >= 0) {
-		instr->AssignSample(s.sample) ;
+	int idx = s.sample.empty() ? -1 : SamplePool::GetInstance()->IndexOf(s.sample.c_str()) ;
+	if (idx >= 0) {
+		instr->AssignSample(idx) ;
 		instr->RefreshSample() ;
 	} else {
 		instr->FindVariable(SIP_SAMPLE)->SetInt(-1) ;
