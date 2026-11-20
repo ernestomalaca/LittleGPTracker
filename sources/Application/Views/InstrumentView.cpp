@@ -41,8 +41,11 @@ private:
 // navegador solo con .sf2)
 class UISoundfontField: public UIIntVarField {
 public:
-	UISoundfontField(GUIPoint &p,Variable &v,const std::string &label,int idx)
-		:UIIntVarField(p,v,"sample: %s",idx,idx,1,1),label_(label) {}
+	UISoundfontField(GUIPoint &p,Variable &v,const std::string &label,int idx,bool fixed=false)
+		:UIIntVarField(p,v,"sample: %s",idx,idx,1,1),label_(label),fixed_(fixed) {}
+	// trk2als: el sonido de una pista se elige en su cabecera: aquí solo se
+	// muestra (no se puede posar el cursor)
+	virtual bool IsStatic() { return fixed_ ; }
 	virtual void Draw(GUIWindow &w,int offset=0) {
 		GUITextProperties props ;
 		GUIPoint position=GetPosition() ;
@@ -59,6 +62,7 @@ public:
 	virtual void ProcessArrow(unsigned short) {}
 private:
 	std::string label_ ;
+	bool fixed_ ;
 } ;
 
 #include <stdio.h>
@@ -415,6 +419,11 @@ void InstrumentView::onInstrumentChange() {
 	} ;
 
 	SetFocus(T_SimpleList<UIField>::GetFirst()) ;
+	{   // trk2als: si el primero es solo para mirar, el primero que se edita
+		IteratorPtr<UIField> it3(T_SimpleList<UIField>::GetIterator()) ;
+		for (it3->Begin();!it3->IsDone();it3->Next())
+			if (!it3->CurrentItem().IsStatic()) { SetFocus(&it3->CurrentItem()) ; break ; }
+	}
 	IteratorPtr<UIField> it2(T_SimpleList<UIField>::GetIterator()) ;
 	for (it2->Begin();!it2->IsDone();it2->Next()) {
         if (it2->CurrentItem().IsStatic()) continue ;   // trk2als: etiquetas, no son de variable
@@ -478,7 +487,7 @@ void InstrumentView::fillSampleParameters() {
 		if (kit) shown="kit: "+shown ;
 		snprintf(label,sizeof(label),"%s (%d %s%s)",shown.c_str(),
 		         instrument->ZoneCount(),kit?"pad":"zona",instrument->ZoneCount()==1?"":"s") ;
-		f1=new UISoundfontField(AT(L),*v,label,v->GetInt()) ;
+		f1=new UISoundfontField(AT(L),*v,label,v->GetInt(),ownedByTrack()) ;
 	} else {
 		// los .wav de las zonas de cualquier soundfont del proyecto no salen
 		std::vector<bool> hidden(sp->GetNameListSize(),false) ;
@@ -1867,7 +1876,7 @@ void InstrumentView::openPresetLoad() {
 }
 
 void InstrumentView::OnBrowserClosed(bool kit) {
-	lastFocusID_=kit?SIP_SAMPLE:IV_PRESET_LOAD ;
+	lastFocusID_=kit?IV_PADSEL:IV_PRESET_LOAD ;
 	padShown_=-1 ;
 	onInstrumentChange() ;
 	isDirty_=true ;
@@ -2584,7 +2593,8 @@ bool InstrumentView::processKit(unsigned short mask) {
 			else if (dir==EPBM_RIGHT && c<3) c++ ;
 			else if (dir==EPBM_UP && r<3) r++ ;        // el pad 1 está abajo
 			else if (dir==EPBM_DOWN && r>0) r-- ;
-			else if (mask==EPBM_UP || mask==EPBM_DOWN) return false ;   // la orilla: al campo de arriba / abajo
+			else if (mask==EPBM_DOWN) return false ;   // la orilla de abajo: a los campos
+			else if (mask==EPBM_UP && !ownedByTrack()) return false ;   // arriba, el kit (si se puede cambiar aquí)
 			else return true ;
 			padSelVar_.SetInt(r*4+c) ;
 			kitSync() ;   // el pad nuevo suena
