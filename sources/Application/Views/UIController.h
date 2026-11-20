@@ -17,6 +17,7 @@ public:
 	void UnMuteAll() ;
 	void ToggleMute(int from,int to) ;
 	void SwitchSoloMode(int from,int to,bool clear) ;
+	void RemoveChannel(int channel) ;   // trk2als: se borró la pista
 
 private:
 	Project *project_ ;

@@ -89,6 +89,15 @@ private:
 public:
 	void MetronomeClick(bool accent) { metronome_.Click(accent) ; }
 	PlayerChannel *channel_[SONG_CHANNEL_COUNT] ;
+	// trk2als: pista -> canal de audio. Al borrar una pista con la música
+	// andando, las de la derecha se recorren en la canción pero siguen
+	// sonando en su canal (sus voces no se mueven): solo cambia el mapa
+	int map_[SONG_CHANNEL_COUNT] ;
+public:
+	int Phys(int track) { return (track >= 0 && track < SONG_CHANNEL_COUNT) ? map_[track] : track ; }
+	void RemoveTrack(int track) ;   // con el lock tomado
+	void ResetMap() ;               // todo quieto: cada pista en su canal
+private:
 
 	// store trigger notes, 0xFF = none
 	

@@ -29,6 +29,7 @@ public:
 	bool UpdateGroove(ChannelGroove &g,bool reverse) ;
 	void GetChannelData(int channel,int *groove,int *position) ;
 	unsigned char *GetGrooveData(int groove) ;
+	void RemoveChannel(int channel) ;   // trk2als: se borró la pista
 	virtual void SaveContent(TiXmlNode *node) ;
 	virtual void RestoreContent(TiXmlElement *element);
 	

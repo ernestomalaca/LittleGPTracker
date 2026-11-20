@@ -112,3 +112,12 @@ bool Groove::TriggerChannel(int i) {
 unsigned char *Groove::GetGrooveData(int groove) {
 	return data_[groove] ;
 } ;
+
+// trk2als: las pistas de la derecha se recorren (con su groove)
+void Groove::RemoveChannel(int channel) {
+	if (channel<0 || channel>=SONG_CHANNEL_COUNT) return ;
+	for (int c=channel;c<SONG_CHANNEL_COUNT-1;c++) channelGroove_[c]=channelGroove_[c+1] ;
+	channelGroove_[SONG_CHANNEL_COUNT-1].groove_=0 ;
+	channelGroove_[SONG_CHANNEL_COUNT-1].position_=0 ;
+	channelGroove_[SONG_CHANNEL_COUNT-1].ticks_=0 ;
+}

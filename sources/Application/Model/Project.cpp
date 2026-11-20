@@ -1,4 +1,5 @@
 #include "Project.h"
+#include "Mixer.h"
 #include <string.h>
 #include <stdio.h>
 #include "Application/Instruments/SampleInstrument.h"
@@ -366,6 +367,14 @@ void Project::DeleteTrack(int channel) {
         std::string n = FindVariable(VAR_TRACKNAME(c + 1))->GetString();
         FindVariable(VAR_TRACKNAME(c))->SetString(n.c_str());
         FindVariable(VAR_TRACKINSTR(c))->SetInt(FindVariable(VAR_TRACKINSTR(c + 1))->GetInt());
+    }
+    // trk2als: y lo de su canal en el mezclador (volumen, bus, filtros)
+    Mixer *mx = Mixer::GetInstance();
+    for (int c = channel; c < SONG_CHANNEL_COUNT - 1; c++) {
+        mx->SetBus(c, mx->GetBus(c + 1));
+        mx->SetChannelVolume(c, mx->GetChannelVolume(c + 1));
+        mx->SetChannelHPF(c, mx->GetChannelHPF(c + 1));
+        mx->SetChannelLPF(c, mx->GetChannelLPF(c + 1));
     }
     FindVariable(VAR_TRACKTYPE(SONG_CHANNEL_COUNT - 1))->SetInt(TT_OFF);
     FindVariable(VAR_TRACKNAME(SONG_CHANNEL_COUNT - 1))->SetString("");

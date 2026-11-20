@@ -1,4 +1,5 @@
 #include "Player.h"
+#include "Application/Views/UIController.h"
 #include "Services/Link/LinkBridge.h"
 extern double g_renderedSamples;   // AudioOut.cpp
 #include "Services/Audio/Audio.h"
@@ -139,6 +140,7 @@ void Player::Start(PlayMode mode, bool forceSongMode) {
 
     // Clear all channel based data
 
+    mixer_->ResetMap();   // trk2als: arrancando, cada pista en su canal
     for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
         mixer_->StopChannel(i);
         timeToLive_[i] = 0;
@@ -148,7 +150,7 @@ void Player::Start(PlayMode mode, bool forceSongMode) {
         autoStep_[i] = 0;
         autoStepSlice_[i] = sliceCount_;
         audioStarted_[i] = false;
-        SampleInstrument::SetChannelSync(i, isAudio(i));
+        SampleInstrument::SetChannelSync(mixer_->Phys(i), isAudio(i));
 		TablePlayback &tpb=TablePlayback::GetTablePlayback(i);
 		tpb.Stop();
     }
@@ -499,7 +501,7 @@ void Player::playAudioCell(int channel) {
     int note = root ? root->GetInt() : 60;
 
     mixer_->StopInstrument(channel);
-    SampleInstrument::SetChannelSync(channel, true);
+    SampleInstrument::SetChannelSync(mixer_->Phys(channel), true);
     mixer_->StartInstrument(channel, instrument, note, true);
     if (!atStart) {
         // posición dentro del loop (la celda puede durar varias vueltas)
@@ -509,7 +511,7 @@ void Player::playAudioCell(int channel) {
         int step = (cpos * 16 + pos) % (loopBars * 16);
         int offset = (step * 256) / (loopBars * 16);
         if (offset > 0xFF) offset = 0xFF;
-        instrument->ProcessCommand(channel, I_CMD_PLOF, (ushort)(offset << 8));
+        instrument->ProcessCommand(mixer_->Phys(channel), I_CMD_PLOF, (ushort)(offset << 8));
     }
     instrumentOnChannel_[channel][0] = '0' + (clip / 16 > 9 ? 7 : 0) + clip / 16;
     instrumentOnChannel_[channel][1] = '0' + (clip % 16 > 9 ? 7 : 0) + clip % 16;
@@ -1251,13 +1253,13 @@ void Player::fireTimed() {
             if (!h.instr) continue;
             if (h.voice == 0) {
                 mixer_->StopInstrument(ch);
-                SampleInstrument::SetChannelSync(ch, false);
+                SampleInstrument::SetChannelSync(mixer_->Phys(ch), false);
                 mixer_->StartInstrument(ch, h.instr, h.note, false);
-                if (h.vel >= 0) h.instr->ProcessCommand(ch, I_CMD_MVEL, (ushort)(h.vel * 2));
+                if (h.vel >= 0) h.instr->ProcessCommand(mixer_->Phys(ch), I_CMD_MVEL, (ushort)(h.vel * 2));
             } else {
                 mixer_->StartVoice(ch, h.instr, h.voice, h.note, h.vel);
             }
-            if (h.delay > 0) h.instr->SetStartDelay(ch, h.voice, h.delay);
+            if (h.delay > 0) h.instr->SetStartDelay(mixer_->Phys(ch), h.voice, h.delay);
         }
     }
 }
@@ -1365,14 +1367,14 @@ void Player::playClipStep(int channel) {
 
 void Player::startClipNote(int channel, int voice, I_Instrument *instrument,
                            unsigned char note, int vel, bool newInstrument) {
-    SampleInstrument::SetChannelSync(channel, false);
+    SampleInstrument::SetChannelSync(mixer_->Phys(channel), false);
     if (voice != 0) {
         mixer_->StartVoice(channel, instrument, voice, note, vel);
         return;
     }
     mixer_->StopInstrument(channel);
     mixer_->StartInstrument(channel, instrument, note, newInstrument);
-    instrument->ProcessCommand(channel, I_CMD_MVEL, (ushort)(vel * 2));
+    instrument->ProcessCommand(mixer_->Phys(channel), I_CMD_MVEL, (ushort)(vel * 2));
     TablePlayback &tpb = TablePlayback::GetTablePlayback(channel);
     int instrTable = instrument->GetTable();
     if (instrTable != VAR_OFF && newInstrument) {
@@ -1623,3 +1625,67 @@ void Player::LinkPoll() {
 
 int Player::LinkPeers() { return LinkBridge::Peers(); }
 bool Player::LinkOn() { return LinkBridge::Enabled(); }
+
+int Player::Phys(int track) { return mixer_->Phys(track); }
+
+// trk2als: borrar una pista, también con la música andando. Lo que suena en
+// las pistas de la derecha no se toca: siguen en su canal de audio y solo
+// cambia el mapa pista -> canal; lo que el reproductor lleva por pista se
+// recorre junto con ellas
+void Player::RemoveTrack(int ch) {
+    if (ch < 0 || ch >= SONG_CHANNEL_COUNT || !project_) return;
+    mixer_->Lock();
+    // callar la pista que se va
+    mixer_->ChokeChannel(ch);
+    mixer_->StopChannel(ch);
+    timed_[ch].clear();
+    clearAutomation(ch);
+    TablePlayback::GetTablePlayback(ch).Stop();
+    const int L = SONG_CHANNEL_COUNT - 1;
+    for (int c = ch; c < L; c++) {
+        memcpy(instrumentOnChannel_[c], instrumentOnChannel_[c + 1], 3);
+        liveQueuePosition_[c] = liveQueuePosition_[c + 1];
+        liveQueueingMode_[c] = liveQueueingMode_[c + 1];
+        liveQueueChainPosition_[c] = liveQueueChainPosition_[c + 1];
+        timeToLive_[c] = timeToLive_[c + 1];
+        timeToStart_[c] = timeToStart_[c + 1];
+        audioStarted_[c] = audioStarted_[c + 1];
+        timed_[c].swap(timed_[c + 1]);
+        for (int v = 0; v < 4; v++) voiceEnd_[c][v] = voiceEnd_[c + 1][v];
+        autoStep_[c] = autoStep_[c + 1];
+        autoStepSlice_[c] = autoStepSlice_[c + 1];
+        autoInstr_[c] = autoInstr_[c + 1];
+        autoApplied_[c].swap(autoApplied_[c + 1]);
+        if (viewData_) {
+            viewData_->songPlayPos_[c] = viewData_->songPlayPos_[c + 1];
+            viewData_->currentPlayChain_[c] = viewData_->currentPlayChain_[c + 1];
+            viewData_->chainPlayPos_[c] = viewData_->chainPlayPos_[c + 1];
+            viewData_->currentPlayPhrase_[c] = viewData_->currentPlayPhrase_[c + 1];
+            viewData_->phrasePlayPos_[c] = viewData_->phrasePlayPos_[c + 1];
+        }
+    }
+    memset(instrumentOnChannel_[L], ' ', 3);
+    liveQueuePosition_[L] = 0;
+    liveQueueingMode_[L] = QM_NONE;
+    liveQueueChainPosition_[L] = 0;
+    timeToLive_[L] = timeToStart_[L] = 0;
+    audioStarted_[L] = false;
+    timed_[L].clear();
+    for (int v = 0; v < 4; v++) voiceEnd_[L][v] = 0;
+    autoStep_[L] = 0;
+    autoStepSlice_[L] = sliceCount_;
+    autoInstr_[L] = 0;
+    autoApplied_[L].clear();
+    if (viewData_) {
+        viewData_->songPlayPos_[L] = 0;
+        viewData_->currentPlayChain_[L] = 0xFF;
+        viewData_->chainPlayPos_[L] = 0;
+        viewData_->currentPlayPhrase_[L] = 0xFF;
+        viewData_->phrasePlayPos_[L] = 0;
+    }
+    mixer_->RemoveTrack(ch);
+    Groove::GetInstance()->RemoveChannel(ch);
+    UIController::GetInstance()->RemoveChannel(ch);
+    project_->DeleteTrack(ch);   // la canción, sus clips y su instrumento
+    mixer_->Unlock();
+}

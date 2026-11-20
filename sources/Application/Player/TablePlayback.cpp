@@ -1,4 +1,5 @@
 #include "TablePlayback.h"
+#include "Player.h"
 #include "Application/Instruments/CommandList.h"
 #include "Application/Instruments/I_Instrument.h"
 
@@ -23,7 +24,8 @@ void TablePlayback::Reset() {
 
 TablePlayback &TablePlayback::GetTablePlayback(int channel) {
 	NAssert((channel>=0)&&(channel<SONG_CHANNEL_COUNT)) ;
-	return playback_[channel] ;
+	// trk2als: la tabla corre en el canal de audio de la pista
+	return playback_[Player::GetInstance()->Phys(channel)] ;
 }
 
 void TablePlayback::Init(int channel) {

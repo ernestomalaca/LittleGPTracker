@@ -1672,12 +1672,9 @@ void SongView::ApplyTrackType(int channel, int code, bool) {
         return;
     }
     if (code == TTD_DELETE) {
-        if (Player::GetInstance()->IsRunning()) {   // nada de borrar lo que suena
-            View::SetNotification("detén la música para borrar");
-            return;
-        }
+        // trk2als: también con la música andando (Player::RemoveTrack)
         std::string name = project->GetTrackName(channel);
-        project->DeleteTrack(channel);
+        Player::GetInstance()->RemoveTrack(channel);
         snprintf(msg, sizeof(msg), "pista %s borrada", name.c_str());
         View::SetNotification(msg);
     } else {

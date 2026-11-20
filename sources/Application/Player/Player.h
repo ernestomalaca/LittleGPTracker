@@ -90,6 +90,10 @@ public:
     bool Clipped() ;
 
     bool ProcessChannelCommand(int channel,FourCC cmd,ushort param) ;
+    // trk2als: el canal de audio de una pista (cambia al borrar pistas en vivo)
+    int Phys(int track) ;
+    // trk2als: borra la pista (también con la música andando)
+    void RemoveTrack(int track) ;
 
 	void StartStreaming(const Path &path) ;
 	void PreviewNote(int channel, I_Instrument *instr, int note) ;   // trk2als: tocar una nota con la canción parada

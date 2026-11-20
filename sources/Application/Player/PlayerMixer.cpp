@@ -18,6 +18,7 @@ PlayerMixer::PlayerMixer() {
         lastInstrument_[i] = 0;
 		channel_[i] = new PlayerChannel(i);
 		isChannelPlaying_[i] = false;
+		map_[i] = i;
     }
 }
 
@@ -78,27 +79,53 @@ void PlayerMixer::Stop() {
 } ;
 
 void PlayerMixer::StartChannel(int channel) {
-	isChannelPlaying_[channel]=true ;
+	isChannelPlaying_[Phys(channel)]=true ;
 } ;
 
 void PlayerMixer::ChokeChannel(int channel) {   // trk2als
-	channel_[channel]->ChokeInstrument() ;
+	channel_[Phys(channel)]->ChokeInstrument() ;
 } ;
 
 void PlayerMixer::StopChannel(int channel) {
-
-    StopInstrument(channel) ;
-	isChannelPlaying_[channel]=false ;
+	int p=Phys(channel) ;
+    channel_[p]->StopInstrument() ;
+    notes_[p]=0xFF ;
+	isChannelPlaying_[p]=false ;
 } ;
 
 
 bool PlayerMixer::IsChannelPlaying(int channel) {
-	return isChannelPlaying_[channel] ;
+	return isChannelPlaying_[Phys(channel)] ;
 } ;
 
 I_Instrument *PlayerMixer::GetLastInstrument(int channel) {
-	return lastInstrument_[channel] ;
+	return lastInstrument_[Phys(channel)] ;
 } ;
+
+// trk2als: la pista 'track' se va; las de la derecha toman su lugar en el
+// mapa y su canal (ya callado) queda al final, libre
+void PlayerMixer::RemoveTrack(int track) {
+	if (track<0 || track>=SONG_CHANNEL_COUNT) return ;
+	int p=map_[track] ;
+	channel_[p]->ChokeInstrument() ;
+	channel_[p]->StopInstrument() ;
+	channel_[p]->SetMute(false) ;
+	notes_[p]=0xFF ;
+	isChannelPlaying_[p]=false ;
+	lastInstrument_[p]=0 ;
+	for (int c=track;c<SONG_CHANNEL_COUNT-1;c++) map_[c]=map_[c+1] ;
+	map_[SONG_CHANNEL_COUNT-1]=p ;
+}
+
+void PlayerMixer::ResetMap() {
+	bool identity=true ;
+	for (int k=0;k<SONG_CHANNEL_COUNT;k++) if (map_[k]!=k) identity=false ;
+	if (identity) return ;
+	bool mute[SONG_CHANNEL_COUNT] ;   // el mute es de la pista: que siga con ella
+	for (int k=0;k<SONG_CHANNEL_COUNT;k++) mute[k]=channel_[map_[k]]->IsMuted() ;
+	for (int k=0;k<SONG_CHANNEL_COUNT;k++) map_[k]=k ;
+	for (int k=0;k<SONG_CHANNEL_COUNT;k++) channel_[k]->SetMute(mute[k]) ;
+}
 
 
 bool PlayerMixer::Clipped() {
@@ -115,10 +142,11 @@ void PlayerMixer::Update(Observable &o,I_ObservableData *d) {
   Mixer *mixer = Mixer::GetInstance();
 
   for (int i=0;i<SONG_CHANNEL_COUNT;i++) {
-      channel_[i]->SetMixBus(mixer->GetBus(i));
-      channel_[i]->SetVolume(fl2fp(mixer->GetChannelVolume(i) / 255.0f));
-      channel_[i]->SetHPFMode((unsigned char)mixer->GetChannelHPF(i));
-      channel_[i]->SetLPFFreq(mixer->GetChannelLPF(i));
+      PlayerChannel *pc=channel_[map_[i]] ;   // la pista i suena en su canal
+      pc->SetMixBus(mixer->GetBus(i));
+      pc->SetVolume(fl2fp(mixer->GetChannelVolume(i) / 255.0f));
+      pc->SetHPFMode((unsigned char)mixer->GetChannelHPF(i));
+      pc->SetLPFFreq(mixer->GetChannelLPF(i));
   }
   MixerService *ms=MixerService::GetInstance();
   ms->SetPregain(project_->GetPregain());
@@ -129,28 +157,31 @@ void PlayerMixer::Update(Observable &o,I_ObservableData *d) {
 
 
 void PlayerMixer::StartInstrument(int channel,I_Instrument *instrument,unsigned char note,bool newInstrument)  {
-	channel_[channel]->StartInstrument(instrument,note,newInstrument) ;
-	lastInstrument_[channel]=instrument ;
-	notes_[channel]=note ;
+	int p=Phys(channel) ;
+	channel_[p]->StartInstrument(instrument,note,newInstrument) ;
+	lastInstrument_[p]=instrument ;
+	notes_[p]=note ;
 
 } ;
 
 void PlayerMixer::StartVoice(int channel,I_Instrument *instrument,int voice,unsigned char note,int velocity) {
-	channel_[channel]->StartVoice(instrument,voice,note,velocity) ;
-	lastInstrument_[channel]=instrument ;
+	int p=Phys(channel) ;
+	channel_[p]->StartVoice(instrument,voice,note,velocity) ;
+	lastInstrument_[p]=instrument ;
 }
 
 void PlayerMixer::StopVoice(int channel,int voice) {
-	channel_[channel]->StopVoice(voice) ;
+	channel_[Phys(channel)]->StopVoice(voice) ;
 }
 
 void PlayerMixer::StopInstrument(int channel) {
-    channel_[channel]->StopInstrument() ;
-    notes_[channel]=0xFF ;
+    int p=Phys(channel) ;
+    channel_[p]->StopInstrument() ;
+    notes_[p]=0xFF ;
 }
 
 I_Instrument *PlayerMixer::GetInstrument(int channel) {
-    return channel_[channel]->GetInstrument();
+    return channel_[Phys(channel)]->GetInstrument();
 }
 
 int PlayerMixer::GetPlayedBufferPercentage() {
@@ -159,11 +190,11 @@ int PlayerMixer::GetPlayedBufferPercentage() {
 };
 
 void PlayerMixer::SetChannelMute(int channel,bool mode) {
-     channel_[channel]->SetMute(mode) ;
+     channel_[Phys(channel)]->SetMute(mode) ;
 }
 
 bool PlayerMixer::IsChannelMuted(int channel) {
-     return channel_[channel]->IsMuted() ;
+     return channel_[Phys(channel)]->IsMuted() ;
 }
 
 void PlayerMixer::StartStreaming(const Path &path) {
@@ -191,22 +222,24 @@ void PlayerMixer::OnPlayerStop() {
 static char noteBuffer[5] ;
 
 int PlayerMixer::GetChannelNote(int channel) {
-	return notes_[channel] ;
+	return notes_[Phys(channel)] ;
 }
 
 char *PlayerMixer::GetPlayedNote(int channel) {
 
-    if (notes_[channel]!=0xFF) {
-		note2visualizer(notes_[channel],noteBuffer) ; 
+    int p=Phys(channel) ;
+    if (notes_[p]!=0xFF) {
+		note2visualizer(notes_[p],noteBuffer) ; 
 		return noteBuffer ;
     }
     return "  " ;
 } ;
 
 char *PlayerMixer::GetPlayedOctive(int channel) {
-    if (notes_[channel]!=0xFF) {
+    int p=Phys(channel) ;
+    if (notes_[p]!=0xFF) {
 		if (!IsChannelMuted(channel)) {
-	        oct2visualizer(notes_[channel],noteBuffer) ; 
+	        oct2visualizer(notes_[p],noteBuffer) ; 
 	        return noteBuffer ;
 		} else {
 			return "--" ;

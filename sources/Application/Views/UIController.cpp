@@ -60,3 +60,9 @@ void UIController::SwitchSoloMode(int from,int to,bool soloing) {
 		} ;
 	}
 } ;
+
+void UIController::RemoveChannel(int channel) {
+	if (channel<0 || channel>=SONG_CHANNEL_COUNT) return ;
+	for (int c=channel;c<SONG_CHANNEL_COUNT-1;c++) soloMask_[c]=soloMask_[c+1] ;
+	soloMask_[SONG_CHANNEL_COUNT-1]=false ;
+}
