@@ -9,6 +9,7 @@
 #include "UIFramework/SimpleBaseClasses/GUIWindow.h"
 #include "Resources/hdfont.h"
 #include "Resources/hdfont_small.h"
+#include "Resources/hdfont32.h"
 #include <math.h>
 #include <assert.h>
 #include <string.h>
@@ -477,9 +478,11 @@ void SDLGUIWindowImp::FrameRoundRect(GUIRect &r, int radius, int thick,
 void SDLGUIWindowImp::BlendText(const char *s, GUIPoint &pos, GUIColor &c,
                                 int scale) {
     if (scale < 0) scale = 0;
-    // scale 0: letra chica (8x12); si no, la de 16x16 ampliada
-    int gw = scale ? HDFONT_SIZE : SMALLFONT_W;
-    int gh = scale ? HDFONT_SIZE : SMALLFONT_H;
+    // scale 0: letra chica (8x12); 2: la de 32 px (JetBrains Mono, nítida);
+    // si no, la de 16x16 ampliada
+    bool big = scale == 2;
+    int gw = big ? HDFONT32_SIZE : scale ? HDFONT_SIZE : SMALLFONT_W;
+    int gh = big ? HDFONT32_SIZE : scale ? HDFONT_SIZE : SMALLFONT_H;
     int size = hdToWin(scale ? HDFONT_SIZE * scale : SMALLFONT_W);
     int sizeY = hdToWin(scale ? HDFONT_SIZE * scale : SMALLFONT_H);
     if (size < 1 || sizeY < 1) return;
@@ -487,11 +490,15 @@ void SDLGUIWindowImp::BlendText(const char *s, GUIPoint &pos, GUIColor &c,
     int y = appAnchorY_ + hdToWin(pos._y);
     int x0 = x;
     int maxX = appAnchorX_ + hdToWin(640), maxY = appAnchorY_ + hdToWin(480);
-    for (; *s; s++, x += size) {
+    // la de 32 px va más junta (24 px por letra); la celda se sigue
+    // dibujando entera, centrada
+    int adv = big ? hdToWin(24) : size;
+    if (big) x -= hdToWin(4);
+    for (; *s; s++, x += adv) {
         unsigned char ch = ((unsigned char)*s) & 127;
         if (ch == ' ') continue;
         if (x + size > maxX || y + sizeY > maxY || x < 0 || y < 0) continue;
-        const unsigned char *g = scale ? hdfont[ch] : hdfont_small[ch];
+        const unsigned char *g = big ? hdfont32[ch] : scale ? hdfont[ch] : hdfont_small[ch];
         for (int dy = 0; dy < sizeY; dy++) {
             int sy = dy * gh / sizeY;
             for (int dx = 0; dx < size; dx++) {

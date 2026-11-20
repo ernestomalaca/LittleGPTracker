@@ -412,7 +412,7 @@ void ProjectView::drawBoard() {
     DrawText(36, TY + 12, "TEMPO", acc, 0);
     snprintf(b, sizeof(b), "%d", project_->GetTempo());
     DrawText(36, TY + 46, b, fg, 2);
-    DrawText(36 + 32 * (int)strlen(b) + 8, TY + 62, "bpm", dim, 0);
+    DrawText(36 + 24 * (int)strlen(b) + 8, TY + 62, "bpm", dim, 0);
     if (fT) DrawText(36, TY + 98, "A+<> 1  A+^v 10", dim, 0);
 
     // escala: nota y escala (‹›)
@@ -424,13 +424,13 @@ void ProjectView::drawBoard() {
     std::string root = project_->FindVariable(VAR_SCALEROOT)->GetString();
     std::string scale = project_->FindVariable(VAR_SCALE)->GetString();
     if (scale.size() > 9) scale = scale.substr(0, 9);
-    int rw = 32 * (int)root.size();
+    int rw = 24 * (int)root.size();
     if (focus == rootField_) FillRect(ex + 6, TY + 40, rw + 12, 44, acc, 4);
     DrawText(ex + 12, TY + 46, root.c_str(), focus == rootField_ ? bg : fg, 2);
     int sx = ex + 12 + rw + 12;
     if (focus == scaleField_) FillRect(sx - 6, TY + 52, 16 * (int)scale.size() + 12, 26, acc, 4);
     DrawText(sx, TY + 57, scale.c_str(), focus == scaleField_ ? bg : fg, 1);
-    if (fS) DrawText(ex + 12, TY + 98, "<> elegir A+<> cambiar", dim, 0);
+    if (fS) DrawText(ex + 12, TY + 98, "<> elige  A+<> cambia", dim, 0);
 
     // Link: el modo y el desfase (‹›)
     bool fL = focus == linkField_, fO = focus == ofsField_;
@@ -440,7 +440,7 @@ void ProjectView::drawBoard() {
     DrawText(lx + 12, TY + 12, "ABLETON LINK", acc, 0);
     int lm = project_->FindVariable(VAR_LINK)->GetInt();
     const char *lmode = lm == 0 ? "no" : lm == 1 ? "si" : "si+play";
-    if (fL) FillRect(lx + 6, TY + 40, 32 * (int)strlen(lmode) + 12, 44, acc, 4);
+    if (fL) FillRect(lx + 6, TY + 40, (lm == 2 ? 16 : 24) * (int)strlen(lmode) + 12, 44, acc, 4);
     DrawText(lx + 12, TY + 46, lmode, fL ? bg : fg, lm == 2 ? 1 : 2);
     snprintf(b, sizeof(b), "desfase %+d ms", project_->FindVariable(VAR_LINKOFS)->GetInt());
     if (fO) FillRect(lx + 6, TY + 92, 8 * (int)strlen(b) + 12, 18, acc, 3);
