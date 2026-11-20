@@ -1680,6 +1680,7 @@ void SongView::LoadTrackPreset(const std::string &name) {
     bool cleaned = false;
     SamplePool *pool = SamplePool::GetInstance();
     unsigned long t0 = SDL_GetTicks();
+    unsigned long m0 = MixerService::GetInstance()->BuffersMixed();
     bool ready = InstrumentPresets::Prepare(name);
     if (!ready && pool->GetNameListSize() >= MAX_PIG_SAMPLES - 16) {
         // trk2als: el pool se llenó con los samples de los sonidos de antes:
@@ -1693,11 +1694,12 @@ void SongView::LoadTrackPreset(const std::string &name) {
         ready = InstrumentPresets::Prepare(name);
     }
     unsigned long t1 = SDL_GetTicks();
+    unsigned long m1 = MixerService::GetInstance()->BuffersMixed();
     beginSoundChange(ch);   // ahora sí: la pista se calla lo que tarda en aplicarse
     bool ok = ready && InstrumentPresets::Load(si, name);
     endSoundChange(ch);
-    Trace::Log("PRESET", "%s: samples %lu ms, pista callada %lu ms", name.c_str(),
-               t1 - t0, (unsigned long)SDL_GetTicks() - t1);
+    Trace::Log("PRESET", "%s: samples %lu ms (el audio mezcló %lu bloques mientras), pista callada %lu ms",
+               name.c_str(), t1 - t0, m1 - m0, (unsigned long)SDL_GetTicks() - t1);
     if (!ok) {
         View::SetNotification(pool->GetNameListSize() >= MAX_PIG_SAMPLES - 16
             ? "Ya no caben más samples en el proyecto"

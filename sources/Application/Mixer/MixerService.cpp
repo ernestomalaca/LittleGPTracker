@@ -8,7 +8,7 @@
 #include "Services/Midi/MidiService.h"
 #include "System/Console/Trace.h"
 
-MixerService::MixerService() : out_(0), sync_(0), isRendering_(false) {
+MixerService::MixerService() : out_(0), sync_(0), depth_(0), owner_(0), mixed_(0), isRendering_(false) {
     mode_ = MSRM_PLAYBACK;
 };
 
@@ -130,6 +130,7 @@ void MixerService::Update(Observable &o, I_ObservableData *d) {
     AudioDriver::Event *event = (AudioDriver::Event *)d;
     if (event->type_ == AudioDriver::Event::ADET_BUFFERNEEDED) {
         Lock();
+        mixed_++;
         SetChanged();
         NotifyObservers();
 
@@ -211,9 +212,27 @@ AudioOut *MixerService::GetAudioOut() {
 
 
 void MixerService::Lock() {
-	if (sync_) SDL_LockMutex(sync_) ;
+	if (!sync_) return ;
+	SDL_LockMutex(sync_) ;
+	if (depth_++ == 0) owner_ = SDL_ThreadID() ;
 }
 
 void MixerService::Unlock() {
-	if (sync_) SDL_UnlockMutex(sync_) ;
+	if (!sync_) return ;
+	if (--depth_ == 0) owner_ = 0 ;
+	SDL_UnlockMutex(sync_) ;
+}
+
+// trk2als: cada botón llega con el mezclador trabado (así venía de LGPT).
+// Lo que tarda (leer los samples de un kit) suelta el candado mientras
+// espera, para que el audio siga mezclando; si no, se queda sin turno.
+int MixerService::ReleaseAll() {
+	if (!sync_ || depth_ == 0 || owner_ != SDL_ThreadID()) return 0 ;
+	int n = depth_ ;
+	for (int i = 0; i < n; i++) Unlock() ;
+	return n ;
+}
+
+void MixerService::Reacquire(int n) {
+	for (int i = 0; i < n; i++) Lock() ;
 }

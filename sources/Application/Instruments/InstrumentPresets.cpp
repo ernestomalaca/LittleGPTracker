@@ -1,3 +1,4 @@
+#include "Application/Mixer/MixerService.h"
 #include "InstrumentPresets.h"
 #include "SampleInstrument.h"
 #include "SamplePool.h"
@@ -6,6 +7,7 @@
 #include "System/Console/Trace.h"
 #include <algorithm>
 #include <string.h>
+#include <stdlib.h>
 
 #define PRESET_DIR "root:presets"
 #define PRESET_FILE "preset.xml"
@@ -443,6 +445,7 @@ static void *prepareThread(void *arg) {
 	syscall(SYS_ioprio_set, 1 /*IOPRIO_WHO_PROCESS*/, tid, 3 << 13 /*IDLE*/) ;   // disco: lo último
 #endif
 	g_importGentle = true ;
+	if (getenv("TRK_SLOWPREP")) usleep(atoi(getenv("TRK_SLOWPREP")) * 1000) ;   // pruebas
 	job->ok = prepareNow(job->name) ;
 	g_importGentle = false ;
 	return 0 ;
@@ -456,7 +459,10 @@ bool InstrumentPresets::Prepare(const std::string &name) {
 	job.ok = false ;
 	pthread_t th ;
 	if (pthread_create(&th, 0, prepareThread, &job) == 0) {
+		MixerService *ms = MixerService::GetInstance() ;
+		int held = ms->ReleaseAll() ;   // el audio sigue mientras se lee
 		pthread_join(th, 0) ;
+		ms->Reacquire(held) ;
 		return job.ok ;
 	}
 #endif

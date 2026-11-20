@@ -60,6 +60,9 @@ public:
 
 	void Lock() ;
 	void Unlock() ;
+	int ReleaseAll() ;        // suelta el candado si es de este hilo (devuelve cuántas veces)
+	void Reacquire(int n) ;
+	unsigned long BuffersMixed() const { return mixed_ ; }
 
 protected:
 	void toggleRendering(bool enable) ;
@@ -70,6 +73,9 @@ private:
   MixBus bus_[MAX_BUS_COUNT];
   MixerServiceRenderMode mode_;
   SDL_mutex *sync_;
+  int depth_;
+  SDL_threadID owner_;
+  volatile unsigned long mixed_;
   bool isRendering_;
 } ;
 #endif

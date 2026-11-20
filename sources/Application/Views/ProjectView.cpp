@@ -305,7 +305,10 @@ void ProjectView::Update(Observable &,I_ObservableData *data) {
                 View::SetNotification("Todo está en el proyecto");
                 break;
             }
+            MixerService *ms = MixerService::GetInstance();
+            int held = ms->ReleaseAll();   // copiar tarda: el audio sigue
             int n = pool->Collect();
+            ms->Reacquire(held);
             MixerService::GetInstance()->SetRenderMode(0);
             PersistencyService::GetInstance()->Save();
             char m[64];
