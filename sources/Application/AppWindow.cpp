@@ -48,6 +48,17 @@ int AppWindow::charHeight_ = 8;
 
 // #define _FORCE_SDL_EVENT_
 
+#ifdef SDL2
+static Uint32 splashDone(Uint32, void *) {
+    SDL_Event e;
+    memset(&e, 0, sizeof(e));
+    e.type = SDL_WINDOWEVENT;
+    e.window.event = SDL_WINDOWEVENT_EXPOSED;
+    SDL_PushEvent(&e);
+    return 0;
+}
+#endif
+
 static void ProjectSelectCallback(View &v, ModalView &dialog) {
 
     SelectProjectDialog &spd = (SelectProjectDialog &)dialog;
@@ -90,6 +101,10 @@ AppWindow::AppWindow(I_GUIWindowImp &imp) : GUIWindow(imp) {
         const char *sp = Config::GetInstance()->GetValue("SPLASH");
         int ms = sp ? atoi(sp) : 2000;
         _splashUntil = ms > 0 ? System::GetInstance()->GetClock() + ms : 0;
+#ifdef SDL2
+        // al terminar, un "expose" para que se dibuje la lista sin esperar un botón
+        if (ms > 0) SDL_AddTimer(ms + 60, splashDone, 0);
+#endif
         _splashDrawn = false;
     }
 
@@ -657,6 +672,13 @@ bool AppWindow::onEvent(GUIEvent &event) {
 };
 
 void AppWindow::onUpdate() {
+    // trk2als: se acabó la pantalla de arranque: a dibujar lo de abajo (la
+    // lista de proyectos) sin esperar a que se apriete un botón
+    if (_splashUntil && System::GetInstance()->GetClock() >= _splashUntil) {
+        if (_currentView) _currentView->SetDirty(true);
+        Redraw();
+        Flush();
+    }
     // trk2als: Ableton Link (tempo y play/stop con la sesión)
     if (Player::GetInstance()) {
         Player *pl = Player::GetInstance();

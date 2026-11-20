@@ -17,7 +17,10 @@ def glyph(c):
     im = Image.new("L", (24, 24), 0)
     ImageDraw.Draw(im).text(((24 - f.getlength(chr(c))) / 2, 0), chr(c), font=f, fill=255)
     top = asc - BASELINE
-    return list(im.crop((12 - W // 2, top, 12 + W // 2, top + H)).get_flattened_data())
+    px = list(im.crop((12 - W // 2, top, 12 + W // 2, top + H)).get_flattened_data())
+    if c == ord("_") and sum(px) < 300:   # trk2als: el guion bajo cae fuera del recorte
+        for x in range(1, 7): px[10 * W + x] = 230
+    return px
 
 with open(out, "w") as o:
     o.write("// Generado por mksmallfont.py - no editar a mano\n")
