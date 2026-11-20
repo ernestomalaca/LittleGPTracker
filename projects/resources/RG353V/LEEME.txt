@@ -79,6 +79,8 @@ Lanzar sonidos a la pista (como clips)
   - El navegador sigue abierto para probar otro (gana el último que lances).
   - A sobre el que ya está en la pista (palomita) cierra el navegador.
   - B cierra y deja el último que entró.
+  - B sube una carpeta; déjalo apretado y suéltalo para salir del
+    navegador desde donde estés (la próxima vez abre en esa carpeta).
   - Y: "cerrar al cargar" sí / no (se recuerda). Con sí, A lanza y cierra;
     la barrita sigue en la cabecera de la pista.
   - Select+L deshace todo lo que probaste en esa visita de una vez.

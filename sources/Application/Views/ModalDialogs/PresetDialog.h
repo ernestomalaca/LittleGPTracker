@@ -103,7 +103,10 @@ private:
 	int treeTop_ ;
 	unsigned long previewAt_ ;   // cuándo arranca la muestra (0 = nada)
 	std::string playing_ ;       // lo que está sonando
-	bool inClip_ ;               // y suena en el clip de la pista (no la muestra)
+	bool inClip_ ;
+	unsigned long bAt_ ;         // cuándo se apretó B (0 = suelto): dejarlo apretado cierra
+	bool bHint_ ;
+	std::string bFolder_ ;       // dónde estaba al apretar B (ahí se vuelve a abrir)               // y suena en el clip de la pista (no la muestra)
 	PresetLauncher *launcher_ ;
 	int pick_ ;
 	int pickInstr_ ;

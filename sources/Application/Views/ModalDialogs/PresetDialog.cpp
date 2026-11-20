@@ -74,6 +74,8 @@ PresetDialog::PresetDialog(View &view, bool forSave, int kind)
       emptyOptions_(false), col_(1), treeSel_(0), treeTop_(0), previewAt_(0) {
 	launcher_ = 0 ;
 	inClip_ = false ;
+	bAt_ = 0 ;
+	bHint_ = false ;
 	pick_ = PICK_NONE ;
 	pickInstr_ = -1 ;
 	InstrumentPresets::ForgetLibCounts() ;   // por si se agregaron samples (p. ej. desde chancho.local)
@@ -414,7 +416,16 @@ void PresetDialog::stopPreview() {
 	}
 }
 
+static const unsigned long B_HOLD = 450 ;   // ms con B apretado: cierra (al soltar)
+
+static bool bLong(unsigned long at) { return at && SDL_GetTicks() - at >= B_HOLD ; }
+
 bool PresetDialog::Tick() {
+	if (!bHint_ && bLong(bAt_)) {   // ya cuenta como largo: se avisa
+		bHint_ = true ;
+		isDirty_ = true ;
+		return true ;
+	}
 	if (previewAt_ && SDL_GetTicks() >= previewAt_) {
 		previewAt_ = 0 ;
 		startPreview() ;
@@ -812,7 +823,10 @@ void PresetDialog::drawShapes() {
 
 	// abajo: lo que suena y los botones
 	const int BY = 410 ;
-	if (!playing_.empty()) {
+	if (bHint_) {   // B apretado un rato
+		FillRect(24, BY, 592, 34, Mix(bg, acc, 22), 6) ;
+		DrawText(36, BY + 11, "suelta B: sale del navegador", acc, 0) ;
+	} else if (!playing_.empty()) {
 		std::string s = (inClip_ ? "en el clip: " : "sonando: ") + playing_ ;
 		FillRect(24, BY, 592, 34, Mix(bg, acc, 14), 6) ;
 		DrawText(36, BY + 11, s.c_str(), acc, 0) ;
@@ -847,7 +861,31 @@ void PresetDialog::OnFocus() {
 }
 
 void PresetDialog::ProcessButtonMask(unsigned short mask, bool pressed) {
-	if (!pressed) return ;   // soltar el botón que abrió la ventana no cuenta
+	// trk2als: B apretado un rato y soltado: sale del navegador desde
+	// cualquier carpeta (al apretarlo ya subió una; donde quedó se recuerda)
+	if (!pressed) {
+		if (bAt_ && !(mask & EPBM_B)) {
+			bool hold = bLong(bAt_) ;
+			bAt_ = 0 ;
+			bHint_ = false ;
+			isDirty_ = true ;
+			if (hold && !IsFinished()) {
+				if (pick_) pickLast() = bFolder_ ; else InstrumentPresets::LastFolder() = bFolder_ ;
+				stopPreview() ;
+				EndModal(launcher_ ? PD_CLOSED : 0) ;
+			}
+		}
+		return ;   // soltar el botón que abrió la ventana no cuenta
+	}
+	if (mask & EPBM_B) {
+		if (bAt_) return ;   // B sigue apretado (repetición): no sube más
+		bAt_ = SDL_GetTicks() ;
+		bFolder_ = folder_ ;
+		if (!bAt_) bAt_ = 1 ;
+#ifdef SDL2
+		SDL_AddTimer(B_HOLD + 15, previewWake, 0) ;
+#endif
+	}
 	isDirty_ = true ;
 	int n = (int)entries_.size() ;
 	if (mask == EPBM_Y && launcher_ && !forSave_) {   // cerrar al cargar: sí / no
