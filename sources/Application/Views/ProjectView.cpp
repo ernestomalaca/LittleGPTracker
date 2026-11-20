@@ -344,8 +344,8 @@ void ProjectView::Update(Observable &,I_ObservableData *data) {
         case ACTION_QUIT: {
             // trk2als: con sabor de aquí
             MessageBox *mb = new MessageBox(
-                *this, "Zarpamos?\nLo que no guardaste\nse lo lleva la marea", MBBF_YES | MBBF_NO);
-            mb->Label(MBL_YES, "Zarpar").Label(MBL_NO, "Me quedo");
+                *this, "", MBBF_YES | MBBF_NO);
+            mb->Title("Salir y perder la fe?").Label(MBL_YES, "Salir").Label(MBL_NO, "Me quedo");
             DoModal(mb, QuitCallback);
             break;
         }

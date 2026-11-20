@@ -121,6 +121,7 @@ void MessageBox::drawShapes() {
 		lines.push_back(rest) ;
 	}
 	std::string title=title_ ;
+	if (!title.empty() && message_.empty()) lines.clear() ;   // solo el título
 	if (title.empty() && lines.size()>1) {
 		title=lines[0] ;
 		lines.erase(lines.begin()) ;
