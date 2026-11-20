@@ -668,7 +668,8 @@ void AppWindow::onUpdate() {
         int links = pl->LinkOn() ? pl->LinkPeers() : -1;
         if (links != lastLinks) {
             lastLinks = links;
-            if (_currentView && _currentView != _nullView) SetDirty();
+            // (se repinta ya: SetDirty solo se atiende cuando llega un botón)
+            if (_currentView && _currentView != _nullView) Redraw();
         }
     }
     if (_loadAfterResume) {
