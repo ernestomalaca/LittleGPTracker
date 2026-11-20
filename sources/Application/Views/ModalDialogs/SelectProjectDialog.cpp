@@ -46,7 +46,7 @@ static std::string ago(long t) {
 	if (d<86400) { long h=d/3600 ; snprintf(b,sizeof(b),h==1?"hace 1 hora":"hace %ld horas",h) ; return b ; }
 	long days=d/86400 ;
 	if (days==1) return "ayer" ;
-	if (days<14) { snprintf(b,sizeof(b),"hace %ld d",days) ; return b ; }
+	if (days<14) { snprintf(b,sizeof(b),"hace %ld días",days) ; return b ; }
 	if (days<60) { snprintf(b,sizeof(b),"hace %ld semanas",days/7) ; return b ; }
 	snprintf(b,sizeof(b),"hace %ld meses",days/30) ;
 	return b ;
