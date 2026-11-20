@@ -22,6 +22,8 @@
 #include "System/System/System.h"
 #include "Application/Model/Config.h"
 #include <cstdlib>
+#include <unistd.h>
+#include "System/Console/Trace.h"
 #include <cstring>
 #include <string>
 
@@ -109,6 +111,15 @@ static void LoadCallback(View &v,ModalView &dialog) {
 } ;
 
 static void QuitCallback(View &v,ModalView &dialog) {
+    if (dialog.GetReturnCode()==MBL_YES) {
+#if defined(__linux__)
+        // trk2als: seguro: si algo se traba al salir, en 5 s el sistema cierra Chancho
+        Trace::Log("SALIR", "confirmado");
+        fflush(stdout);
+        fsync(1);
+        alarm(5);
+#endif
+    }
     MixerService::GetInstance()->SetRenderMode(0);
     if (dialog.GetReturnCode()==MBL_YES) {
 		((ProjectView &)v).OnQuit() ;

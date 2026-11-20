@@ -1,3 +1,4 @@
+#include <unistd.h>
 #include "AppWindow.h"
 #include "Application/Commands/ApplicationCommandDispatcher.h"
 #include "Application/Commands/EventDispatcher.h"
@@ -944,6 +945,15 @@ void AppWindow::Update(Observable &o, I_ObservableData *d) {
 }
 
 void AppWindow::onQuitApp() {
+#if defined(__linux__)
+    // trk2als: salir sin desarmar nada (desarmar el audio y Link al final
+    // dejaba la consola en negro); el sistema cierra el audio y los archivos
+    Trace::Log("SALIR", "saliendo");
+    fflush(stdout);
+    fflush(stderr);
+    fsync(1);
+    _exit(0);
+#endif
     Player *player = Player::GetInstance();
     player->Stop();
     player->RemoveObserver(*this);
