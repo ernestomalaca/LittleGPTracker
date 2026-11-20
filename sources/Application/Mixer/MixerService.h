@@ -62,6 +62,7 @@ public:
 	void Unlock() ;
 	int ReleaseAll() ;        // suelta el candado si es de este hilo (devuelve cuántas veces)
 	void Reacquire(int n) ;
+	void Debug(int &depth, unsigned long &owner) { depth = depth_ ; owner = (unsigned long)owner_ ; }
 	unsigned long BuffersMixed() const { return mixed_ ; }
 	// lo más que el audio esperó el candado / tardó en mezclar desde la última vez (ms)
 	void TakeMax(unsigned &wait, unsigned &work) { wait = maxWait_ ; work = maxWork_ ; maxWait_ = 0 ; maxWork_ = 0 ; }

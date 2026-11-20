@@ -4,6 +4,7 @@
 #define SONG_COL_W 4   // trk2als: ancho de cada pista en la grilla
 #include "Application/Commands/ApplicationCommandDispatcher.h"
 #include "Application/Mixer/MixerService.h"
+#include "Application/Mixer/AudioWatch.h"
 #include "Application/Model/ProjectDatas.h"
 #include "Application/Player/Player.h"
 #include "Application/Utils/char.h"
@@ -1683,6 +1684,7 @@ void SongView::LoadTrackPreset(const std::string &name) {
     unsigned long m0 = MixerService::GetInstance()->BuffersMixed();
     unsigned w0, k0;
     MixerService::GetInstance()->TakeMax(w0, k0);
+    AudioWatchReset();
     bool ready = InstrumentPresets::Prepare(name);
     if (!ready && pool->GetNameListSize() >= MAX_PIG_SAMPLES - 16) {
         // trk2als: el pool se llenó con los samples de los sonidos de antes:
@@ -1699,13 +1701,19 @@ void SongView::LoadTrackPreset(const std::string &name) {
     unsigned long m1 = MixerService::GetInstance()->BuffersMixed();
     unsigned w1, k1;
     MixerService::GetInstance()->TakeMax(w1, k1);
+    unsigned gOut, gMix, gLock;
+    AudioWatchTake(gOut, gMix, gLock);
     beginSoundChange(ch);   // ahora sí: la pista se calla lo que tarda en aplicarse
     bool ok = ready && InstrumentPresets::Load(si, name);
     endSoundChange(ch);
-    extern int g_prepareHeld;
-    Trace::Log("PRESET", "%s: samples %lu ms (el audio mezcló %lu bloques mientras; candado %d; "
-               "esperó hasta %u ms, mezcla hasta %u ms), pista callada %lu ms",
-               name.c_str(), t1 - t0, m1 - m0, g_prepareHeld, w1, k1, (unsigned long)SDL_GetTicks() - t1);
+    extern int g_prepareHeld, g_prepareDepth;
+    extern unsigned long g_prepareOwner, g_prepareSelf;
+    Trace::Log("PRESET", "%s: samples %lu ms, pista callada %lu ms | durante la lectura: %lu bloques "
+               "mezclados; huecos máx: salida %u ms, mezcla %u ms, candado %u ms | candado soltado %d "
+               "(prof %d, dueño %s)",
+               name.c_str(), t1 - t0, (unsigned long)SDL_GetTicks() - t1, m1 - m0, gOut, gMix, gLock,
+               g_prepareHeld, g_prepareDepth,
+               g_prepareOwner == 0 ? "nadie" : (g_prepareOwner == g_prepareSelf ? "la interfaz" : "otro hilo"));
     if (!ok) {
         View::SetNotification(pool->GetNameListSize() >= MAX_PIG_SAMPLES - 16
             ? "Ya no caben más samples en el proyecto"

@@ -416,7 +416,8 @@ void InstrumentPresets::Restore(SampleInstrument *instr, const Snapshot &s) {
 // tarjeta con prioridad normal dejaba al audio sin turno (huecos). La
 // interfaz espera a que termine.
 extern volatile bool g_importGentle ;
-int g_prepareHeld = -1 ;   // para el log: cuántas veces se soltó el candado
+int g_prepareHeld = -1 ;
+int g_prepareDepth = 0 ; unsigned long g_prepareOwner = 0, g_prepareSelf = 0 ;   // para el log: cuántas veces se soltó el candado
 struct PrepareJob { std::string name ; bool ok ; } ;
 
 static bool prepareNow(const std::string &name) {
@@ -461,6 +462,8 @@ bool InstrumentPresets::Prepare(const std::string &name) {
 	pthread_t th ;
 	if (pthread_create(&th, 0, prepareThread, &job) == 0) {
 		MixerService *ms = MixerService::GetInstance() ;
+		ms->Debug(g_prepareDepth, g_prepareOwner) ;
+		g_prepareSelf = (unsigned long)SDL_ThreadID() ;
 		int held = ms->ReleaseAll() ;   // el audio sigue mientras se lee
 		pthread_join(th, 0) ;
 		ms->Reacquire(held) ;

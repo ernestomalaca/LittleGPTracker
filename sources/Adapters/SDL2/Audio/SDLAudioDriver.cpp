@@ -4,6 +4,7 @@
 #include "System/Console/Trace.h"
 #include "System/System/System.h"
 #include "Application/Model/Config.h"
+#include "Application/Mixer/AudioWatch.h"
 #include <string.h>
 #if defined(__linux__)
 #include <pthread.h>
@@ -30,6 +31,7 @@ static void audioRealtime(const char *who, int prio) {
 void sdl_callback(void *userdata, Uint8 *stream, int len) {
     static bool rt = false;
     if (!rt) { rt = true; audioRealtime("la salida de audio", 70); }
+    AudioWatchOut();
     SDLAudioDriver *sound = (SDLAudioDriver *)userdata;
     sound->OnChunkDone(stream, len);
 };

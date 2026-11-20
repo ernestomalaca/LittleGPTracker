@@ -1,3 +1,4 @@
+#include "AudioWatch.h"
 #include "MixerService.h"
 #include "Application/Audio/DummyAudioOut.h"
 #include "Application/Model/Config.h"
@@ -130,7 +131,9 @@ void MixerService::Update(Observable &o, I_ObservableData *d) {
     AudioDriver::Event *event = (AudioDriver::Event *)d;
     if (event->type_ == AudioDriver::Event::ADET_BUFFERNEEDED) {
         Uint32 a = SDL_GetTicks();
+        AudioWatchWaitBegin();
         Lock();
+        AudioWatchWaitEnd();
         Uint32 b = SDL_GetTicks();
         mixed_++;
         SetChanged();
@@ -138,6 +141,7 @@ void MixerService::Update(Observable &o, I_ObservableData *d) {
 
         out_->Trigger();
         Unlock();
+        AudioWatchMixDone();
         Uint32 c = SDL_GetTicks();
         // trk2als: para el log: lo más que esperó el candado y lo más que tardó en mezclar
         if (b - a > maxWait_) maxWait_ = b - a;
@@ -241,4 +245,36 @@ int MixerService::ReleaseAll() {
 
 void MixerService::Reacquire(int n) {
 	for (int i = 0; i < n; i++) Lock() ;
+}
+
+// --- trk2als: AudioWatch ----------------------------------------------------
+static volatile Uint32 awLastOut = 0, awLastMix = 0, awWaitSince = 0 ;
+static volatile Uint32 awOutGap = 0, awMixGap = 0, awLockWait = 0 ;
+
+void AudioWatchOut() {
+	Uint32 now = SDL_GetTicks() ;
+	if (awLastOut && now - awLastOut > awOutGap) awOutGap = now - awLastOut ;
+	awLastOut = now ;
+}
+void AudioWatchWaitBegin() { awWaitSince = SDL_GetTicks() ; }
+void AudioWatchWaitEnd() {
+	Uint32 w = SDL_GetTicks() - awWaitSince ;
+	if (w > awLockWait) awLockWait = w ;
+	awWaitSince = 0 ;
+}
+void AudioWatchMixDone() {
+	Uint32 now = SDL_GetTicks() ;
+	if (awLastMix && now - awLastMix > awMixGap) awMixGap = now - awLastMix ;
+	awLastMix = now ;
+}
+void AudioWatchReset() { awOutGap = awMixGap = awLockWait = 0 ; }
+void AudioWatchTake(unsigned &outGap, unsigned &mixGap, unsigned &lockWait) {
+	Uint32 now = SDL_GetTicks() ;
+	// lo que va del hueco actual también cuenta
+	Uint32 o = awOutGap, m = awMixGap, l = awLockWait ;
+	if (awLastOut && now - awLastOut > o) o = now - awLastOut ;
+	if (awLastMix && now - awLastMix > m) m = now - awLastMix ;
+	Uint32 ws = awWaitSince ;
+	if (ws && now - ws > l) l = now - ws ;
+	outGap = o ; mixGap = m ; lockWait = l ;
 }
