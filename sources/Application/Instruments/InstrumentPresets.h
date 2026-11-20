@@ -32,6 +32,18 @@ namespace InstrumentPresets {
 	// carga el preset en el instrumento; si el sample no está en el
 	// proyecto, lo copia. false si falló
 	bool Load(SampleInstrument *instr, const std::string &name) ;
+	// trk2als: lo que hace falta para mostrar y pre-escuchar un preset sin
+	// cargarlo: tipo, cuántas zonas o pads, su carpeta, el sample principal
+	// y los .wav de las zonas (en orden)
+	struct Info {
+		int kind ;
+		int zones ;
+		std::string dir ;      // la carpeta del preset (ruta completa)
+		std::string sample ;
+		std::vector<std::string> zoneFiles ;
+		Info() : kind(PK_SAMPLE), zones(0) {}
+	} ;
+	bool Describe(const std::string &name, Info &out) ;
 	// nombre sugerido para guardar: el del sample, sin extensión
 	std::string SuggestedName(SampleInstrument *instr) ;
 }

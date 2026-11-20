@@ -108,6 +108,10 @@ class View : public Observable {
     virtual void OnPlayerUpdate(PlayerEventType, unsigned int currentTick) = 0;
     virtual void OnFocus() = 0;
     virtual void AnimationUpdate() {}
+    // trk2als: un empujón de tiempo (cuando la ventana se repinta sola); llega
+    // también a las ventanas abiertas encima
+    virtual bool Tick() { return false; }   // true: hay que repintar
+    bool TickChain();
     // trk2als: la vista recibe los botones tal cual (Select, L, R, X, Y), sin
     // la traducción a los atajos de LGPT; pressedButton_ = el que se acaba de apretar
     virtual bool WantsRawButtons() { return false; }

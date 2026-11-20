@@ -47,5 +47,17 @@ Ableton Link
   corrido respecto a Live, ajusta <LINKOFFSET value="20"/> (milisegundos,
   puede ser negativo) en config.xml.
 
+Sonidos (presets) y su pre-escucha
+  Los presets viven en presets/ con carpetas por tipo: Kits, Multicapa,
+  Samples (y las subcarpetas que quieras, como Kits/Cumbia). Cada preset es
+  una carpeta con su preset.xml y sus .wav.
+  En el navegador de sonidos, al detenerte en uno suena su muestra:
+    - si la carpeta del preset trae preview.wav, suena ese archivo
+      (por ejemplo un loop de 2 a 4 segundos exportado de Ableton,
+      44.1 kHz, 16 bits, estéreo o mono)
+    - si no: un kit toca un compás con sus pads (bombo, hat, caja...) al
+      tempo del proyecto; un sample o multicapa toca su sample principal
+  Ejemplo:  presets/Kits/Cumbia/KIT 1/preview.wav
+
 Si algo falla
   chancho6/log.txt tiene lo que dijo el programa.

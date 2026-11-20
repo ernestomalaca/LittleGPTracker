@@ -9,6 +9,7 @@
 #include "Application/Utils/char.h"
 #include "Application/Views/ModalDialogs/MessageBox.h"
 #include "Application/Views/ModalDialogs/SelectProjectDialog.h"
+#include "Application/Views/ModalDialogs/PresetDialog.h"
 #include "Foundation/Variables/WatchedVariable.h"
 #include "Player/Player.h"
 #include "Services/Midi/MidiService.h"
@@ -694,6 +695,21 @@ void AppWindow::onUpdate() {
             lastLinks = links;
             // (se repinta ya: SetDirty solo se atiende cuando llega un botón)
             if (_currentView && _currentView != _nullView) Redraw();
+        }
+    }
+    if (_currentView && _currentView->TickChain()) {   // trk2als
+        _currentView->SetDirty(true);
+        Redraw();
+    }
+    // trk2als: pruebas: TRK_PRESETS=1 abre el navegador de sonidos al empezar
+    {
+        static bool once = false;
+        const char *tp = getenv("TRK_PRESETS");
+        if (!once && tp && *tp && _currentView == _songView && !_currentView->HasModal()) {
+            once = true;
+            _currentView->DoModal(new PresetDialog(*_currentView));
+            _currentView->SetDirty(true);
+            Redraw();
         }
     }
     if (_loadAfterResume) {

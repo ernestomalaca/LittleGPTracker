@@ -223,6 +223,12 @@ void View::Redraw() {
 	isDirty_=false ;
 } ;
 
+bool View::TickChain() {
+	bool d=Tick() ;
+	if (modalView_ && modalView_->TickChain()) d=true ;
+	return d ;
+}
+
 bool View::ModalChainShapes() {
 	if (!modalView_) return true ;
 	return modalView_->UsesShapes() && modalView_->ModalChainShapes() ;

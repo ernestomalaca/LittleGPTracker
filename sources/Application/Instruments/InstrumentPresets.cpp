@@ -340,3 +340,41 @@ const char *InstrumentPresets::KindFolder(int kind) {
 		default: return "Samples" ;
 	}
 }
+
+bool InstrumentPresets::Describe(const std::string &name, Info &out) {
+	out = Info() ;
+	Path folder = presetPath(name) ;
+	out.dir = folder.GetPath() ;
+	TiXmlDocument doc(Path(folder).Descend(PRESET_FILE).GetPath()) ;
+	if (!doc.LoadFile()) return false ;
+	TiXmlElement *top = doc.FirstChildElement("LGPTPRESET") ;
+	TiXmlElement *data = top ? top->FirstChildElement("INSTRUMENT") : 0 ;
+	if (!data) return false ;
+	bool kit = false ;
+	std::string zones ;
+	for (TiXmlElement *p = data->FirstChildElement("PARAM"); p; p = p->NextSiblingElement("PARAM")) {
+		const char *n = p->Attribute("NAME") ;
+		const char *v = p->Attribute("VALUE") ;
+		if (!n || !v) continue ;
+		if (!strcmp(n, "sample")) out.sample = v ;
+		if (!strcmp(n, "s kit") && strcmp(v, "0") && *v) kit = true ;
+		if (!strcmp(n, "s zones")) zones = v ;
+	}
+	size_t pos = 0 ;
+	while (pos < zones.size()) {
+		size_t end = zones.find(';', pos) ;
+		if (end == std::string::npos) end = zones.size() ;
+		std::string item = zones.substr(pos, end - pos) ;
+		pos = end + 1 ;
+		int commas = 0 ;
+		for (size_t c = 0; c < item.size(); c++) {
+			if (item[c] == ',' && ++commas == 6) {
+				out.zoneFiles.push_back(item.substr(c + 1)) ;
+				break ;
+			}
+		}
+	}
+	out.zones = (int)out.zoneFiles.size() ;
+	out.kind = kit ? PK_KIT : (out.zones ? PK_MULTI : PK_SAMPLE) ;
+	return true ;
+}
