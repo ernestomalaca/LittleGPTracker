@@ -555,11 +555,10 @@ void ProjectView::drawBoard() {
     }
 
     // el aviso de lo que acaba de pasar (guardar, recopilar...), en el espacio de abajo
-    if (!msg_.empty()) {
-        int tw = 8 * TextLen(msg_);
-        int mx = 320 - tw / 2 - 16;
-        FillRect(mx, 408, tw + 32, 30, Mix(bg, acc, 16), 6);
-        DrawText(mx + 16, 417, msg_.c_str(), acc, 0);
+    if (!msg_.empty()) {   // letras blancas, como los avisos de la Session
+        std::string m = msg_;
+        if (m.size() > 36) m = m.substr(0, 36);
+        DrawText(28, 414, m.c_str(), fg, 1);
     }
 
     snprintf(b, sizeof(b), "Chancho 6 - %s.%s.%s", PROJECT_NUMBER, PROJECT_RELEASE, BUILD_COUNT);
