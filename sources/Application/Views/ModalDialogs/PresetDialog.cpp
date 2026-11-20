@@ -11,6 +11,7 @@
 #include <ctype.h>
 #include <fstream>
 #include <vector>
+#include <algorithm>
 
 #define PD_WIDTH 28
 #define PD_ROWS 12
@@ -144,6 +145,15 @@ void PresetDialog::buildTree() {
 		if (locked && folders[i] != InstrumentPresets::KindFolder(kind_)) continue ;
 		n.path = folders[i] ; n.label = folders[i] ; n.depth = 0 ;
 		tree_.push_back(n) ;   // trk2als: solo las categorías; lo de adentro, a la derecha
+	}
+	// trk2als: Samples siempre que haya samplelib (aunque no haya presets de
+	// sample): ahí están "Sample vacío" y la Librería
+	const char *sf = InstrumentPresets::KindFolder(InstrumentPresets::PK_SAMPLE) ;
+	if (!forSave_ && (kind_ < 0 || kind_ == InstrumentPresets::PK_SAMPLE) &&
+	    std::find(folders.begin(), folders.end(), std::string(sf)) == folders.end() &&
+	    InstrumentPresets::LibExists()) {
+		n.path = sf ; n.label = sf ; n.depth = 0 ;
+		tree_.push_back(n) ;
 	}
 	// el elegido: la carpeta actual o su antepasado más cercano en el árbol
 	treeSel_ = 0 ;
