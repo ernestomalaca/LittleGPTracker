@@ -3,6 +3,7 @@
 #include "Application/Instruments/WavFile.h"
 #include "Application/Player/Player.h"
 #include "Application/Utils/Latin1.h"
+#include "NewProjectDialog.h"
 #include "System/FileSystem/FileSystem.h"
 #include <stdio.h>
 #include <string.h>
@@ -37,7 +38,13 @@ PresetDialog::PresetDialog(View &view, bool forSave, int kind)
 		const char *kf = InstrumentPresets::KindFolder(kind_) ;
 		if (folder_.compare(0, strlen(kf), kf) != 0 || !InstrumentPresets::FolderHas(folder_, kind_))
 			folder_ = InstrumentPresets::FolderHas(kf, kind_) || forSave_ ? kf : "" ;
-		if (forSave_ && !Path(std::string("root:presets/") + kf).Exists()) folder_ = "" ;
+		if (forSave_) {   // trk2als: se guarda en su categoría (se crea si no existe)
+			Path base("root:presets") ;
+			if (!base.Exists()) FileSystem::GetInstance()->MakeDir(base.GetPath().c_str()) ;
+			Path cat = base.Descend(kf) ;
+			if (!cat.Exists()) FileSystem::GetInstance()->MakeDir(cat.GetPath().c_str()) ;
+			if (folder_.compare(0, strlen(kf), kf) != 0) folder_ = kf ;
+		}
 	}
 	load() ;
 	if (entries_.empty() && !folder_.empty()) {    // la carpeta ya no existe
@@ -78,12 +85,14 @@ void PresetDialog::buildTree() {
 	InstrumentPresets::ListFolder("", folders, presets) ;
 	std::string topSel = folder_.substr(0, folder_.find('/')) ;
 	Node n ;
-	if (!presets.empty() || forSave_) {   // presets sueltos en la raíz
+	bool locked = forSave_ && kind_ >= 0 ;   // guardar: solo su categoría
+	if (!presets.empty() && !forSave_) {   // presets sueltos en la raíz
 		n.path = "" ; n.label = "Sueltos" ; n.depth = 0 ;
 		tree_.push_back(n) ;
 	}
 	for (size_t i = 0; i < folders.size(); i++) {
 		if (!folderOk(folders[i])) continue ;
+		if (locked && folders[i] != InstrumentPresets::KindFolder(kind_)) continue ;
 		n.path = folders[i] ; n.label = folders[i] ; n.depth = 0 ;
 		tree_.push_back(n) ;   // trk2als: solo las categorías; lo de adentro, a la derecha
 	}
@@ -108,6 +117,11 @@ void PresetDialog::load() {
 		e.kind = K_HERE ;
 		e.name = "[guardar aquí]" ;
 		entries_.push_back(e) ;
+		if (!folder_.empty()) {
+			e.kind = K_NEWDIR ;
+			e.name = "Nueva carpeta" ;
+			entries_.push_back(e) ;
+		}
 	}
 	// trk2als: la opción vacía de la categoría (Kits, Multicapa, Samples)
 	if (emptyOptions_ && !forSave_ && depthOf(folder_) == 1) {
@@ -146,6 +160,21 @@ void PresetDialog::load() {
 	}
 	selected_ = 0 ;
 	top_ = 0 ;
+}
+
+static void NewFolderCallback(View &v, ModalView &dialog) {
+	if (dialog.GetReturnCode() > 0)
+		((PresetDialog &)v).OnNewFolder(((NewProjectDialog &)dialog).GetName()) ;
+}
+
+void PresetDialog::OnNewFolder(const std::string &name) {
+	if (name.empty()) return ;
+	Path p(std::string("root:presets/") + full(name)) ;
+	if (!p.Exists()) FileSystem::GetInstance()->MakeDir(p.GetPath().c_str()) ;
+	folder_ = full(name) ;
+	load() ;
+	selected_ = 0 ;   // "Guardar aquí"
+	isDirty_ = true ;
 }
 
 // trk2als: atrás (← o B): a la carpeta de arriba, o a las categorías
@@ -417,11 +446,13 @@ void PresetDialog::drawShapes() {
 			sub = b ;
 		} else {
 			FrameRect(sx, sy, ss, ss, dim, 7, 2) ;
-			const char *ic = e.kind == K_UP ? "<" : (e.kind == K_HERE || e.kind == K_EMPTY) ? "+" : "/" ;
+			const char *ic = e.kind == K_UP ? "<" : e.kind == K_HERE ? ">" :
+			                 (e.kind == K_EMPTY || e.kind == K_NEWDIR) ? "+" : "/" ;
 			DrawText(sx + 11, sy + 11, ic, dim, 1) ;
 			if (e.kind == K_FOLDER) { name = name.substr(0, name.size() - 1) ; sub = "carpeta" ; }
 			if (e.kind == K_UP) { name = "volver" ; sub = "carpeta de arriba" ; }
 			if (e.kind == K_HERE) { name = "Guardar aquí" ; sub = folder_.empty() ? "presets" : folder_ ; }
+			if (e.kind == K_NEWDIR) sub = "una subcategoría aquí" ;
 			if (e.kind == K_EMPTY)
 				sub = e.zones == PD_EMPTY_KIT ? "armarlo pad por pad" :
 				      e.zones == PD_IMPORT_SF2 ? "un soundfont de la samplelib" : "eliges el sample tú" ;
@@ -461,7 +492,7 @@ void PresetDialog::drawShapes() {
 		DrawText(36, BY + 11, s.c_str(), acc, 0) ;
 		DrawText(616 - 12 - 8 * 18, BY + 11, "A carga   B atrás", fg, 0) ;
 	} else if (forSave_) {
-		DrawText(32, BY + 11, "<> columnas   A elige   B cancela", dim, 0) ;
+		DrawText(32, BY + 11, col_ == 0 ? "A o derecha entra   B cancela" : "A elige / entra   izquierda o B atrás", dim, 0) ;
 	} else {
 		DrawText(32, BY + 11, col_ == 0 ? "A o derecha entra   B cierra" : "A entra / carga   izquierda o B atrás", dim, 0) ;
 	}
@@ -524,6 +555,13 @@ void PresetDialog::ProcessButtonMask(unsigned short mask, bool pressed) {
 			InstrumentPresets::LastFolder() = folder_ ;
 			EndModal(1) ;
 			return ;
+		case K_NEWDIR: {
+			NewProjectDialog *nd = new NewProjectDialog(*this, Path(std::string("root:presets/") + folder_)) ;
+			nd->SetPrefix("") ;
+			nd->SetTitle("Nueva subcategoría") ;
+			DoModal(nd, NewFolderCallback) ;
+			return ;
+		}
 		case K_EMPTY:
 			stopPreview() ;
 			InstrumentPresets::LastFolder() = folder_ ;

@@ -10,6 +10,7 @@
 #include "Application/Views/ModalDialogs/MessageBox.h"
 #include "Application/Views/ModalDialogs/SelectProjectDialog.h"
 #include "Application/Views/ModalDialogs/PresetDialog.h"
+#include "Application/Instruments/InstrumentPresets.h"
 #include "Foundation/Variables/WatchedVariable.h"
 #include "Player/Player.h"
 #include "Services/Midi/MidiService.h"
@@ -707,7 +708,10 @@ void AppWindow::onUpdate() {
         const char *tp = getenv("TRK_PRESETS");
         if (!once && tp && *tp && _currentView == _songView && !_currentView->HasModal()) {
             once = true;
-            _currentView->DoModal(new PresetDialog(*_currentView));
+            // TRK_PRESETS=save: la de guardar un kit
+            _currentView->DoModal(strcmp(tp, "save") == 0
+                ? new PresetDialog(*_currentView, true, InstrumentPresets::PK_KIT)
+                : new PresetDialog(*_currentView));
             _currentView->SetDirty(true);
             Redraw();
         }

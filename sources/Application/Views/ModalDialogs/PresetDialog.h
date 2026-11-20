@@ -34,7 +34,10 @@ public:
 	// trk2als: "Kit vacío" / "Importar .sf2" / "Sample vacío" en cada categoría
 	void SetEmptyOptions(bool on) { emptyOptions_ = on ; load() ; }
 private:
-	enum Kind { K_UP, K_HERE, K_FOLDER, K_PRESET, K_EMPTY } ;
+	enum Kind { K_UP, K_HERE, K_FOLDER, K_PRESET, K_EMPTY, K_NEWDIR } ;
+public:
+	void OnNewFolder(const std::string &name) ;   // "Nueva subcategoría"
+private:
 	struct Entry {
 		Kind kind ;
 		std::string name ;

@@ -2,6 +2,7 @@
 #include "NewProjectDialog.h"
 #include "Application/Utils/ProjectName.h"
 #include "Application/Utils/RandomNames.h"
+#include "Application/Utils/Latin1.h"
 #include <string.h>
 
 // trk2als: solo lo que sirve en un nombre de carpeta
@@ -231,7 +232,7 @@ void NewProjectDialog::drawShapes() {
 
     // el título
     std::string t = title_.empty() ? "Guardar como" : title_;
-    for (size_t i = 0; i < t.size(); i++) t[i] = toupper(t[i]);
+    t = UpperUtf8(t);   // con tildes
     DrawText(32, 24, t.c_str(), acc, 1);
     if (keyboard_) DrawText(PX + PW - 24 - 8 * 22, 28, "Start cierra el teclado", dim, 0);
 

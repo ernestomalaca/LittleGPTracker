@@ -39,6 +39,21 @@ inline std::string ToLatin1(const std::string &s) { return ToLatin1(s.c_str()); 
 inline int TextLen(const char *s) { return (int)ToLatin1(s).size(); }
 inline int TextLen(const std::string &s) { return (int)ToLatin1(s).size(); }
 
+// mayúsculas, también con tilde y ñ (UTF-8 -> UTF-8)
+inline std::string UpperUtf8(const std::string &s) {
+    std::string out(s);
+    for (size_t i = 0; i < out.size(); i++) {
+        unsigned char c = out[i];
+        if (c >= 'a' && c <= 'z') out[i] = char(c - 32);
+        else if (c == 0xC3 && i + 1 < out.size()) {
+            unsigned char d = out[i + 1];
+            if (d >= 0xA0 && d <= 0xBE && d != 0xB7) out[i + 1] = char(d - 0x20);
+            i++;
+        }
+    }
+    return out;
+}
+
 // para la letra vieja de 8x8 (128 caracteres): la letra sin tilde
 inline unsigned char FoldLatin1(unsigned char c) {
     if (c < 0x80) return c;

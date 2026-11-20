@@ -1857,7 +1857,9 @@ void InstrumentView::openPresetSave() {
 		return ;
 	}
 	// primero la carpeta (categoría), luego el nombre (un kit, de entrada en Kits)
-	PresetDialog *pd=new PresetDialog(*this,true,si->IsKit()?InstrumentPresets::PK_KIT:-1) ;
+	// trk2als: la categoría la pone lo que se guarda: kit, multicapa o sample
+	int kind=si->IsKit()?InstrumentPresets::PK_KIT:(si->IsZoned()?InstrumentPresets::PK_MULTI:InstrumentPresets::PK_SAMPLE) ;
+	PresetDialog *pd=new PresetDialog(*this,true,kind) ;
 	DoModal(pd,PresetFolderCallback) ;
 }
 
