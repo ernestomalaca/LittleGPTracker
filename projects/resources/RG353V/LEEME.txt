@@ -71,9 +71,9 @@ Lanzar sonidos a la pista (como clips)
   - Y: "cerrar al cargar" sí / no (se recuerda). Con sí, A lanza y cierra;
     la barrita sigue en la cabecera de la pista.
   - Select+L deshace todo lo que probaste en esa visita de una vez.
-  - Igual en "cambiar de kit" (A en el nombre del kit, en el instrumento) y
-    en "cargar preset" de un instrumento sin pista; ahí el deshacer es el
-    del kit (Select+L en el instrumento).
+  - El sonido de una pista se elige solo en su cabecera; en el instrumento
+    se edita (pads, samples, rebanadas, perillas). En un instrumento sin
+    pista, "cargar preset" también lanza al 1.
 
 Samples: se usan desde donde están (como Live)
   Cargar un sonido de la librería o de un preset ya no copia sus .wav al
