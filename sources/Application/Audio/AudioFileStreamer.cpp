@@ -5,6 +5,8 @@
 #include "Services/Audio/Audio.h"
 #include <string.h>
 
+#define STREAM_FADE 256   // salir: ~6 ms; entrar: ~1.5 ms
+
 AudioFileStreamer::AudioFileStreamer() {
 	wav_=0 ;
 	end_=-1 ;
@@ -17,6 +19,8 @@ AudioFileStreamer::AudioFileStreamer() {
 	startFrac_=0 ;
 	delay_=0 ;
 	loop_=false ;
+	gain_=0 ;
+	stopping_=false ;
 } ;
 
 AudioFileStreamer::~AudioFileStreamer() {
@@ -39,12 +43,15 @@ bool AudioFileStreamer::Start(const Path &path, double speed, double delaySecs, 
 	loop_=loop ;
 	end_=-1 ;
 	newPath_=true ;
+	stopping_=false ;
 	mode_=AFSM_PLAYING ;
 	return true ;
 } ;
 
 void AudioFileStreamer::Stop() {
-	mode_=AFSM_STOPPED ;
+	// trk2als: no se corta de golpe: baja unos ms y luego para (en Render)
+	if (mode_==AFSM_PLAYING && wav_ && gain_>0) stopping_=true ;
+	else mode_=AFSM_STOPPED ;
   Trace::Debug("Streaming stopped");
 } ;
 
@@ -58,10 +65,13 @@ bool AudioFileStreamer::Render(fixed *buffer,int samplecount) {
 	}
 
 	// Do we need to get a new file ?
-
-	if (newPath_) {
+	// trk2als: si lo de antes suena, primero baja (este bloque) y luego cambia
+	bool switching=newPath_ && wav_ && gain_>0 ;
+	bool fadeOut=stopping_ || switching ;
+	if (newPath_ && !switching) {
 		SAFE_DELETE(wav_) ;
 		newPath_=false ;
+		gain_=0 ;
 	}
 
 	// new look if we need to load the file
@@ -77,6 +87,7 @@ bool AudioFileStreamer::Render(fixed *buffer,int samplecount) {
 		}
 		position_=long(startFrac_*wav_->GetSize(-1)) ;
 		frac_=0 ;
+		gain_=0 ;
 	}
 
 	// we are playing a valid file
@@ -93,7 +104,7 @@ bool AudioFileStreamer::Render(fixed *buffer,int samplecount) {
 	// trk2als: silencio hasta el siguiente tiempo
 	memset(buffer,0,2*samplecount*sizeof(fixed)) ;
 	int skip=0 ;
-	if (delay_>0) {
+	if (delay_>0 && !fadeOut) {
 		skip=(delay_>samplecount)?samplecount:int(delay_) ;
 		delay_-=skip ;
 		if (skip==samplecount) return true ;
@@ -106,6 +117,7 @@ bool AudioFileStreamer::Render(fixed *buffer,int samplecount) {
 		count=size-position_ ;
 	}
 	if (count<=0) {
+		if (switching) { SAFE_DELETE(wav_) ; return true ; }   // lo de antes ya había acabado
 		if (loop_ && size>0) { position_=0 ; frac_=0 ; return true ; }
 		mode_=AFSM_STOPPED ;
 		return true ;
@@ -127,8 +139,18 @@ bool AudioFileStreamer::Render(fixed *buffer,int samplecount) {
 			long left=size-(position_+idx) ;
 			if (left<128) { l=int(l*left/128) ; r=int(r*left/128) ; }
 		}
+		// trk2als: el fade de entrada / salida
+		if (fadeOut) { if (gain_>0) gain_-- ; }
+		else if (gain_<STREAM_FADE) { gain_+=4 ; if (gain_>STREAM_FADE) gain_=STREAM_FADE ; }   // entra en ~1.5 ms (el golpe no se pierde)
+		if (gain_<STREAM_FADE) { l=l*gain_/STREAM_FADE ; r=r*gain_/STREAM_FADE ; }
 		*dst++=i2fp(l) ;
 		*dst++=i2fp(r) ;
+		if (fadeOut && gain_==0) { i++ ; break ; }
+	}
+	if (fadeOut && gain_==0) {   // ya bajó: para, o el que sigue en el próximo bloque
+		SAFE_DELETE(wav_) ;
+		if (stopping_) { stopping_=false ; mode_=AFSM_STOPPED ; }
+		return true ;
 	}
 	double advance=frac_+i*step ;
 	int whole=int(advance) ;

@@ -36,6 +36,9 @@ protected:
 	double frac_ ;   // trk2als: posición fraccionaria para respetar la frecuencia del archivo
 	int shift_ ;
 	int end_ ;
+	// trk2als: sin clicks al moverse rápido: entra y sale con un fade corto
+	int gain_ ;       // 0..STREAM_FADE
+	bool stopping_ ;  // bajando para parar
 } ;
 
 #endif 
