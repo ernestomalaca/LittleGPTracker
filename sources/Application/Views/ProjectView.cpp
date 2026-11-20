@@ -615,6 +615,13 @@ void ProjectView::notify(const char *msg) {
 }
 
 bool ProjectView::Tick() {
+    // trk2als: si el tempo cambió desde afuera (Link), el número grande también
+    static int shownTempo = -1;
+    int t = project_ ? project_->GetTempo() : -1;
+    if (t != shownTempo) {
+        shownTempo = t;
+        return true;
+    }
     if (!msg_.empty() && SDL_GetTicks() - msgAt_ >= 2000) {
         msg_.clear();
         return true;
