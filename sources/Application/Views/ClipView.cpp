@@ -1839,7 +1839,7 @@ void ClipView::curveCopy(bool cut) {
         int k = curveNodeAt(cursorStep_);
         if (!l || k < 0) { message(cut ? "Nada que borrar" : "Nada que copiar"); return; }
         curveClip_.clear();
-        curveClip_.push_back(AutoPoint(l->points[k].pos - from, l->points[k].value, l->points[k].ramp));
+        curveClip_.push_back(AutoPoint(l->points[k].pos - from, l->points[k].value, l->points[k].ramp, l->points[k].inv));
         curveClipLen_ = 1;
         if (cut) {
             curveSel_ = -1;
@@ -1858,7 +1858,7 @@ void ClipView::curveCopy(bool cut) {
     curveClip_.push_back(AutoPoint(0, v, r));   // cómo empieza
     for (size_t k = 0; k < l->points.size(); k++) {
         const AutoPoint &p = l->points[k];
-        if (p.pos > from && p.pos < to) curveClip_.push_back(AutoPoint(p.pos - from, p.value, p.ramp));
+        if (p.pos > from && p.pos < to) curveClip_.push_back(AutoPoint(p.pos - from, p.value, p.ramp, p.inv));
     }
     laneAt(l, to - 1, base, v, r);
     curveClip_.push_back(AutoPoint(to - 1 - from, v, false));   // cómo termina
@@ -1930,7 +1930,7 @@ void ClipView::curveWrite(const std::vector<AutoPoint> &seg, int from, int len) 
     for (size_t k = 0; k < seg.size(); k++) {
         int p = from + seg[k].pos;
         if (p >= to) { cutShort = true; continue; }
-        l.points.push_back(AutoPoint(p, seg[k].value, seg[k].ramp));
+        l.points.push_back(AutoPoint(p, seg[k].value, seg[k].ramp, seg[k].inv));
     }
     if (cutShort && to - 1 > from) {   // no cupo entero: su forma hasta el final del clip
         AutoLane g;
@@ -1955,7 +1955,7 @@ bool ClipView::curveTake(int from, int to, std::vector<AutoPoint> &seg) {
     seg.push_back(AutoPoint(0, v, r));
     for (size_t k = 0; k < l->points.size(); k++) {
         const AutoPoint &p = l->points[k];
-        if (p.pos > from && p.pos < to) seg.push_back(AutoPoint(p.pos - from, p.value, p.ramp));
+        if (p.pos > from && p.pos < to) seg.push_back(AutoPoint(p.pos - from, p.value, p.ramp, p.inv));
     }
     laneAt(l, to - 1, base, v, r);
     if (to - 1 - from > 0) seg.push_back(AutoPoint(to - 1 - from, v, false));
@@ -2005,7 +2005,7 @@ void ClipView::curveTransform(int mode, int d) {
         for (size_t k = 0; k < seg.size(); k++) {
             int p = int((long long)seg[k].pos * nlen / len);
             if (k + 1 == seg.size() && seg.size() > 1) p = nlen - 1;   // el final, al final
-            out.push_back(AutoPoint(p, seg[k].value, seg[k].ramp));
+            out.push_back(AutoPoint(p, seg[k].value, seg[k].ramp, seg[k].inv));
         }
         AutoLane tmp;
         tmp.points = out;
@@ -2151,9 +2151,11 @@ bool ClipView::curveButton(unsigned short mask, unsigned short v) {
         if (v == EPBM_X) {   // X: rampa o escalón hacia el siguiente
             AutoLane *l = clip().FindLane(d->curveID_, -1);
             int k = curveNodeAt(cursorStep_);
-            if (l && k >= 0) {
-                l->points[k].ramp = !l->points[k].ramp;
-                message(l->points[k].ramp ? "Rampa" : "Escalon");
+            if (l && k >= 0) {   // rampa -> escalón -> escalón invertido -> rampa
+                AutoPoint &p = l->points[k];
+                if (p.ramp) { p.ramp = false; p.inv = false; message("Escalon"); }
+                else if (!p.inv) { p.inv = true; message("Escalon invertido"); }
+                else { p.ramp = true; p.inv = false; message("Rampa"); }
             }
         }
         return true;
@@ -2255,7 +2257,7 @@ void ClipView::drawCurves() {
         curveText(curV, vb, sizeof(vb), false);
         DrawText(w + 16, 35, vb, fg, 1);
         const char *node = "";
-        if (nodeK >= 0) node = lane->points[nodeK].ramp ? "  rampa" : "  escalon";
+        if (nodeK >= 0) node = lane->points[nodeK].ramp ? "  rampa" : lane->points[nodeK].inv ? "  invertido" : "  escalon";
         if (!msg_.empty()) snprintf(info, sizeof(info), "%s", msg_.c_str());
         else snprintf(info, sizeof(info), "%d.%d.%d%s%s", cursorStep_ / 16 + 1, (cursorStep_ % 16) / 4 + 1,
                       cursorStep_ % 4 + 1, has ? "" : "  sin curva", node);
@@ -2405,5 +2407,5 @@ void ClipView::drawCurves() {
         FillRect(GRID_X + (playStep_ - p0) * STEP_W, GRID_Y - 2, 2, gh + 4, play);
 
     View::EnableNotification();   // el aviso, abajo
-    drawHelpBar("A:nodo;A+flechas:mover;B+A:borrar;X:rampa;SEL:notas;A+L:instrumento");
+    drawHelpBar("A:nodo;A+flechas:mover;B+A:borrar;X:forma;SEL:notas;A+L:instrumento");
 }

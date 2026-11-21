@@ -52,6 +52,7 @@ bool AutoLane::ValueAt(int pos,int &value) const {
 	size_t i=0 ;
 	while (i+1<points.size() && points[i+1].pos<=pos) i++ ;
 	const AutoPoint &a=points[i] ;
+	if (a.inv && !a.ramp && i+1<points.size() && pos>a.pos) { value=points[i+1].value ; return true ; }
 	if (!a.ramp || i+1>=points.size()) { value=a.value ; return true ; }
 	const AutoPoint &b=points[i+1] ;
 	int span=b.pos-a.pos ;
@@ -104,7 +105,7 @@ void Clip::DuplicatePageLanes(int page) {
 			AutoPoint a=p[k] ;
 			if (a.pos>=t) a.pos+=d ;
 			out.push_back(a) ;
-			if (p[k].pos>=f && p[k].pos<t) out.push_back(AutoPoint(p[k].pos+d,p[k].value,p[k].ramp)) ;
+			if (p[k].pos>=f && p[k].pos<t) out.push_back(AutoPoint(p[k].pos+d,p[k].value,p[k].ramp,p[k].inv)) ;
 		}
 		p=out ;
 		lanes[i].Sort() ;
@@ -168,7 +169,7 @@ void ClipBank::Save(TiXmlNode *node) {
 			std::string pts ;
 			for (size_t k=0;k<lane.points.size();k++) {
 				char b[48] ;
-				sprintf(b,"%s%d,%d,%d",k?";":"",lane.points[k].pos,lane.points[k].value,lane.points[k].ramp?1:0) ;
+				sprintf(b,"%s%d,%d,%d",k?";":"",lane.points[k].pos,lane.points[k].value,lane.points[k].ramp?1:(lane.points[k].inv?2:0)) ;
 				pts+=b ;
 			}
 			le.SetAttribute("POINTS",pts.c_str()) ;
@@ -212,7 +213,7 @@ void ClipBank::Restore(TiXmlElement *element) {
 			while (*p) {
 				int pos,val,r ;
 				if (sscanf(p,"%d,%d,%d",&pos,&val,&r)==3 && pos>=0 && pos<clip.Steps()*CLIP_TICKS)
-					lane.points.push_back(AutoPoint(pos,val,r!=0)) ;
+					lane.points.push_back(AutoPoint(pos,val,r==1,r==2)) ;
 				const char *n=strchr(p,';') ;
 				if (!n) break ;
 				p=n+1 ;

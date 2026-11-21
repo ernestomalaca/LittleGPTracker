@@ -44,9 +44,10 @@ struct AutoPoint {
 	int pos ;      // en 1/24 de paso desde el inicio del clip
 	int value ;    // el valor tal cual de la variable
 	bool ramp ;    // de aquí al siguiente: rampa (si no, escalón)
-	AutoPoint():pos(0),value(0),ramp(false) {}
-	AutoPoint(int p,int v,bool r):pos(p),value(v),ramp(r) {}
-	bool operator==(const AutoPoint &o) const { return pos==o.pos && value==o.value && ramp==o.ramp ; }
+	bool inv ;     // escalón invertido: salta ya al valor del siguiente
+	AutoPoint():pos(0),value(0),ramp(false),inv(false) {}
+	AutoPoint(int p,int v,bool r,bool i=false):pos(p),value(v),ramp(r),inv(i) {}
+	bool operator==(const AutoPoint &o) const { return pos==o.pos && value==o.value && ramp==o.ramp && inv==o.inv ; }
 } ;
 
 struct AutoLane {
