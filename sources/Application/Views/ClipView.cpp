@@ -1774,7 +1774,7 @@ void ClipView::curveMoveNode(int dt, int dv, bool big) {
     if (!l || k < 0) return;
     AutoPoint p = l->points[k];
     if (dt) {
-        int n = dt * (curveAccel_ < 4 ? curveAccel_ : 4);   // sostenido, de a más pasos
+        int n = dt * (curveAccel_ < 6 ? curveAccel_ : 6);   // sostenido, de a más pasos
         int ns = cursorStep_ + n;
         if (ns < 0) ns = 0;
         if (ns >= c.Steps()) ns = c.Steps() - 1;
@@ -2084,14 +2084,25 @@ bool ClipView::curveButton(unsigned short mask, unsigned short v) {
         else accelN_ = 0;
         accelV_ = v;
         accelT_ = now;
-        curveAccel_ = 1 + accelN_ / 3;
-        if (curveAccel_ > 6) curveAccel_ = 6;
+        curveAccel_ = 1 + accelN_ / 2;   // más suelta: sostenido llega rápido a lo lejos
+        if (curveAccel_ > 10) curveAccel_ = 10;
     }
     int dt = (v == EPBM_LEFT) ? -1 : (v == EPBM_RIGHT) ? 1 : 0;
     int dv = (v == EPBM_UP) ? 1 : (v == EPBM_DOWN) ? -1 : 0;
     if (curveShownID_ != d->curveID_) {   // recién entrado: el punto donde suena
         curveShownID_ = d->curveID_;
         curveSyncCursor();
+    }
+    if (v == EPBM_L && (mask & EPBM_A)) {   // A + L: de vuelta a la perilla (ida y vuelta con el mismo atajo)
+        curveAPut_ = false;
+        d->curveFocus_ = d->curveID_;
+        d->curveLastID_ = d->curveID_;
+        d->currentInstrument_ = d->curveInstr_;
+        d->instrumentFromSong_ = false;
+        d->curveID_ = 0;
+        curveGrab_ = curveMarking_ = false;
+        switchView(VT_INSTRUMENT);   // (cuando la mixer tenga curvas: a la mixer si se vino de ahí)
+        return true;
     }
     if (curvePasting_) {   // Select + A sostenido: se acomoda con las flechas; B cancela
         if (v == EPBM_B) { curvePasting_ = false; message("Pegado cancelado"); }
@@ -2181,12 +2192,19 @@ bool ClipView::curveButton(unsigned short mask, unsigned short v) {
         return true;
     }
     if (mask & EPBM_A) {
-        if (v == EPBM_A) { curvePutNode(); return true; }   // como la nota: pone o agarra
+        if (v == EPBM_A) {   // sobre un nodo: lo agarra; en un paso vacío, el nodo se pone al soltar (o al moverlo)
+            int k = curveNodeAt(cursorStep_);
+            if (k >= 0) {
+                curveVal_ = clip().FindLane(d->curveID_, -1)->points[k].value;
+                curveSel_ = k;
+                curveGrab_ = true;
+            } else curveAPut_ = true;
+            return true;
+        }
+        if ((dt || dv) && curveAPut_) { curveAPut_ = false; curvePutNode(); }
         if (!curveGrab_) return true;
         if (dt) curveMoveNode(dt, 0, false);
         else if (dv) curveMoveNode(0, dv, false);
-        else if (v == EPBM_L) curveMoveNode(0, -1, true);   // A + L / R: de a mucho (como la octava)
-        else if (v == EPBM_R) curveMoveNode(0, 1, true);
         return true;
     }
     if (mask & EPBM_Y) {   // Y + ← →: de nodo en nodo (el punto se va a él)
@@ -2420,5 +2438,5 @@ void ClipView::drawCurves() {
         FillRect(GRID_X + (playStep_ - p0) * STEP_W, GRID_Y - 2, 2, gh + 4, play);
 
     View::EnableNotification();   // el aviso, abajo
-    drawHelpBar("A:nodo;A+flechas:mover;B+A:borrar;X:forma;Y+<>:nodos;SEL:notas;SEL+>:instrumento");
+    drawHelpBar("A:nodo;A+flechas:mover;B+A:borrar;X:forma;Y+<>:nodos;SEL:notas;A+L:volver");
 }

@@ -126,8 +126,8 @@ Curvas en el clip
   - el punto (la cruz): ← → por los pasos, ↑ ↓ por los valores, L / R de a
     mucho (sostenido, acelera); B + ← → de compás en compás; Y + ← → de nodo
     en nodo (uno por uno, también dos en el mismo paso)
-  - A pone un nodo (o agarra el que hay); A + flechas lo mueve; A + L / R de
-    a mucho (como la octava de una nota)
+  - A pone un nodo (al soltarla; o agarra el que hay); A + flechas lo mueve
+    (sostenido, acelera: de un extremo al otro en un segundo)
   - X cambia cómo va al siguiente nodo: rampa, escalón (se queda y salta al
     llegar) o escalón invertido (salta ya y se queda); X + A + ← →: un
     poquito antes o después (1/24 de paso)
@@ -140,8 +140,8 @@ Curvas en el clip
     X + ↑ ↓ más alto o más plano; Y + ↑ ↓ lo inclina (el final sube o baja);
     A sola cancela la marca
   - Start toca; Select + L / R deshace / rehace; B + L / R marca el loop
-  - Select tocado solo: de la curva a las notas y de vuelta; Select + → al
-    instrumento, en ese parámetro
+  - Select tocado solo: de la curva a las notas y de vuelta
+  - A + L otra vez: de vuelta a la perilla (ida y vuelta con el mismo atajo)
 
 Recortar el clip
   En las notas, B + A + ↓ recorta al loop (quedan solo sus compases y el
