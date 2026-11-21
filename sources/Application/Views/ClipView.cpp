@@ -1937,20 +1937,43 @@ void ClipView::drawCurves() {
         FillRect(GRID_X, y, gw, 1, Mix(bg, fg, 10));
     }
 
-    // la curva (o, sin curva, el valor del instrumento punteado)
-    int prevY = -1;
-    for (int x = 0; x < gw; x += 3) {
-        int pos = p0 * CLIP_TICKS + x * CLIP_TICKS / STEP_W;
-        int v = base;
-        if (has) lane->ValueAt(pos, v);
-        int y = top + int((1.0 - curveNorm(v)) * h + 0.5);
-        if (!has) {
-            if ((x / 3) % 3 != 2) FillRect(GRID_X + x, y - 1, 3, 2, dim);
-            continue;
+    // la curva (o, sin curva, el valor del instrumento punteado). Una columna
+    // por pixel: lo plano en un solo trazo, lo que sube o baja columna por
+    // columna con un borde suave (la pantalla no tiene líneas inclinadas)
+    if (!has) {
+        int y = top + int((1.0 - curveNorm(base)) * h + 0.5);
+        for (int x = 0; x < gw; x += 9) FillRect(GRID_X + x, y - 1, 6, 2, dim);
+    } else {
+        GUIColor soft = Mix(bg, curveC, 40);
+        std::vector<int> ys(gw);
+        for (int x = 0; x < gw; x++) {
+            int pos = p0 * CLIP_TICKS + x * CLIP_TICKS / STEP_W;
+            int v = base;
+            lane->ValueAt(pos, v);
+            ys[x] = top + int((1.0 - curveNorm(v)) * h + 0.5);
         }
-        int y0 = prevY < 0 ? y : std::min(prevY, y), y1 = prevY < 0 ? y : std::max(prevY, y);
-        FillRect(GRID_X + x, y0 - 1, 3, y1 - y0 + 3, curveC);
-        prevY = y;
+        int x = 0;
+        while (x < gw) {
+            int y = ys[x];
+            int run = 1;
+            while (x + run < gw && ys[x + run] == y) run++;
+            if (run > 1) {   // plano
+                FillRect(GRID_X + x, y - 1, run, 2, curveC);
+            } else {         // inclinado: une con la columna de al lado
+                int prev = x > 0 ? ys[x - 1] : y;
+                int y0 = std::min(prev, y), y1 = std::max(prev, y);
+                FillRect(GRID_X + x, y0 - 1, 1, y1 - y0 + 3, curveC);
+                FillRect(GRID_X + x, y0 - 2, 1, 1, soft);
+                FillRect(GRID_X + x, y1 + 2, 1, 1, soft);
+            }
+            // un salto (escalón): la vertical
+            if (x + run < gw && ys[x + run] != y && (ys[x + run] - y > 2 || y - ys[x + run] > 2) && run > 1) {
+                int ny = ys[x + run];
+                int y0 = std::min(ny, y), y1 = std::max(ny, y);
+                FillRect(GRID_X + x + run - 1, y0 - 1, 2, y1 - y0 + 2, curveC);
+            }
+            x += run;
+        }
     }
     if (has) {   // los puntos
         for (size_t k = 0; k < lane->points.size(); k++) {
