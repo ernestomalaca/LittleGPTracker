@@ -109,6 +109,9 @@ class ClipView : public View {
     void curveRange(int &s0, int &s1);
     void curveCopy(bool cut);
     void curvePaste();
+    void curveClear(int from, int to);
+    bool curvePasting_;             // Select + A sostenido: se ve dónde cae
+    bool curveBPending_;            // B con algo marcado: copia al soltar (si no vino A)
     void curveToggle();
     int curveVal_;                  // el punto: su valor (su paso es cursorStep_)
     unsigned int curveShownID_;     // la curva que se estaba viendo

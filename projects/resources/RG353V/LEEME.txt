@@ -124,13 +124,15 @@ Curvas en el clip
   curva en el clip (el que suena, o el de la celda de la Session). Las
   notas se ven de fondo. Se edita como el piano roll, con nodos:
   - el punto (la cruz): ← → por los pasos, ↑ ↓ por los valores, L / R de a
-    mucho; B + ← → de compás en compás
+    mucho; B + ← → de compás en compás; Y + ← → de nodo en nodo
   - A pone un nodo en el punto (o agarra el que hay en ese paso);
     A sostenido + flechas lo mueve (L / R: de a mucho)
   - X: rampa o escalón hacia el siguiente nodo; X + A + ← →: un poquito
     antes o después (1/24 de paso)
-  - B + A borra el nodo; Select, B marca; B copia; B + A corta;
-    Select + A pega desde el punto
+  - B + A borra el nodo (o lo marcado); Select, B marca; B copia;
+    Select + A sostenido muestra dónde cae lo copiado (flechas: acomodar,
+    B: cancelar) y al soltar A se pega tal cual: lo de antes se corta ahí y
+    lo de después sigue como estaba
   - Start toca; Select + L / R deshace / rehace
   - Select tocado solo: de la curva a las notas y de vuelta
   - A + L vuelve al instrumento, en ese parámetro
