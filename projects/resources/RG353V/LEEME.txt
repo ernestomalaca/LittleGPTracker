@@ -117,3 +117,12 @@ Automatización (vista del instrumento)
   su loop, y ahí la curva vuelve a mandar (no se borra nada).
   Select + L deshace y Select + R rehace lo grabado (cada vez que soltaste
   A es un paso) y las curvas borradas.
+  B + A sobre un parámetro con curva la borra.
+
+Curvas en el clip
+  En el instrumento, A + gatillo L sobre un parámetro automatizable abre su
+  curva en el clip (el que suena, o el de la celda de la Session). Las
+  notas se ven de fondo. ← → paso, ↑ ↓ sube o baja el valor de ese paso
+  (A + ↑ ↓: de a mucho), Start toca, Select + L / R deshace / rehace.
+  A + L otra vez vuelve al instrumento, en ese mismo parámetro.
+  En el instrumento, Select es Select (como en LSDJ) y L es el gatillo.

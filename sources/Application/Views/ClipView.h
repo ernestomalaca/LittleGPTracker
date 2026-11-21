@@ -90,6 +90,15 @@ class ClipView : public View {
     void ratchet(int d);
     void rampVel(int d);
     void moveCursor(int dt, int dp);
+    // trk2als: la curva de un parámetro (A + L desde el instrumento)
+    bool curveOn();
+    int curveInstrValue();
+    double curveNorm(int v);
+    void curveText(int v, char *buf, int size, bool shortForm);
+    int curveNudge(int v, int dir, bool big);
+    void curveSetStep(int step, int dir, bool big);
+    bool curveButton(unsigned short mask, unsigned short v);
+    void drawCurves();
     void audition(int step);
     void stopAudition();
     void switchView(ViewType vt);

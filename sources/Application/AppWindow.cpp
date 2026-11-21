@@ -818,6 +818,10 @@ unsigned short AppWindow::joyLegacy(unsigned short phys) {
         return m;
     }
     unsigned short m = phys & ~EPBM_SELECT;
+    // trk2als: en el instrumento Select es Select (como en LSDJ) y L es el
+    // gatillo; en las demás pantallas Select sigue siendo el L de LGPT
+    if ((phys & EPBM_SELECT) && _currentView == _instrumentView && !(phys & EPBM_START))
+        return m | EPBM_SELECT;
     if (phys & EPBM_SELECT) m |= (phys & EPBM_START) ? EPBM_R : EPBM_L;
     return m;
 }
@@ -876,6 +880,8 @@ void AppWindow::Update(Observable &o, I_ObservableData *d) {
         if (_currentView) {
             _currentView->LooseFocus();
         }
+        // trk2als: la curva del clip es solo mientras se está ahí
+        if (*vt != VT_CLIP && _viewData) _viewData->curveID_ = 0;
         switch (*vt) {
         case VT_SONG:
             _currentView = _songView;

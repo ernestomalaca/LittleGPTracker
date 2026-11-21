@@ -14,6 +14,17 @@ ViewData::ViewData(Project *project) {
 	currentTable_=0 ;
 	currentInstrument_=0 ;
 	instrumentFromSong_=false ;
+	curveID_=0 ;
+	curveInstr_=-1 ;
+	curveMin_=0 ;
+	curveMax_=1 ;
+	curveStep_=1 ;
+	curveBig_=1 ;
+	curveDisp_=0 ;
+	curveLog_=false ;
+	curveName_[0]=0 ;
+	curveFmt_[0]=0 ;
+	curveFocus_=0 ;
 	currentGroove_=0 ;
 	mixerCol_=0 ;
 	mixerRow_=0 ;

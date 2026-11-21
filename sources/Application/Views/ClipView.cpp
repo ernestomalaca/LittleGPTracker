@@ -1078,6 +1078,13 @@ void ClipView::ProcessButtonMask(unsigned short mask, bool pressed) {
 
 void ClipView::handleButton(unsigned short mask, bool pressed) {
     unsigned short v = View::pressedButton_;
+    if (curveOn()) {
+        // en la curva: sus botones; Start y Select + flechas siguen como siempre
+        if (!pressed) { isDirty_ = true; return; }
+        if (curveButton(mask, v)) { isDirty_ = true; return; }
+        bool nav = (mask & EPBM_SELECT) && (v == EPBM_LEFT || v == EPBM_RIGHT || v == EPBM_UP || v == EPBM_DOWN);
+        if (v != EPBM_START && !nav) return;
+    }
     if (!pressed) {
         if (baPending_ && !(mask & EPBM_A)) {   // B + A sola: corta la nota
             baPending_ = false;
@@ -1268,6 +1275,11 @@ void ClipView::DrawView() {
     GUIColor hi2 = ColorOf(CD_HILITE2);
     GUIColor dim = Mix(bg, fg, 55);
     GUIColor play = ColorOf(CD_PLAY);
+
+    if (curveOn()) {
+        drawCurves();
+        return;
+    }
 
     std::vector<Note> notes;
     readNotes(notes);
@@ -1523,4 +1535,255 @@ void ClipView::OnPlayerUpdate(PlayerEventType, unsigned int) {
     } else {
         refreshTopBar();
     }
+}
+
+/************************************************************
+ trk2als: la curva de un parámetro en el clip (A + L desde el
+ instrumento). Las notas se ven de fondo; aquí se edita la lane.
+ ************************************************************/
+
+bool ClipView::curveOn() {
+    return viewData_->curveID_ != 0 && viewData_->curveInstr_ >= 0 && pages() > 0;
+}
+
+// el valor del parámetro en el instrumento (lo que suena sin curva)
+int ClipView::curveInstrValue() {
+    I_Instrument *in = viewData_->project_->GetInstrumentBank()->GetInstrument(viewData_->curveInstr_);
+    Variable *v = in ? in->FindVariable(viewData_->curveID_) : 0;
+    return v ? v->GetInt() : viewData_->curveMin_;
+}
+
+double ClipView::curveNorm(int v) {
+    ViewData *d = viewData_;
+    double lo = d->curveMin_, hi = d->curveMax_;
+    if (hi <= lo) return 0;
+    if (v < lo) v = int(lo);
+    if (v > hi) v = int(hi);
+    if (d->curveLog_ && lo > 0) return (log(double(v)) - log(lo)) / (log(hi) - log(lo));
+    return (v - lo) / (hi - lo);
+}
+
+void ClipView::curveText(int v, char *buf, int size, bool shortForm) {
+    ViewData *d = viewData_;
+    if (d->curveLog_) {   // Hz
+        if (v >= 10000) snprintf(buf, size, shortForm ? "%dk" : "%dkHz", (v + 500) / 1000);
+        else if (v >= 1000) snprintf(buf, size, shortForm ? "%d.%dk" : "%d.%dkHz", v / 1000, ((v % 1000) + 50) / 100 > 9 ? 9 : ((v % 1000) + 50) / 100);
+        else snprintf(buf, size, shortForm ? "%d" : "%dHz", v);
+        return;
+    }
+    int iv = v + d->curveDisp_;
+    snprintf(buf, size, d->curveFmt_, iv, iv);
+}
+
+// un paso del parámetro, como en el instrumento (la frecuencia, en semitonos)
+int ClipView::curveNudge(int v, int dir, bool big) {
+    ViewData *d = viewData_;
+    if (d->curveLog_) {
+        double f = big ? 2.0 : 1.0594631;
+        double nv = dir > 0 ? v * f : v / f;
+        int r = int(nv + 0.5);
+        if (r == v) r += dir;
+        v = r;
+    } else {
+        v += dir * (big ? d->curveBig_ : d->curveStep_);
+    }
+    if (v < d->curveMin_) v = d->curveMin_;
+    if (v > d->curveMax_) v = d->curveMax_;
+    return v;
+}
+
+// sube o baja el valor de ese paso (solo ese: el de antes y el de después
+// se quedan como estaban)
+void ClipView::curveSetStep(int step, int dir, bool big) {
+    Clip &c = clip();
+    unsigned int id = viewData_->curveID_;
+    AutoLane *old = c.FindLane(id, -1);
+    int base = curveInstrValue();
+    int pos = step * CLIP_TICKS, end = pos + CLIP_TICKS;
+    int cur = base, after = base;
+    bool hadBefore = false, hadAtEnd = false, ramp = false;
+    if (old && !old->points.empty()) {
+        old->ValueAt(pos, cur);
+        old->ValueAt(end, after);
+        for (size_t k = 0; k < old->points.size(); k++) {
+            const AutoPoint &p = old->points[k];
+            if (p.pos <= pos) hadBefore = true;
+            if (p.pos == end) hadAtEnd = true;
+            if (p.pos == pos) ramp = p.ramp;
+        }
+    }
+    int nv = curveNudge(cur, dir, big);
+    AutoLane &lane = c.GetLane(id, -1);
+    std::vector<AutoPoint> &pts = lane.points;
+    int before = cur;
+    if (!hadBefore && pos > 0) {   // lo de antes se queda como sonaba
+        int v0 = base;
+        if (old && !old->points.empty()) old->ValueAt(0, v0);
+        before = v0;
+        pts.push_back(AutoPoint(0, before, false));
+    }
+    for (size_t k = 0; k < pts.size();) {
+        if (pts[k].pos >= pos && pts[k].pos < end && !(pts[k].pos == 0 && pos > 0)) pts.erase(pts.begin() + k);
+        else k++;
+    }
+    pts.push_back(AutoPoint(pos, nv, ramp));
+    if (!hadAtEnd && end < c.Steps() * CLIP_TICKS) pts.push_back(AutoPoint(end, after, false));
+    lane.Sort();
+    char vb[24];
+    curveText(nv, vb, sizeof(vb), false);
+    message(vb);
+}
+
+bool ClipView::curveButton(unsigned short mask, unsigned short v) {
+    ViewData *d = viewData_;
+    if (v == EPBM_L && (mask & EPBM_A)) {   // A + L: de vuelta al instrumento, en ese parámetro
+        d->curveFocus_ = d->curveID_;
+        d->currentInstrument_ = d->curveInstr_;
+        d->instrumentFromSong_ = false;
+        d->curveID_ = 0;
+        switchView(VT_INSTRUMENT);
+        return true;
+    }
+    if (mask & EPBM_SELECT) return false;   // Select + flechas: otras pantallas
+    if (v == EPBM_START) return false;
+    if (v == EPBM_LEFT || v == EPBM_RIGHT) {
+        if (mask & EPBM_A) return true;   // dibujar: lo que sigue
+        moveCursor(v == EPBM_LEFT ? -1 : 1, 0);
+        return true;
+    }
+    if (v == EPBM_UP || v == EPBM_DOWN) {
+        curveSetStep(cursorStep_, v == EPBM_UP ? 1 : -1, (mask & EPBM_A) != 0);
+        return true;
+    }
+    return true;   // lo demás no hace nada aquí
+}
+
+void ClipView::drawCurves() {
+    ViewData *d = viewData_;
+    GUIColor bg = ColorOf(CD_BACKGROUND);
+    GUIColor fg = ColorOf(CD_NORMAL);
+    GUIColor hi = ColorOf(CD_HILITE1);
+    GUIColor hi2 = ColorOf(CD_HILITE2);
+    GUIColor dim = Mix(bg, fg, 55);
+    GUIColor play = ColorOf(CD_PLAY);
+    GUIColor curveC = Mix(hi, fg, 25);
+
+    Clip &c = clip();
+    AutoLane *lane = c.FindLane(d->curveID_, -1);
+    bool has = lane && !lane->points.empty();
+    int base = curveInstrValue();
+    int page = cursorStep_ / 16;
+    int p0 = page * 16;
+    int npages = pages();
+
+    const std::string &cn = d->song_->GetClipName(d->currentChain_);
+    char cname[16];
+    sprintf(cname, "Clip %2.2X", d->currentChain_);
+    std::string ctx = std::string(d->project_->GetTrackName(d->songX_)) + " > " +
+                      (cn.empty() ? std::string(cname) : cn);
+    drawTopBar(TAB_CLIP, ctx.c_str());
+
+    // encabezado: el parámetro (en su color) y su valor en el cursor
+    int curV = base;
+    if (has) lane->ValueAt(cursorStep_ * CLIP_TICKS, curV);
+    {
+        std::string nm = d->curveName_;
+        for (size_t i = 0; i < nm.size(); i++) nm[i] = toupper(nm[i]);
+        int w = 16 * int(nm.size()) + 12;
+        FillRect(6, 33, w, 20, curveC, 3);
+        DrawText(12, 35, nm.c_str(), bg, 1);
+        char vb[24], info[64];
+        curveText(curV, vb, sizeof(vb), false);
+        DrawText(w + 16, 35, vb, fg, 1);
+        bool rampHere = false;
+        if (has)
+            for (size_t k = 0; k < lane->points.size(); k++)
+                if (lane->points[k].pos / CLIP_TICKS == cursorStep_ && lane->points[k].ramp) rampHere = true;
+        if (!msg_.empty()) snprintf(info, sizeof(info), "%s", msg_.c_str());
+        else snprintf(info, sizeof(info), "P%d/%d S%d%s%s", page + 1, npages, cursorStep_ % 16 + 1,
+                      has ? "" : "  sin curva", rampHere ? "  rampa" : "");
+        DrawText(w + 16 + 16 * int(strlen(vb)) + 16, 39, info, dim, 0);
+    }
+
+    // la rejilla con las notas de fondo
+    const int gw = 16 * STEP_W, gh = ROWS * ROW_H;
+    FillRect(GRID_X, GRID_Y, gw, gh, Mix(bg, fg, 4));
+    for (int s = 0; s < 16; s++) {
+        GUIColor lc = Mix(bg, fg, (s % 4 == 0) ? 16 : 8);
+        FillRect(GRID_X + s * STEP_W, GRID_Y, 1, gh, lc);
+    }
+    FillRect(GRID_X + (cursorStep_ - p0) * STEP_W, GRID_Y, STEP_W, gh, Mix(bg, hi2, 14));
+    {
+        std::vector<Note> notes;
+        readNotes(notes);
+        buildRows();
+        int RH = kit() ? gh / 16 : ROW_H;
+        for (size_t i = 0; i < notes.size(); i++) {
+            const Note &n = notes[i];
+            int r = rowOf(n.pitch);
+            int s0 = n.start - p0, s1 = std::min(16, n.start + n.len - p0);
+            if (r < 0 || s1 <= 0 || s0 >= 16) continue;
+            if (s0 < 0) s0 = 0;
+            FillRect(GRID_X + s0 * STEP_W + 1, GRID_Y + r * RH + 1, (s1 - s0) * STEP_W - 2, RH - 2, Mix(bg, fg, 13), 3);
+        }
+    }
+
+    // el eje: el valor real a la izquierda
+    const int top = GRID_Y + 8, h = gh - 16;
+    // en Hz: valores redondos (50, 200, 1k, 5k, 20k); si no, en cuartos
+    static const int hzTicks[] = {50, 200, 1000, 5000, 20000};
+    for (int k = 0; k <= 4; k++) {
+        double t = 1.0 - k / 4.0;
+        int v;
+        if (d->curveLog_ && d->curveMin_ > 0) {
+            v = hzTicks[4 - k];
+            if (v < d->curveMin_ || v > d->curveMax_) continue;
+        } else
+            v = int(d->curveMin_ + t * (d->curveMax_ - d->curveMin_) + (t >= 0 ? 0.5 : -0.5));
+        char lb[16];
+        curveText(v, lb, sizeof(lb), true);
+        int y = top + int((1.0 - curveNorm(v)) * h + 0.5);
+        int lx = GRID_X - 4 - 8 * int(strlen(lb));
+        if (lx < 2) lx = 2;
+        DrawText(lx, y - 6, lb, dim, 0);
+        FillRect(GRID_X, y, gw, 1, Mix(bg, fg, 10));
+    }
+
+    // la curva (o, sin curva, el valor del instrumento punteado)
+    int prevY = -1;
+    for (int x = 0; x < gw; x += 3) {
+        int pos = p0 * CLIP_TICKS + x * CLIP_TICKS / STEP_W;
+        int v = base;
+        if (has) lane->ValueAt(pos, v);
+        int y = top + int((1.0 - curveNorm(v)) * h + 0.5);
+        if (!has) {
+            if ((x / 3) % 3 != 2) FillRect(GRID_X + x, y - 1, 3, 2, dim);
+            continue;
+        }
+        int y0 = prevY < 0 ? y : std::min(prevY, y), y1 = prevY < 0 ? y : std::max(prevY, y);
+        FillRect(GRID_X + x, y0 - 1, 3, y1 - y0 + 3, curveC);
+        prevY = y;
+    }
+    if (has) {   // los puntos
+        for (size_t k = 0; k < lane->points.size(); k++) {
+            const AutoPoint &p = lane->points[k];
+            int s = p.pos / CLIP_TICKS - p0;
+            if (s < 0 || s >= 16) continue;
+            int x = GRID_X + (p.pos - p0 * CLIP_TICKS) * STEP_W / CLIP_TICKS;
+            int y = top + int((1.0 - curveNorm(p.value)) * h + 0.5);
+            FillRect(x - 4, y - 4, 9, 9, (p.pos / CLIP_TICKS == cursorStep_) ? fg : curveC, 4);
+        }
+    }
+    // el valor del cursor, junto a su paso
+    {
+        int x = GRID_X + (cursorStep_ - p0) * STEP_W;
+        int y = top + int((1.0 - curveNorm(curV)) * h + 0.5);
+        FrameRect(x, y - 2, STEP_W, 5, fg, 2, 1);
+    }
+
+    // el cabezal
+    if (playStep_ >= p0 && playStep_ < p0 + 16)
+        FillRect(GRID_X + (playStep_ - p0) * STEP_W, GRID_Y - 2, 2, gh + 4, play);
+
+    drawHelpBar("<>:paso;^v:valor;A+^v:valor x10;START:play;A+L:al instrumento");
 }

@@ -139,6 +139,7 @@ private:
 class UIFreqVarField : public UIIntVarField {
 public:
 	UIFreqVarField(GUIPoint &p, Variable &v) : UIIntVarField(p,v,"freq: %d",30,22000,1,12) {}
+	virtual bool IsLog() { return true ; }
 	virtual void Draw(GUIWindow &w,int offset=0) {
 		GUITextProperties props ;
 		GUIPoint position=GetPosition() ;
@@ -935,9 +936,12 @@ static FourCC focusID(FieldView &fv) ;
 void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 	// trk2als: automatización
 	if (pressed && mask==(EPBM_Y|EPBM_START)) { toggleAutoRec() ; return ; }
+	// A + gatillo L: la curva de este parámetro en el clip (si no se
+	// automatiza, o no hay clip, no pasa nada)
+	if (pressed && mask==(EPBM_A|EPBM_L)) { openCurve() ; return ; }
 	// un toque de Select (nada más) poco después de borrar: recupera la lane
-	if (pressed) selTap_=(mask==EPBM_L) ;
-	else if (selTap_ && !(mask&EPBM_L)) { selTap_=false ; if (undoLane()) return ; }
+	if (pressed) selTap_=(mask==EPBM_SELECT) ;
+	else if (selTap_ && !(mask&EPBM_SELECT)) { selTap_=false ; if (undoLane()) return ; }
 	if (!pressed && touching_ && !(mask&EPBM_A)) endTouch() ;
 	if (kitMode_ && padAPending_) {   // A tocada sola en un pad vacío (sin flechas)
 		if (pressed && mask!=EPBM_A) padAPending_=false ;
@@ -1053,7 +1057,7 @@ void InstrumentView::processButtonMask(unsigned short mask,bool pressed) {
 	}
 
 	if (viewMode_==VM_CLONE) {
-        if ((mask&EPBM_A)&&(mask&EPBM_L)) {
+        if ((mask&EPBM_A)&&(mask&EPBM_SELECT)) {
 			UIIntVarField *field=(UIIntVarField *)GetFocus() ;
 			mask&=(0xFFFF-EPBM_A) ;
 			Variable &v=field->GetVariable() ;
@@ -1066,7 +1070,7 @@ void InstrumentView::processButtonMask(unsigned short mask,bool pressed) {
 				isDirty_=true ;
 			}
 		}
-		mask&=(0xFFFF-(EPBM_A|EPBM_L)) ;
+		mask&=(0xFFFF-(EPBM_A|EPBM_SELECT)) ;
 	} ;
 
 	if (viewMode_==VM_SELECTION) {
@@ -1154,7 +1158,7 @@ void InstrumentView::processButtonMask(unsigned short mask,bool pressed) {
 				if (!deleteLane()) resetFocusedField() ;
 		   }
         }
-        if (mask&EPBM_L) {
+        if (mask&EPBM_SELECT) {
             viewMode_=VM_CLONE ;
         } ;
     } else {
@@ -1854,7 +1858,13 @@ void InstrumentView::AnimationUpdate() {
 	}
 }
 
-void InstrumentView::OnFocus() { onInstrumentChange(); }
+void InstrumentView::OnFocus() {
+	if (viewData_->curveFocus_) {   // vuelve de su curva: el foco en ese parámetro
+		lastFocusID_=viewData_->curveFocus_ ;
+		viewData_->curveFocus_=0 ;
+	}
+	onInstrumentChange();
+}
 
 // trk2als: el instrumento de .sf2 del sample actual pasa a zonas
 void InstrumentView::convertSf2(bool refresh) {
@@ -2175,7 +2185,7 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 		stopTapPlay() ;
 	}
 
-	if ((mask&(EPBM_L|EPBM_R)) && (mask&EPBM_B) && !(mask&EPBM_A)) {   // Select + B: seleccionar
+	if ((mask&(EPBM_SELECT|EPBM_R)) && (mask&EPBM_B) && !(mask&EPBM_A)) {   // Select + B: seleccionar
 		waveSel_=(waveSel_>=2)?2:waveSel_+1 ;
 		return true ;
 	}
@@ -2574,20 +2584,21 @@ void InstrumentView::OnKitLoad(const std::string &name) {
 	isDirty_=true ;
 }
 
+// Select + L / R en un kit: los pads (lo llama Undo)
+void InstrumentView::kitUndo(bool undo) {
+	kitTrack() ;   // lo que haya cambiado sin botón (el navegador)
+	std::vector<std::vector<std::string> > &from=undo?kitUndo_:kitRedo_ ;
+	std::vector<std::vector<std::string> > &to=undo?kitRedo_:kitUndo_ ;
+	if (from.empty()) { View::SetNotification(undo?"nada que deshacer":"nada que rehacer") ; return ; }
+	to.push_back(kitState_) ;
+	std::vector<std::string> snap=from.back() ;
+	from.pop_back() ;
+	kitRestore(snap) ;
+	View::SetNotification(undo?"deshecho":"rehecho") ;
+	isDirty_=true ;
+}
+
 bool InstrumentView::processKit(unsigned short mask) {
-	if (View::physMask_==(EPBM_SELECT|EPBM_L) || View::physMask_==(EPBM_SELECT|EPBM_R)) {
-		kitTrack() ;   // lo que haya cambiado sin botón (el navegador)
-		bool undo=(View::physMask_&EPBM_L)!=0 ;
-		std::vector<std::vector<std::string> > &from=undo?kitUndo_:kitRedo_ ;
-		std::vector<std::vector<std::string> > &to=undo?kitRedo_:kitUndo_ ;
-		if (from.empty()) { View::SetNotification(undo?"nada que deshacer":"nada que rehacer") ; return true ; }
-		to.push_back(kitState_) ;
-		std::vector<std::string> snap=from.back() ;
-		from.pop_back() ;
-		kitRestore(snap) ;
-		View::SetNotification(undo?"deshecho":"rehecho") ;
-		return true ;
-	}
 	UIField *f=GetFocus() ;
 	if (!f || f->IsStatic()) return false ;
 	FourCC id=((UIIntVarField *)f)->GetVariableID() ;
@@ -2646,7 +2657,7 @@ bool InstrumentView::processKit(unsigned short mask) {
 		View::SetNotification(padClip_?"pad cortado":"pad vacío") ;
 		return true ;
 	}
-	if (mask==(EPBM_L|EPBM_A) && whole) {   // pegar (encima de otro: lo reemplaza)
+	if (mask==(EPBM_SELECT|EPBM_A) && whole) {   // pegar (encima de otro: lo reemplaza)
 		if (!padClip_) { View::SetNotification("nada que pegar") ; return true ; }
 		std::string oldWav=si->PadSample(note) ;
 		PadParams oldP=si->GetPad(note) ;
@@ -2845,6 +2856,64 @@ void InstrumentView::takeOver() {
 	if (!player->IsAutoRec()) player->OverrideAutomation(autoChannel(),id) ;
 }
 
+// A + L: al clip, a la curva del parámetro del foco
+bool InstrumentView::openCurve() {
+	UIField *f=GetFocus() ;
+	if (!f || f->IsStatic() || !current_ || current_->GetType()!=IT_SAMPLE) return false ;
+	UIIntVarField *fld=(UIIntVarField *)f ;
+	FourCC id=fld->GetVariableID() ;
+	if (!automatable(id)) return false ;
+	int ch=autoChannel() ;
+	int clip=autoClip(ch) ;
+	if (clip<0) return false ;
+	if (touching_) cancelTouch() ;   // la A del combo no graba nada
+	ViewData *vd=viewData_ ;
+	vd->curveID_=id ;
+	vd->curveInstr_=vd->currentInstrument_ ;
+	vd->curveMin_=fld->GetMin() ;
+	vd->curveMax_=fld->GetMax() ;
+	vd->curveStep_=fld->GetStep()>0?fld->GetStep():1 ;
+	vd->curveBig_=fld->GetBigStep()>0?fld->GetBigStep():vd->curveStep_*10 ;
+	vd->curveDisp_=fld->GetDisplayOffset() ;
+	vd->curveLog_=fld->IsLog() ;
+	// "volume: %+ddB" -> nombre "volume", formato "%+ddB"
+	const char *fmt=fld->GetFormat() ;
+	const char *colon=fmt?strstr(fmt,": "):0 ;
+	if (colon) {
+		int n=int(colon-fmt) ;
+		if (n>23) n=23 ;
+		memcpy(vd->curveName_,fmt,n) ;
+		vd->curveName_[n]=0 ;
+		snprintf(vd->curveFmt_,sizeof(vd->curveFmt_),"%s",colon+2) ;
+	} else {
+		snprintf(vd->curveName_,sizeof(vd->curveName_),"%s",fmt?fmt:"") ;
+		snprintf(vd->curveFmt_,sizeof(vd->curveFmt_),"%%d") ;
+	}
+	if (vd->curveLog_) snprintf(vd->curveFmt_,sizeof(vd->curveFmt_),"%%dHz") ;
+	vd->currentChain_=clip ;
+	vd->songX_=ch ;
+	lastFocusID_=id ;
+	ViewType vt=VT_CLIP ;
+	ViewEvent ve(VET_SWITCH_VIEW,&vt) ;
+	SetChanged() ;
+	NotifyObservers(&ve) ;
+	return true ;
+}
+
+// el toque que empezó A (grabando) se deshace: como si no se hubiera tocado
+void InstrumentView::cancelTouch() {
+	if (!touching_) return ;
+	touching_=false ;
+	if (autoUndo_.empty()) return ;
+	LaneSnap s=autoUndo_.back() ;
+	autoUndo_.pop_back() ;
+	MixerService::GetInstance()->Lock() ;
+	viewData_->song_->clips_->Get(s.clip).lanes=s.lanes ;
+	MixerService::GetInstance()->Unlock() ;
+	Variable *v=(s.var && s.instr==current_) ? current_->FindVariable(s.var) : 0 ;
+	if (v) v->SetInt(s.value) ;
+}
+
 void InstrumentView::beginTouch() {
 	FourCC id=focusID(*this) ;
 	if (!automatable(id) || !current_ || current_->GetType()!=IT_SAMPLE) return ;
@@ -2959,6 +3028,7 @@ void InstrumentView::pushLaneSnap(int clip) {
 }
 
 bool InstrumentView::Undo(bool redo) {
+	if (kitMode_) { kitUndo(!redo) ; return true ; }   // en un kit: los pads
 	std::vector<LaneSnap> &from=redo?autoRedo_:autoUndo_ ;
 	std::vector<LaneSnap> &to=redo?autoUndo_:autoRedo_ ;
 	if (touching_) endTouch() ;

@@ -26,7 +26,14 @@ public:
   FourCC GetVariableID() ;
 	Variable &GetVariable() ;
 	const char *GetFormat() { return format_ ; }
-	int GetDrawnLength() { return drawnLen_ ; }   // trk2als: cuántas letras se dibujaron (el puntito va después)
+	int GetDrawnLength() { return drawnLen_ ; }
+	// trk2als: para dibujar su curva en el clip
+	int GetMin() { return min_ ; }
+	int GetMax() { return max_ ; }
+	int GetStep() { return xOffset_ ; }
+	int GetBigStep() { return yOffset_ ; }
+	int GetDisplayOffset() { return displayOffset_ ; }
+	virtual bool IsLog() { return false ; }   // la frecuencia del filtro   // trk2als: cuántas letras se dibujaron (el puntito va después)
 protected:
 	Variable &src_ ;
 	const char *format_ ;

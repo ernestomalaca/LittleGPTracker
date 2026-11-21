@@ -63,6 +63,15 @@ public:
 
 	int currentInstrument_ ;    // .Current edited instrument
 	bool instrumentFromSong_ ;  // .trk2als: se abrió desde un loop de la song
+	// trk2als: la curva de un parámetro en el clip (A + L en el instrumento).
+	// curveID_ 0 = el clip muestra sus notas
+	unsigned int curveID_ ;
+	int curveInstr_ ;           // de qué instrumento es
+	int curveMin_, curveMax_, curveStep_, curveBig_, curveDisp_ ;
+	bool curveLog_ ;
+	char curveName_[24] ;       // "freq"
+	char curveFmt_[24] ;        // "%+ddB" (lo de después de "nombre: ")
+	unsigned int curveFocus_ ;  // al volver al instrumento: el foco ahí
 
 	int currentTable_ ;			// .Current edited table
 

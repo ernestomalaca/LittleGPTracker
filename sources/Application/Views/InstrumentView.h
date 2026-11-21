@@ -144,6 +144,9 @@ private:
 	void beginTouch() ;
 	void recordTouch() ;
 	void takeOver() ;
+	bool openCurve() ;
+	void cancelTouch() ;
+	void kitUndo(bool undo) ;
 	void endTouch() ;
 	bool deleteLane() ;           // B+A: quita la automatización del campo
 	bool undoLane() ;
