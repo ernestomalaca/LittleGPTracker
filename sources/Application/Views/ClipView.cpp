@@ -652,8 +652,7 @@ int ClipView::shiftPitch(int pitch, int fromRef, int toRef) {
 void ClipView::message(const char *fmt, int n) {
     char buf[64];
     snprintf(buf, sizeof(buf), fmt, n);
-    msg_ = buf;
-    msgTime_ = System::GetInstance()->GetClock();
+    View::SetNotification(buf);   // abajo, como en todas las pantallas
     isDirty_ = true;
 }
 
@@ -1335,22 +1334,28 @@ void ClipView::DrawView() {
             sprintf(info, "pag %d/%d   paso %d   %s", page + 1, npages > 0 ? npages : 1,
                     cursorStep_ % 16 + 1, nn.c_str());
         }
-        // trk2als: en letra grande y corto: nota, velocity, largo (o página y paso)
+        // trk2als: en letra grande: el nombre en un ancho fijo (un pad del kit,
+        // hasta 12 letras; una nota, 4) y luego velocity y largo, o la posición
+        // como en Live (compás.tiempo.semicorchea). Así lo de la derecha no se
+        // mueve con el nombre ni tapa los compases
+        int nameW = kitInstr ? 12 : 4;
+        std::string nm = noteName(cur >= 0 ? notes[cur].pitch : cursorPitch_);
+        if ((int)nm.size() > nameW) nm = nm.substr(0, nameW);
+        char rest[48];
         if (cur >= 0) {
-            sprintf(info, "%s V%d L%d", noteName(notes[cur].pitch).c_str(), notes[cur].vel, notes[cur].len);
-            if (notes[cur].tick) sprintf(info + strlen(info), " +%d", notes[cur].tick);
-            if (notes[cur].rat > 1) sprintf(info + strlen(info), " x%d", notes[cur].rat);
+            sprintf(rest, "V%d L%d", notes[cur].vel, notes[cur].len);
+            if (notes[cur].tick) sprintf(rest + strlen(rest), " +%d", notes[cur].tick);
+            if (notes[cur].rat > 1) sprintf(rest + strlen(rest), " x%d", notes[cur].rat);
         } else {
-            // la posición como en Live: compás.tiempo.semicorchea (1.1.1)
-            sprintf(info, "%s %d.%d.%d", nn.c_str(), cursorStep_ / 16 + 1, (cursorStep_ % 16) / 4 + 1,
-                    cursorStep_ % 4 + 1);
+            sprintf(rest, "%d.%d.%d", cursorStep_ / 16 + 1, (cursorStep_ % 16) / 4 + 1, cursorStep_ % 4 + 1);
         }
-        if (!msg_.empty()) {   // el aviso de lo que acaba de pasar
-            int w = 8 * int(msg_.size()) + 12;
-            FillRect(6, 34, w, 18, Mix(bg, hi2, 25), 4);
-            DrawText(12, 37, msg_.c_str(), hi2, 0);
-        } else {
-            DrawText(10, 36, info, fg, 1);
+        snprintf(info, sizeof(info), "%s %s", nm.c_str(), rest);
+        {
+            const int limit = 634 - 16 * 17 - 10;   // donde empiezan los compases
+            DrawText(10, 36, nm.c_str(), fg, 1);
+            int rx = 10 + 16 * (nameW + 1);
+            if (rx + 16 * int(strlen(rest)) <= limit) DrawText(rx, 36, rest, fg, 1);
+            else DrawText(rx, 40, rest, fg, 0);   // no cabe grande: chico
             int used = 10 + 16 * int(strlen(info));
             if (scale > 0) {   // la escala, como en Live (si cabe)
                 std::string sc = std::string(viewData_->project_->GetFold() ? "FOLD " : "") + scaleNotes[root] + " " + scaleNames[scale];
@@ -1359,26 +1364,7 @@ void ClipView::DrawView() {
                 if (sx > used + 8) DrawText(sx, 38, sc.c_str(), hi, 0);
             }
         }
-        // las páginas, a la derecha (y el loop debajo)
-        int loopS = 0, loopE = 0;
-        bool hasLoop = viewData_->song_->GetClipLoop(viewData_->currentChain_, loopS, loopE);
-        // trk2als: más grandes (14 x 11): el que se ve, claro; el que suena,
-        // con marco; la llave del loop debajo
-        const int CW = 17;
-        int bx = 634 - 16 * CW;
-        for (int i = 0; i < 16; i++) {
-            int x = bx + i * CW;
-            if (i < npages) {
-                bool playing = playStep_ >= 0 && playStep_ / 16 == i;
-                bool inLoop = !hasLoop || (i >= loopS && i <= loopE);
-                GUIColor c = (i == page) ? hi2 : Mix(bg, fg, inLoop ? 45 : 12);
-                if (hasLoop && inLoop) FillRect(x - 2, 49, CW, 3, hi);   // la llave del loop
-                FillRect(x, 35, 14, 11, c, 2);
-                if (playing) FrameRect(x - 2, 33, 18, 15, play, 3, 2);
-            } else {
-                FillRect(x + 5, 39, 3, 3, Mix(bg, fg, 20));
-            }
-        }
+        drawPages(page, npages);
     }
 
     // la rejilla
@@ -1539,6 +1525,7 @@ void ClipView::DrawView() {
         }
     }
 
+    View::EnableNotification();   // el aviso, abajo
     if (marking_)
         drawHelpBar("flechas:marcar;B:copiar;B+A:cortar;A+<>:mover;SEL+A:duplicar;A:salir");
     else
@@ -1560,6 +1547,36 @@ void ClipView::OnPlayerUpdate(PlayerEventType, unsigned int) {
         DrawView();
     } else {
         refreshTopBar();
+    }
+}
+
+
+// los compases, arriba a la derecha (14 x 11): el que se ve, claro; el que
+// suena, con marco; la llave del loop debajo
+void ClipView::drawPages(int page, int npages) {
+    GUIColor bg = ColorOf(CD_BACKGROUND);
+    GUIColor fg = ColorOf(CD_NORMAL);
+    GUIColor hi = ColorOf(CD_HILITE1);
+    GUIColor hi2 = ColorOf(CD_HILITE2);
+    GUIColor play = ColorOf(CD_PLAY);
+    int loopS = 0, loopE = 0;
+    bool hasLoop = viewData_->song_->GetClipLoop(viewData_->currentChain_, loopS, loopE);
+    // trk2als: más grandes (14 x 11): el que se ve, claro; el que suena,
+    // con marco; la llave del loop debajo
+    const int CW = 17;
+    int bx = 634 - 16 * CW;
+    for (int i = 0; i < 16; i++) {
+        int x = bx + i * CW;
+        if (i < npages) {
+            bool playing = playStep_ >= 0 && playStep_ / 16 == i;
+            bool inLoop = !hasLoop || (i >= loopS && i <= loopE);
+            GUIColor c = (i == page) ? hi2 : Mix(bg, fg, inLoop ? 45 : 12);
+            if (hasLoop && inLoop) FillRect(x - 2, 49, CW, 3, hi);   // la llave del loop
+            FillRect(x, 35, 14, 11, c, 2);
+            if (playing) FrameRect(x - 2, 33, 18, 15, play, 3, 2);
+        } else {
+            FillRect(x + 5, 39, 3, 3, Mix(bg, fg, 20));
+        }
     }
 }
 
@@ -1759,8 +1776,7 @@ void ClipView::curveToggle() {
     if (owner != d->curveInstr_) { message("Sin curva en esta pista"); return; }
     d->curveID_ = d->curveLastID_;
     curveShownID_ = 0;
-    msg_ = std::string("Curva: ") + d->curveName_;
-    msgTime_ = System::GetInstance()->GetClock();
+    View::SetNotification((std::string("Curva: ") + d->curveName_).c_str());
 }
 
 bool ClipView::curveButton(unsigned short mask, unsigned short v) {
@@ -1886,12 +1902,13 @@ void ClipView::drawCurves() {
         curveText(curV, vb, sizeof(vb), false);
         DrawText(w + 16, 35, vb, fg, 1);
         const char *node = "";
-        if (nodeK >= 0) node = lane->points[nodeK].ramp ? "  nodo: rampa" : "  nodo: escalon";
+        if (nodeK >= 0) node = lane->points[nodeK].ramp ? "  rampa" : "  escalon";
         if (!msg_.empty()) snprintf(info, sizeof(info), "%s", msg_.c_str());
         else snprintf(info, sizeof(info), "%d.%d.%d%s%s", cursorStep_ / 16 + 1, (cursorStep_ % 16) / 4 + 1,
                       cursorStep_ % 4 + 1, has ? "" : "  sin curva", node);
         DrawText(w + 16 + 16 * int(strlen(vb)) + 16, 39, info, dim, 0);
     }
+    drawPages(page, npages);
 
     // la rejilla con las notas de fondo
     const int gw = 16 * STEP_W, gh = ROWS * ROW_H;
@@ -2005,5 +2022,6 @@ void ClipView::drawCurves() {
     if (playStep_ >= p0 && playStep_ < p0 + 16)
         FillRect(GRID_X + (playStep_ - p0) * STEP_W, GRID_Y - 2, 2, gh + 4, play);
 
+    View::EnableNotification();   // el aviso, abajo
     drawHelpBar("A:nodo;A+flechas:mover;B+A:borrar;X:rampa;SEL:notas;A+L:instrumento");
 }

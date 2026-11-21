@@ -597,6 +597,9 @@ void ProjectView::drawBigNumber(int x, int y, const char *txt, int h, GUIColor c
 
 // trk2als: aviso abajo (con figuras); sin figuras, el de siempre arriba
 void ProjectView::notify(const char *msg) {
+    // trk2als: abajo, como en todas las pantallas
+    View::SetNotification(msg);
+    return;
     if (!SupportsShapes()) {
         View::SetNotification(msg);
         return;

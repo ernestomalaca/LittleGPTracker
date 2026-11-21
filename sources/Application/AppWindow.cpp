@@ -713,6 +713,10 @@ void AppWindow::onUpdate() {
             if (_currentView && _currentView != _nullView) Redraw();
         }
     }
+    if (_currentView && _currentView->NoticeExpired()) {   // trk2als: se va el aviso de abajo
+        _currentView->SetDirty(true);
+        Redraw();
+    }
     if (_currentView && _currentView->TickChain()) {   // trk2als
         _currentView->SetDirty(true);
         Redraw();

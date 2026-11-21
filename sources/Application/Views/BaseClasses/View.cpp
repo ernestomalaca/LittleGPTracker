@@ -51,8 +51,9 @@ View::View(GUIWindow &w,ViewData *viewData):
 	viewMode_=VM_NORMAL ;
 	locked_=false ;
 	viewData_=viewData;
-	NOTIFICATION_TIMEOUT = 1000;
+	NOTIFICATION_TIMEOUT = 1500;
 	displayNotification_ = "";
+	noticePending_ = false;
     // Initialize VU meter inertia tracking
     for (int i = 0; i < 8; i++) {
         prevLeftVU_[i] = 0;
@@ -303,6 +304,26 @@ void View::DrawString(int x,int y,const char *txt,GUITextProperties &props) {
 	Displays the saved notification for 1 second
 */
 void View::EnableNotification() {
+	// trk2als: con figuras, el aviso va abajo en letras blancas, en el mismo
+	// lugar que en la Session (en todas las pantallas)
+	if (SupportsShapes() && !miniLayout_) {
+		if (displayNotification_.empty()) return ;
+		if ((SDL_GetTicks() - notificationTime_) > NOTIFICATION_TIMEOUT) { displayNotification_ = "" ; return ; }
+		std::string m = displayNotification_ ;
+		size_t nl = m.find('\n') ;
+		if (nl != std::string::npos) m = m.substr(0, nl) + " " + m.substr(nl + 1) ;
+		GUIColor bg = ColorOf(CD_BACKGROUND), fg = ColorOf(CD_NORMAL) ;
+		// la última fila (464-480): ahí no hay nada en ninguna pantalla
+		FillRect(0, 464, 640, 16, bg) ;
+		{   // y las letras de la rejilla de esa fila (van encima de las figuras)
+			GUITextProperties props ;
+			SetColor(CD_NORMAL) ;
+			DrawString(0, 29, "                                        ", props) ;
+		}
+		if (m.size() <= 36) DrawText(44, 464, m.c_str(), fg, 1) ;
+		else DrawText(44, 466, m.substr(0, 74).c_str(), fg, 0) ;
+		return ;
+	}
 	if ((SDL_GetTicks() - notificationTime_) <= NOTIFICATION_TIMEOUT) {
 		SetColor(CD_NORMAL);
 		GUITextProperties props;
@@ -333,6 +354,19 @@ void View::SetNotification(const char *notification, int offset) {
     displayNotification_ = notification;
     notiDistY_ = offset;
     isDirty_ = true;
+    noticePending_ = true;
+    // que se borre solo aunque no se toque nada
+    struct W { static Uint32 wake(Uint32, void *) {
+        SDL_Event e; memset(&e, 0, sizeof(e));
+        e.type = SDL_WINDOWEVENT; e.window.event = SDL_WINDOWEVENT_EXPOSED;
+        SDL_PushEvent(&e); return 0; } };
+    SDL_AddTimer(NOTIFICATION_TIMEOUT + 40, W::wake, 0);
+}
+
+bool View::NoticeExpired() {
+    if (!noticePending_ || (SDL_GetTicks() - notificationTime_) <= NOTIFICATION_TIMEOUT) return false;
+    noticePending_ = false;
+    return true;
 }
 
 void View::drawVUMeter(uint8_t leftBars, uint8_t rightBars, GUIPoint pos,

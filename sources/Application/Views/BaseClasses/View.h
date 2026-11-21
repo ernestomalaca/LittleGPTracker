@@ -160,6 +160,8 @@ class View : public Observable {
 
     void EnableNotification();
     void SetNotification(const char *notification, int offset = 2);
+    // trk2als: el aviso ya pasó y hay que redibujar para quitarlo (una vez)
+    bool NoticeExpired();
 
   protected:
     virtual void ProcessButtonMask(unsigned short mask, bool pressed) = 0;
@@ -227,6 +229,7 @@ protected:
     uint32_t notificationTime_;
     uint16_t NOTIFICATION_TIMEOUT;
     std::string displayNotification_;
+    bool noticePending_;
   private:
     unsigned short mask_;
     bool locked_;

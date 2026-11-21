@@ -115,6 +115,7 @@ class ClipView : public View {
     int curveClipLen_;
     bool selTapC_;                  // Select tocado solo
     void drawCurves();
+    void drawPages(int page, int npages);
     void audition(int step);
     void stopAudition();
     void switchView(ViewType vt);
