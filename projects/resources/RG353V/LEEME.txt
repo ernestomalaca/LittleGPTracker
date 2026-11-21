@@ -127,10 +127,11 @@ Curvas en el clip
     mucho (sostenido, acelera); B + ← → de compás en compás; Y + ← → de nodo
     en nodo (uno por uno, también dos en el mismo paso)
   - A pone un nodo (al soltarla; o agarra el que hay); A + flechas lo mueve
-    (sostenido, acelera: de un extremo al otro en un segundo)
+    por la rejilla (sostenido, acelera: de un extremo al otro en un segundo)
+  - X + A + flechas: fino y fuera de la rejilla (← → de a 1/24 de paso,
+    ↑ ↓ de a poquito, sin acelerar); con A vuelve a la rejilla
   - X cambia cómo va al siguiente nodo: rampa, escalón (se queda y salta al
-    llegar) o escalón invertido (salta ya y se queda); X + A + ← →: un
-    poquito antes o después (1/24 de paso)
+    llegar) o escalón invertido (salta ya y se queda)
   - B + A borra el nodo (o lo marcado); B + A + ↑ borra el compás y
     B + A + ↓ recorta, como en las notas
   - Select, B marca (otra B: todo el clip); B copia; Select + A sostenido

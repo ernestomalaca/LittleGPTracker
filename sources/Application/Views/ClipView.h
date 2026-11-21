@@ -105,7 +105,7 @@ class ClipView : public View {
     void curveSyncCursor();
     void curvePutNode();
     void curveMoveNode(int dt, int dv, bool big);
-    void curveNudgeNode(int d);
+    void curveNudgeNode(int dt, int dv);
     void curveRange(int &s0, int &s1);
     void curveCopy(bool cut);
     void curvePaste();
