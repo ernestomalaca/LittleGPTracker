@@ -114,7 +114,13 @@ class ClipView : public View {
     bool curveTake(int from, int to, std::vector<AutoPoint> &seg);
     int curveDenorm(double n);
     void curveTransform(int mode, int d);
-    bool curveAPending_;            // A sola con algo marcado: al soltar, cancela la marca
+    bool curveAPending_;
+    bool curveAPut_;                // A sola en un paso vacío: el nodo se pone al soltar
+    int curveSel_;                  // el nodo elegido con Y + ← → (índice), -1 ninguno
+    int curveAccel_;                // sostener una flecha: de a más
+    int accelN_;
+    unsigned short accelV_;
+    unsigned long accelT_;            // A sola con algo marcado: al soltar, cancela la marca
     bool curvePasting_;             // Select + A sostenido: se ve dónde cae
     bool curveBPending_;            // B con algo marcado: copia al soltar (si no vino A)
     void curveToggle();
