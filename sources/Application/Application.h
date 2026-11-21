@@ -4,6 +4,9 @@
 #include "UIFramework/SimpleBaseClasses/GUIWindow.h"
 #include "Foundation/T_Singleton.h"
 
+// trk2als: la interfaz está atendiendo algo (para notar si se congela)
+void AppBusy(bool on) ;
+
 class Application:public T_Singleton<Application> {
 
 public:

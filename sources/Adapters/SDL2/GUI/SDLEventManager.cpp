@@ -81,8 +81,10 @@ int SDLEventManager::MainLoop()
 	while (!finished_)
 	{
 		SDL_Event event;
+		AppBusy(false) ;
 		if (SDL_WaitEvent(&event)) 
     {
+			AppBusy(true) ;
 			switch (event.type) {
 				case SDL_KEYDOWN:
 					if (dumpEvent_) 

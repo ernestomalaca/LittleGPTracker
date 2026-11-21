@@ -9,6 +9,14 @@ cd "$DIR" || exit 1
 export HOME="$DIR"
 export TRK_LINKDBG=1
 chmod +x ./chancho6-rg353v.elf 2>/dev/null
+# los registros de las 3 veces anteriores se guardan (log-1 es la anterior):
+# si algo truena y se vuelve a abrir, lo de esa vez no se pierde
+for f in link sistema; do
+  [ -f "$f.txt" ] || continue
+  mv -f "$f-2.txt" "$f-3.txt" 2>/dev/null
+  mv -f "$f-1.txt" "$f-2.txt" 2>/dev/null
+  mv -f "$f.txt" "$f-1.txt"
+done
 
 {
   echo "=== $(date) ==="
@@ -35,4 +43,7 @@ while kill -0 $PID 2>/dev/null; do
   } >> sistema.txt 2>&1
   sleep 10
 done
+wait $PID
+CODE=$?
+echo "=== $(date +%T) salió con código $CODE (134 abort, 139 crash de memoria, 137 forzado)" >> link.txt
 sync
