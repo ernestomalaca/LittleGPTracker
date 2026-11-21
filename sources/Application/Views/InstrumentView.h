@@ -23,6 +23,7 @@ public:
 	virtual void DrawView() ;
 	virtual void OnPlayerUpdate(PlayerEventType,unsigned int) {} ;
 	virtual void OnFocus() ;
+	virtual bool Tick() ;
 	virtual void AnimationUpdate() ;
 
 protected:

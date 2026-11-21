@@ -1,4 +1,5 @@
 #include "SDLGUIWindowImp.h"
+#include "Application/Commands/EventDispatcher.h"
 #include "Application/Model/Config.h"
 #include "Application/Utils/char.h"
 #include "System/Console/Trace.h"
@@ -721,12 +722,18 @@ void SDLGUIWindowImp::ProcessQuit() {
 
 void SDLGUIWindowImp::PushEvent(GUIEvent &event) {
     SDL_Event sdlevent;
+    memset(&sdlevent, 0, sizeof(sdlevent));
     sdlevent.type = SDL_USEREVENT;
     sdlevent.user.data1 = &event;
     SDL_PushEvent(&sdlevent);
 };
 
 void SDLGUIWindowImp::ProcessUserEvent(SDL_Event &event) {
+    if (event.user.code == EventDispatcher::REPEAT_EVENT_CODE) {   // trk2als
+        EventDispatcher::GetInstance()->DispatchRepeat();
+        return;
+    }
+    if (!event.user.data1) return;
     GUIEvent *guiEvent = (GUIEvent *)event.user.data1;
     _window->DispatchEvent(*guiEvent);
     delete (guiEvent);

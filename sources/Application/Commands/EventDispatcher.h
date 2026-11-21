@@ -14,6 +14,10 @@ public:
 	void SetWindow(GUIWindow *window) ;
 	virtual void Execute(FourCC id,float value) ;
 	unsigned int OnTimerTick() ;
+	// trk2als: la repetición (botón sostenido) se atiende en el hilo de la
+	// interfaz, no en el del reloj: dos hilos dibujando a la vez tronaban
+	void DispatchRepeat() ;
+	enum { REPEAT_EVENT_CODE = 0x5245 } ;
 	int GetEventMask() { return eventMask_ ; } ;
     virtual void Update(Observable &o,I_ObservableData *d) ;
 private:

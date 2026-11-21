@@ -6,6 +6,7 @@
 #endif
 #include "Application/Model/Config.h"
 #include "System/Console/Trace.h"
+#include <string.h>
 
 int EventDispatcher::keyRepeat_=30 ;
 int EventDispatcher::keyDelay_=500 ;
@@ -130,8 +131,30 @@ void EventDispatcher::SetWindow(GUIWindow *window) {
 	window_=window ;
 } ;
 
+static volatile int repeatPending_=0 ;   // ya hay un aviso en la cola
+
 unsigned int EventDispatcher::OnTimerTick() {
 
+	if (eventMask_&repeatMask_) {
+#ifdef SDL2
+		// se le avisa al hilo de la interfaz; ahí se ve qué sigue apretado
+		if (repeatPending_) return keyRepeat_ ;
+		repeatPending_=1 ;
+		SDL_Event e ;
+		memset(&e,0,sizeof(e)) ;
+		e.type=SDL_USEREVENT ;
+		e.user.code=REPEAT_EVENT_CODE ;
+		SDL_PushEvent(&e) ;
+#else
+		DispatchRepeat() ;
+#endif
+		return keyRepeat_ ;
+	}
+	return 0 ;
+} ;
+
+void EventDispatcher::DispatchRepeat() {
+	repeatPending_=0 ;
 	unsigned sendMask=(eventMask_&repeatMask_) ;
 	unsigned long now=System::GetInstance()->GetClock();
 
@@ -144,10 +167,8 @@ unsigned int EventDispatcher::OnTimerTick() {
 			}
 			sendMask>>=1 ;
 			current++ ;
-		}		
-		return keyRepeat_ ;
+		}
 	}
-	return 0 ;
 } ;
 
 void EventDispatcher::Update(Observable &o,I_ObservableData *d) {

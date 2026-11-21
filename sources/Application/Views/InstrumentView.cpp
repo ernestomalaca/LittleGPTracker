@@ -1780,12 +1780,19 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 }
 
 // trk2als: ~25 veces por segundo; si el cursor se movió, redibujar las figuras
+bool InstrumentView::Tick() {
+	if (!touching_ || HasModal()) return false ;
+	recordTouch() ;
+	return !touching_ ;   // se acabó: a redibujar
+}
+
 void InstrumentView::AnimationUpdate() {
 	if (!current_ || current_->GetType()!=IT_SAMPLE || HasModal()) return ;
 	SampleInstrument *si=(SampleInstrument *)current_ ;
-	// trk2als: automatización: seguir escribiendo mientras se sostiene A, y
-	// redibujar si cambió algún valor automatizado (o la grabación)
-	if (touching_) recordTouch() ;
+	// trk2als: redibujar si cambió algún valor automatizado (o la grabación).
+	// Lo que se graba mientras se sostiene A va en Tick: aquí se está dibujando
+	// (candado de dibujo) y grabar toma el del mezclador: en ese orden, con el
+	// audio tomándolos al revés, se trababan
 	{
 		std::vector<int> now ;
 		if (Player::GetInstance()->IsRunning()) {

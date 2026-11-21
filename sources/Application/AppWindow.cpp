@@ -778,6 +778,9 @@ void AppWindow::onUpdate() {
     static unsigned int animTick = 0;
     if ((animTick++ % 2) == 0) {  // every 2nd call, roughly 25Hz at 50Hz main loop
         if (_currentView) {
+            // trk2als: el audio dibuja la posición (OnPlayerUpdate) con este
+            // mismo candado: sin él, los dos pisaban la lista de figuras
+            SysMutexLocker locker(drawMutex_);
             _currentView->AnimationUpdate();
         }
     }
