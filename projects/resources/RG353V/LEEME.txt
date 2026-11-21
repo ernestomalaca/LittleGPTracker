@@ -134,4 +134,9 @@ Curvas en el clip
   - Start toca; Select + L / R deshace / rehace
   - Select tocado solo: de la curva a las notas y de vuelta
   - A + L vuelve al instrumento, en ese parámetro
+
+Recortar el clip
+  En las notas, B + A + ↓ recorta al loop (quedan solo sus compases y el
+  clip empieza ahí, como "recortar" en Live). Sin loop, quita los compases
+  vacíos del final. Pregunta antes y Select + L lo deshace.
   En el instrumento, Select es Select (como en LSDJ) y L es el gatillo.

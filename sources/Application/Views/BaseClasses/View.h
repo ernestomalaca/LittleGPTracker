@@ -162,6 +162,8 @@ class View : public Observable {
     void SetNotification(const char *notification, int offset = 2);
     // trk2als: el aviso ya pasó y hay que redibujar para quitarlo (una vez)
     bool NoticeExpired();
+    // trk2als: el color de cada pista (config.xml: TRACKCOLORS)
+    GUIColor TrackColor(int track);
 
   protected:
     virtual void ProcessButtonMask(unsigned short mask, bool pressed) = 0;

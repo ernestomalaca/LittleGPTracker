@@ -1,5 +1,6 @@
 #include "View.h"
 #include <string.h>
+#include <stdio.h>
 #include "System/Console/Trace.h"
 #include "Application/Player/Player.h"
 #include "Application/Utils/char.h"
@@ -580,4 +581,27 @@ void View::FitScaleAnswer(bool yes) {
     }
     project->AcceptScale();
     isDirty_ = true;
+}
+
+// trk2als: los colores de las pistas (los mismos de la Session); se pueden
+// cambiar en config.xml: <TRACKCOLORS value="E0B24A,E8955A,..."/>
+GUIColor View::TrackColor(int track) {
+	static unsigned char tc[8][3] = {
+		{0xE6, 0xC0, 0x7A}, {0xE8, 0xA0, 0x7E}, {0x8F, 0xA0, 0xF0}, {0xB7, 0xA4, 0xF0},
+		{0xE2, 0x8D, 0xB8}, {0x7F, 0xC9, 0x8E}, {0x74, 0xC2, 0xC8}, {0xB2, 0xD5, 0x8A}} ;
+	static bool loaded = false ;
+	if (!loaded) {
+		loaded = true ;
+		const char *v = Config::GetInstance()->GetValue("TRACKCOLORS") ;
+		for (int i = 0; v && i < 8 && *v; i++) {
+			unsigned int c ;
+			if (sscanf(v, "%6x", &c) != 1) break ;
+			tc[i][0] = (c >> 16) & 0xFF ; tc[i][1] = (c >> 8) & 0xFF ; tc[i][2] = c & 0xFF ;
+			const char *comma = strchr(v, ',') ;
+			if (!comma) break ;
+			v = comma + 1 ;
+		}
+	}
+	int i = track < 0 ? 0 : track % 8 ;
+	return GUIColor(tc[i][0], tc[i][1], tc[i][2]) ;
 }

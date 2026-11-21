@@ -62,8 +62,12 @@ class ClipView : public View {
     // compases: B + A + → / ← duplica el compás, B + A + ↑ lo borra
     bool duplicatePage(bool right);
     void askDeletePage();
+    void removePage(int page);
+    void cropRange(int &k0, int &k1);
+    void askCrop();
   public:
     void deletePageAnswer(bool yes);
+    void cropAnswer(bool yes);
   private:
     bool baPending_;   // B + A sin flecha: corta la nota al soltar A
     unsigned long lastLoopL_;

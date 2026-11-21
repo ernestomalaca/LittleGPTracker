@@ -406,13 +406,9 @@ void ClipView::askDeletePage() {
     DoModal(mb, DeletePageCallback);
 }
 
-void ClipView::deletePageAnswer(bool yes) {
-    isDirty_ = true;
-    if (!yes) return;
-    Snap before;
-    takeSnap(before);
+// quita un compás: lo de después se recorre (notas, curvas y el loop)
+void ClipView::removePage(int page) {
     int n = pages();
-    int page = cursorStep_ / 16;
     Song *song = viewData_->song_;
     int chain = viewData_->currentChain_;
     Clip &c = clip();
@@ -435,10 +431,80 @@ void ClipView::deletePageAnswer(bool yes) {
         if (e < s || e < 0) song->ClearClipLoop(chain);
         else song->SetClipLoop(chain, s, e);
     }
+}
+
+void ClipView::deletePageAnswer(bool yes) {
+    isDirty_ = true;
+    if (!yes) return;
+    Snap before;
+    takeSnap(before);
+    int page = cursorStep_ / 16;
+    removePage(page);
     if (cursorStep_ >= total()) cursorStep_ = total() - 1;
     undo_.push_back(before);
     redo_.clear();
     message("Compás %d borrado", page + 1);
+}
+
+// B + A + ↓: recortar al loop (como "recortar" en Live). Sin loop: quita los
+// compases vacíos del final
+void ClipView::cropRange(int &k0, int &k1) {
+    int n = pages();
+    int s, e;
+    if (viewData_->song_->GetClipLoop(viewData_->currentChain_, s, e)) {
+        k0 = s < 0 ? 0 : s;
+        k1 = e >= n ? n - 1 : e;
+        return;
+    }
+    Clip &c = clip();
+    int last = 0;
+    for (size_t k = 0; k < c.notes.size(); k++) {
+        int p = (c.notes[k].start + c.notes[k].len - 1) / 16;
+        if (p > last) last = p;
+    }
+    for (size_t l = 0; l < c.lanes.size(); l++)
+        for (size_t k = 0; k < c.lanes[l].points.size(); k++) {
+            int p = c.lanes[l].points[k].pos / (16 * CLIP_TICKS);
+            if (p > last) last = p;
+        }
+    k0 = 0;
+    k1 = last >= n ? n - 1 : last;
+}
+
+static void CropCallback(View &v, ModalView &dialog) {
+    ((ClipView &)v).cropAnswer(dialog.GetReturnCode() == MBL_YES);
+}
+
+void ClipView::askCrop() {
+    int k0, k1;
+    cropRange(k0, k1);
+    if (k0 == 0 && k1 >= pages() - 1) { message("Nada que recortar"); return; }
+    char buf[80];
+    bool loop = viewData_->song_->GetClipLoop(viewData_->currentChain_, k0, k1);
+    cropRange(k0, k1);
+    if (loop && k0 == k1) snprintf(buf, sizeof(buf), "¿Recortar al loop?\nQueda el compás %d", k0 + 1);
+    else if (loop) snprintf(buf, sizeof(buf), "¿Recortar al loop?\nQuedan los compases %d a %d", k0 + 1, k1 + 1);
+    else snprintf(buf, sizeof(buf), "¿Quitar los compases vacíos?\nQuedan %d", k1 + 1);
+    MessageBox *mb = new MessageBox(*this, buf, MBBF_YES | MBBF_NO);
+    DoModal(mb, CropCallback);
+}
+
+void ClipView::cropAnswer(bool yes) {
+    isDirty_ = true;
+    if (!yes) return;
+    int k0, k1;
+    cropRange(k0, k1);
+    Snap before;
+    takeSnap(before);
+    for (int p = pages() - 1; p > k1; p--) removePage(p);
+    for (int i = 0; i < k0; i++) removePage(0);
+    viewData_->song_->ClearClipLoop(viewData_->currentChain_);   // ahora es todo el clip
+    cursorStep_ -= k0 * 16;
+    if (cursorStep_ < 0) cursorStep_ = 0;
+    if (cursorStep_ >= total()) cursorStep_ = total() - 1;
+    undo_.push_back(before);
+    redo_.clear();
+    message(pages() == 1 ? "Recortado: 1 compás" : "Recortado: %d compases", pages());
 }
 
 /************************************************************
@@ -1247,6 +1313,7 @@ void ClipView::handleButton(unsigned short mask, bool pressed) {
             if (v == EPBM_A) baPending_ = true;
             else if (dt) { baPending_ = false; duplicatePage(dt > 0); }
             else if (v == EPBM_UP) { baPending_ = false; askDeletePage(); }
+            else if (v == EPBM_DOWN) { baPending_ = false; askCrop(); }
             isDirty_ = true;
             return;
         }
@@ -1290,8 +1357,9 @@ void ClipView::DrawView() {
 
     GUIColor bg = ColorOf(CD_BACKGROUND);
     GUIColor fg = ColorOf(CD_NORMAL);
-    GUIColor hi = ColorOf(CD_HILITE1);
-    GUIColor hi2 = ColorOf(CD_HILITE2);
+    // trk2als: el clip lleva el color de su pista (notas, compases, marca, curva)
+    GUIColor hi2 = TrackColor(viewData_->songX_);
+    GUIColor hi = Mix(ColorOf(CD_BACKGROUND), hi2, 85);
     GUIColor dim = Mix(bg, fg, 55);
     GUIColor play = ColorOf(CD_PLAY);
 
@@ -1556,8 +1624,9 @@ void ClipView::OnPlayerUpdate(PlayerEventType, unsigned int) {
 void ClipView::drawPages(int page, int npages) {
     GUIColor bg = ColorOf(CD_BACKGROUND);
     GUIColor fg = ColorOf(CD_NORMAL);
-    GUIColor hi = ColorOf(CD_HILITE1);
-    GUIColor hi2 = ColorOf(CD_HILITE2);
+    // trk2als: el clip lleva el color de su pista (notas, compases, marca, curva)
+    GUIColor hi2 = TrackColor(viewData_->songX_);
+    GUIColor hi = Mix(ColorOf(CD_BACKGROUND), hi2, 85);
     GUIColor play = ColorOf(CD_PLAY);
     int loopS = 0, loopE = 0;
     bool hasLoop = viewData_->song_->GetClipLoop(viewData_->currentChain_, loopS, loopE);
@@ -1864,11 +1933,12 @@ void ClipView::drawCurves() {
     ViewData *d = viewData_;
     GUIColor bg = ColorOf(CD_BACKGROUND);
     GUIColor fg = ColorOf(CD_NORMAL);
-    GUIColor hi = ColorOf(CD_HILITE1);
-    GUIColor hi2 = ColorOf(CD_HILITE2);
+    // trk2als: el clip lleva el color de su pista (notas, compases, marca, curva)
+    GUIColor hi2 = TrackColor(viewData_->songX_);
+    GUIColor hi = Mix(ColorOf(CD_BACKGROUND), hi2, 85);
     GUIColor dim = Mix(bg, fg, 55);
     GUIColor play = ColorOf(CD_PLAY);
-    GUIColor curveC = Mix(hi, fg, 25);
+    GUIColor curveC = hi2;
 
     if (curveShownID_ != d->curveID_) {   // recién entrado: el punto donde suena
         curveShownID_ = d->curveID_;
