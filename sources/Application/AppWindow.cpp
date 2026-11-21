@@ -843,7 +843,7 @@ void AppWindow::joyButton(unsigned short v, bool pressed, bool repeat) {
         return;
     }
     // trk2als: Select + L deshace, Select + R rehace (como en el clip)
-    if (_currentView == _songView && (phys & EPBM_SELECT) && !(phys & EPBM_B) &&
+    if ((_currentView == _songView || _currentView == _instrumentView) && (phys & EPBM_SELECT) && !(phys & EPBM_B) &&
         (v == EPBM_L || v == EPBM_R)) {
         if (pressed && !repeat && _currentView->Undo(v == EPBM_R)) _isDirty = true;
         return;

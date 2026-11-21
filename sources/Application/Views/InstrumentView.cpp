@@ -319,6 +319,7 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data),
 	touchCh_=touchClip_=touchLast_=-1 ;
 	touchHadOld_=false ;
 	laneUndo_=false ;
+	preTouchVal_=0 ;
 	laneUndoClip_=-1 ;
 	laneUndoTime_=0 ;
 	selTap_=false ;
@@ -929,6 +930,8 @@ void InstrumentView::warpToNext(int offset) {
 	isDirty_=true ;
 } ;
 
+static FourCC focusID(FieldView &fv) ;
+
 void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 	// trk2als: automatización
 	if (pressed && mask==(EPBM_Y|EPBM_START)) { toggleAutoRec() ; return ; }
@@ -945,6 +948,14 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 		}
 	}
 	if (pressed && kitMode_ && processKit(mask)) { kitTrack() ; return ; }
+	// A + flechas en un parámetro automatizado: se toma desde lo que suena
+	if (pressed && (mask&EPBM_A) && !(mask&EPBM_B) && !touching_) {   // para deshacer: cómo estaba la perilla
+		FourCC id=focusID(*this) ;
+		Variable *v=(current_ && id) ? current_->FindVariable(id) : 0 ;
+		preTouchVal_=v ? v->GetInt() : 0 ;
+	}
+	if (pressed && (mask&EPBM_A) && (mask&(EPBM_LEFT|EPBM_RIGHT|EPBM_UP|EPBM_DOWN)) && !(mask&EPBM_B))
+		takeOver() ;
 	processButtonMask(mask,pressed) ;
 	if (pressed) { kitSync() ; kitTrack() ; }
 	// A sostenido en un parámetro mientras se graba: se escribe la lane
@@ -2819,6 +2830,21 @@ void InstrumentView::toggleAutoRec() {
 	isDirty_=true ;
 }
 
+// mover a mano un parámetro con automatización: arranca desde el valor que
+// está sonando (sin saltos) y, si no se graba, manda la mano hasta que el clip
+// vuelva a empezar; la lane no se toca
+void InstrumentView::takeOver() {
+	FourCC id=focusID(*this) ;
+	if (!automatable(id) || !current_ || current_->GetType()!=IT_SAMPLE) return ;
+	SampleInstrument *si=(SampleInstrument *)current_ ;
+	int av ;
+	if (!si->GetAutomated(id,av)) return ;   // no está sonando automatizado
+	Variable *v=si->FindVariable(id) ;
+	if (v) v->SetInt(av) ;
+	Player *player=Player::GetInstance() ;
+	if (!player->IsAutoRec()) player->OverrideAutomation(autoChannel(),id) ;
+}
+
 void InstrumentView::beginTouch() {
 	FourCC id=focusID(*this) ;
 	if (!automatable(id) || !current_ || current_->GetType()!=IT_SAMPLE) return ;
@@ -2833,6 +2859,9 @@ void InstrumentView::beginTouch() {
 	Clip &c=viewData_->song_->clips_->Get(clip) ;
 	AutoLane *l=c.FindLane(id,-1) ;
 	touchHadOld_=(l!=0) ;
+	pushLaneSnap(clip) ;   // un toque grabado se deshace de una vez
+	autoUndo_.back().var=id ;
+	autoUndo_.back().value=preTouchVal_ ;
 	if (l) touchOld_=*l ;
 }
 
@@ -2903,6 +2932,7 @@ bool InstrumentView::deleteLane() {
 	AutoLane *l=c.FindLane(id,-1) ;
 	if (!l) return false ;
 	if (touching_) endTouch() ;
+	pushLaneSnap(clip) ;
 	laneUndoLane_=*l ;
 	laneUndoClip_=clip ;
 	laneUndo_=true ;
@@ -2911,6 +2941,49 @@ bool InstrumentView::deleteLane() {
 	c.RemoveLane(id,-1) ;
 	MixerService::GetInstance()->Unlock() ;
 	View::SetNotification("automatización borrada (Select la recupera)") ;
+	isDirty_=true ;
+	return true ;
+}
+
+void InstrumentView::pushLaneSnap(int clip) {
+	if (clip<0) return ;
+	LaneSnap s ;
+	s.clip=clip ;
+	s.lanes=viewData_->song_->clips_->Get(clip).lanes ;
+	s.var=0 ;
+	s.value=0 ;
+	s.instr=current_ ;
+	autoUndo_.push_back(s) ;
+	if (autoUndo_.size()>48) autoUndo_.erase(autoUndo_.begin()) ;
+	autoRedo_.clear() ;
+}
+
+bool InstrumentView::Undo(bool redo) {
+	std::vector<LaneSnap> &from=redo?autoRedo_:autoUndo_ ;
+	std::vector<LaneSnap> &to=redo?autoUndo_:autoRedo_ ;
+	if (touching_) endTouch() ;
+	if (from.empty()) {
+		View::SetNotification(redo?"nada que rehacer":"nada que deshacer") ;
+		return true ;
+	}
+	LaneSnap s=from.back() ;
+	from.pop_back() ;
+	Clip &c=viewData_->song_->clips_->Get(s.clip) ;
+	LaneSnap now ;
+	now.clip=s.clip ;
+	now.lanes=c.lanes ;
+	now.var=s.var ;
+	now.value=0 ;
+	now.instr=s.instr ;
+	Variable *v=(s.var && s.instr && s.instr==current_) ? current_->FindVariable(s.var) : 0 ;
+	if (v) now.value=v->GetInt() ;
+	to.push_back(now) ;
+	MixerService::GetInstance()->Lock() ;   // el audio lee las lanes
+	c.lanes=s.lanes ;
+	if (v) v->SetInt(s.value) ;
+	MixerService::GetInstance()->Unlock() ;
+	laneUndo_=false ;
+	View::SetNotification(redo?"automatización: rehecho":"automatización: deshecho") ;
 	isDirty_=true ;
 	return true ;
 }

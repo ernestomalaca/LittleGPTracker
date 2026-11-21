@@ -107,3 +107,13 @@ Audio en tiempo real
 
 Si algo falla
   chancho6/log.txt tiene lo que dijo el programa.
+
+Automatización (vista del instrumento)
+  Y + Start graba (con precuenta si no suena; si suena, desde el siguiente
+  compás). Mientras graba, A + flechas sobre un parámetro escribe su curva
+  en el clip que suena; al soltar A lo demás queda como estaba.
+  Sin grabar, A + flechas sobre un parámetro automatizado lo mueve a mano
+  desde donde está sonando: se queda así hasta que el clip vuelve a empezar
+  su loop, y ahí la curva vuelve a mandar (no se borra nada).
+  Select + L deshace y Select + R rehace lo grabado (cada vez que soltaste
+  A es un paso) y las curvas borradas.

@@ -104,6 +104,9 @@ public:
 	void SetPreviewInstrument(int track, I_Instrument *in) ;
 	I_Instrument *GetPreviewInstrument(int track) ;
 	bool ClipPlaying(int track) ;   // ¿suena un clip MIDI en esa pista?
+	// se movió a mano un parámetro automatizado: manda la mano hasta que el
+	// clip vuelva a empezar su loop (no se borra nada)
+	void OverrideAutomation(int track, unsigned int id) ;
 	// ya nadie lo mezcla ni lo va a tocar (antes de cambiarle o quitarle samples)
 	void KillInstrument(I_Instrument *in) ;
 
@@ -238,6 +241,10 @@ private:
 	unsigned long autoStepSlice_[SONG_CHANNEL_COUNT] ;  // la rebanada en que empezó
 	class SampleInstrument *autoInstr_[SONG_CHANNEL_COUNT] ;
 	std::vector<unsigned int> autoApplied_[SONG_CHANNEL_COUNT] ;
+	// trk2als: parámetros que se movieron a mano (sin grabar): la lane no se
+	// aplica hasta que el clip da la vuelta (como en Live)
+	std::vector<unsigned int> autoOverride_[SONG_CHANNEL_COUNT] ;
+	int autoLastPos_[SONG_CHANNEL_COUNT] ;
 	// trk2als: Ableton Link
 	double linkLatency() ;
 	void linkStart() ;

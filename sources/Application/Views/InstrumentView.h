@@ -143,6 +143,7 @@ private:
 	void toggleAutoRec() ;
 	void beginTouch() ;
 	void recordTouch() ;
+	void takeOver() ;
 	void endTouch() ;
 	bool deleteLane() ;           // B+A: quita la automatización del campo
 	bool undoLane() ;
@@ -157,6 +158,16 @@ private:
 	unsigned long laneUndoTime_ ;
 	bool selTap_ ;
 	AutoLane laneUndoLane_ ;
+	// deshacer / rehacer la automatización (Select + L / R): una foto de las
+	// lanes del clip antes de cada toque grabado o lane borrada
+	// (y el valor de la perilla que se movió, para que vuelva a donde estaba)
+	struct LaneSnap { int clip ; std::vector<AutoLane> lanes ; FourCC var ; int value ; I_Instrument *instr ; } ;
+	int preTouchVal_ ;   // la perilla antes de este toque
+	std::vector<LaneSnap> autoUndo_, autoRedo_ ;
+	void pushLaneSnap(int clip) ;
+public:
+	virtual bool Undo(bool redo) ;
+private:
 	std::vector<int> autoShown_ ;  // los valores en vivo que se dibujaron
 	int recShown_ ;   // cómo se dibujó el REC (0 no, 1/3 parpadeo, 2 grabando)
 } ;

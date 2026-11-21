@@ -54,6 +54,7 @@ Player::Player() {
     for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {   // trk2als
         autoInstr_[i] = 0;
         previewInstr_[i] = 0;
+        autoLastPos_[i] = -1;
         autoStep_[i] = 0;
         autoStepSlice_[i] = 0;
     }
@@ -1415,6 +1416,17 @@ void Player::clearAutomation(int channel) {
     }
     autoApplied_[channel].clear();
     autoInstr_[channel] = 0;
+    autoOverride_[channel].clear();
+    autoLastPos_[channel] = -1;
+}
+
+void Player::OverrideAutomation(int ch, unsigned int id) {
+    if (ch < 0 || ch >= SONG_CHANNEL_COUNT) return;
+    std::vector<unsigned int> &o = autoOverride_[ch];
+    for (size_t k = 0; k < o.size(); k++)
+        if (o[k] == id) return;
+    o.push_back(id);
+    if (autoInstr_[ch]) autoInstr_[ch]->ClearAutomated(id);   // ya suena lo de la mano
 }
 
 void Player::updateAutomation() {
@@ -1433,10 +1445,17 @@ void Player::updateAutomation() {
         if (sub < 0) sub = 0;
         if (sub > 5) sub = 5;
         int pos = autoStep_[ch] * CLIP_TICKS + sub * (CLIP_TICKS / 6);
+        // el clip volvió a empezar: lo que se movió a mano vuelve a la lane
+        if (pos < autoLastPos_[ch]) autoOverride_[ch].clear();
+        autoLastPos_[ch] = pos;
         std::vector<unsigned int> now;
         for (size_t l = 0; l < clip.lanes.size(); l++) {
             const AutoLane &lane = clip.lanes[l];
             if (lane.pad >= 0) continue;   // los pads del kit: más adelante
+            bool manual = false;
+            for (size_t k = 0; k < autoOverride_[ch].size() && !manual; k++)
+                manual = (autoOverride_[ch][k] == lane.target);
+            if (manual) continue;
             int v;
             if (!lane.ValueAt(pos, v)) continue;
             si->SetAutomated(lane.target, v);
