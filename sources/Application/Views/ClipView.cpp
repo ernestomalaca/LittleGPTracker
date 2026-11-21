@@ -1973,6 +1973,8 @@ bool ClipView::curveButton(unsigned short mask, unsigned short v) {
             return true;
         }
         if (v == EPBM_A) { curveBPending_ = false; curveCopy(true); return true; }   // B + A: borra lo marcado o el nodo
+        if (v == EPBM_L) { curveBPending_ = false; loopButton(true); return true; }    // B + L / R: el loop, como en las notas
+        if (v == EPBM_R) { curveBPending_ = false; loopButton(false); return true; }
         if (dt) {   // de compás en compás
             int t = pages() * 16;
             int s = cursorStep_ + dt * 16;
@@ -2160,8 +2162,12 @@ void ClipView::drawCurves() {
             int y = ys[x];
             int run = 1;
             while (x + run < gw && ys[x + run] == y) run++;
-            if (run > 1) {   // plano
+            if (run > 1) {   // plano (si llega de un salto, la vertical del salto)
                 FillRect(GRID_X + x, y - 1, run, 2, curveC);
+                if (x > 0 && (ys[x - 1] - y > 1 || y - ys[x - 1] > 1)) {
+                    int y0 = std::min(ys[x - 1], y), y1 = std::max(ys[x - 1], y);
+                    FillRect(GRID_X + x, y0 - 1, 2, y1 - y0 + 2, curveC);
+                }
             } else {         // inclinado: une con la columna de al lado
                 int prev = x > 0 ? ys[x - 1] : y;
                 int y0 = std::min(prev, y), y1 = std::max(prev, y);
