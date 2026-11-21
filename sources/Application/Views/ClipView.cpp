@@ -65,6 +65,7 @@ ClipView::ClipView(GUIWindow &w, ViewData *viewData) : View(w, viewData) {
     selTapC_ = false;
     curveSel_ = -1;
     curveAPut_ = false;
+    curveBAPending_ = false;
     curveAccel_ = 1;
     accelN_ = 0;
     accelV_ = 0;
@@ -1174,6 +1175,11 @@ void ClipView::handleButton(unsigned short mask, bool pressed) {
                 curveGrab_ = false;
                 if (curvePasting_) { curvePasting_ = false; curvePaste(); }   // al soltar A se pega
             }
+            if (curveBAPending_ && (!(mask & EPBM_A) || !(mask & EPBM_B))) {   // B + A sola: borra lo marcado o el nodo
+                curveBAPending_ = false;
+                curveBPending_ = false;
+                curveCopy(true);
+            }
             if (curveBPending_ && !(mask & EPBM_B)) { curveBPending_ = false; curveCopy(false); }   // B sola: copia
             if (curveAPending_ && !(mask & EPBM_A)) {   // A sola con algo marcado: cancela la marca
                 curveAPending_ = false;
@@ -1973,6 +1979,20 @@ int ClipView::curveDenorm(double n) {
     return int(v < 0 ? v - 0.5 : v + 0.5);
 }
 
+// Select, B, A: lo marcado otra vez, justo después (la marca pasa a la copia)
+void ClipView::curveDuplicate() {
+    int s0, s1;
+    curveRange(s0, s1);
+    int n = s1 - s0 + 1;
+    if (s1 + 1 >= pages() * 16) { message("No cabe: agrega un compás"); return; }
+    std::vector<AutoPoint> seg;
+    if (!curveTake(s0 * CLIP_TICKS, (s1 + 1) * CLIP_TICKS, seg)) { message("Nada marcado con curva"); return; }
+    curveWrite(seg, (s1 + 1) * CLIP_TICKS, n * CLIP_TICKS);
+    curveAnchor_ = s1 + 1;
+    cursorStep_ = std::min(s1 + n, pages() * 16 - 1);
+    message("Duplicado");
+}
+
 // lo marcado, como con las notas: A + flechas lo mueve; X + ↑ ↓ lo hace más
 // alto o más plano y X + ← → más ancho o angosto (como el largo de una
 // nota); Y + ← → lo inclina (como la rampa de velocity)
@@ -2073,17 +2093,6 @@ bool ClipView::curveButton(unsigned short mask, unsigned short v) {
         curveShownID_ = d->curveID_;
         curveSyncCursor();
     }
-    if (v == EPBM_L && (mask & EPBM_A)) {   // A + L: de vuelta al instrumento, en ese parámetro
-        curveAPut_ = false;
-        d->curveFocus_ = d->curveID_;
-        d->curveLastID_ = d->curveID_;
-        d->currentInstrument_ = d->curveInstr_;
-        d->instrumentFromSong_ = false;
-        d->curveID_ = 0;
-        curveGrab_ = curveMarking_ = false;
-        switchView(VT_INSTRUMENT);
-        return true;
-    }
     if (curvePasting_) {   // Select + A sostenido: se acomoda con las flechas; B cancela
         if (v == EPBM_B) { curvePasting_ = false; message("Pegado cancelado"); }
         else if (dt) {
@@ -2105,6 +2114,15 @@ bool ClipView::curveButton(unsigned short mask, unsigned short v) {
             message("Marcando: flechas para agrandar");
             return true;
         }
+        if (v == EPBM_A && curveMarking_) {   // Select, B, A: duplicar lo marcado (justo después)
+            curveDuplicate();
+            return true;
+        }
+        if (v == EPBM_RIGHT) {   // al instrumento (lo de siempre), parado en este parámetro
+            d->curveFocus_ = d->curveID_;
+            curveGrab_ = curveMarking_ = false;
+            return false;
+        }
         if (v == EPBM_A) {   // mantén A: se ve dónde cae; al soltar, se pega
             if (curveClip_.empty()) message("Nada que pegar");
             else { curvePasting_ = true; curveMarking_ = false; message("Suelta A para pegar (flechas: acomodar, B: cancelar)"); }
@@ -2118,7 +2136,9 @@ bool ClipView::curveButton(unsigned short mask, unsigned short v) {
             curveBPending_ = curveMarking_;
             return true;
         }
-        if (v == EPBM_A) { curveBPending_ = false; curveCopy(true); return true; }   // B + A: borra lo marcado o el nodo
+        if (v == EPBM_A) { curveBPending_ = false; curveBAPending_ = true; return true; }   // B + A: borra al soltar
+        if ((mask & EPBM_A) && v == EPBM_UP) { curveBAPending_ = false; askDeletePage(); return true; }   // B + A + ↑: borrar compás
+        if ((mask & EPBM_A) && v == EPBM_DOWN) { curveBAPending_ = false; askCrop(); return true; }      // B + A + ↓: recortar
         if (v == EPBM_L) { curveBPending_ = false; loopButton(true); return true; }    // B + L / R: el loop, como en las notas
         if (v == EPBM_R) { curveBPending_ = false; loopButton(false); return true; }
         if (dt) {   // de compás en compás
@@ -2141,8 +2161,8 @@ bool ClipView::curveButton(unsigned short mask, unsigned short v) {
             if (dt) { curveTransform(CT_WIDTH, dt); return true; }    // X + ← →: más ancho / angosto
             if (dv) { curveTransform(CT_HEIGHT, dv); return true; }   // X + ↑ ↓: más alto / plano
         }
-        if (mask & EPBM_Y) {
-            if (dt) curveTransform(CT_TILT, dt);   // Y + ← →: inclinarlo (rampa)
+        if ((mask & EPBM_Y) && dv) {   // Y + ↑ ↓: inclinarlo (el final sube o baja)
+            curveTransform(CT_TILT, dv);
             return true;
         }
     }
@@ -2161,19 +2181,12 @@ bool ClipView::curveButton(unsigned short mask, unsigned short v) {
         return true;
     }
     if (mask & EPBM_A) {
-        if (v == EPBM_A) {   // sobre un nodo: lo agarra; si no, el nodo se pone al soltar A (o al moverlo)
-            int k = curveNodeAt(cursorStep_);
-            if (k >= 0) {
-                curveVal_ = clip().FindLane(d->curveID_, -1)->points[k].value;
-                curveSel_ = k;
-                curveGrab_ = true;
-            } else curveAPut_ = true;
-            return true;
-        }
-        if ((dt || dv) && curveAPut_) { curveAPut_ = false; curvePutNode(); }
+        if (v == EPBM_A) { curvePutNode(); return true; }   // como la nota: pone o agarra
         if (!curveGrab_) return true;
         if (dt) curveMoveNode(dt, 0, false);
         else if (dv) curveMoveNode(0, dv, false);
+        else if (v == EPBM_L) curveMoveNode(0, -1, true);   // A + L / R: de a mucho (como la octava)
+        else if (v == EPBM_R) curveMoveNode(0, 1, true);
         return true;
     }
     if (mask & EPBM_Y) {   // Y + ← →: de nodo en nodo (el punto se va a él)
@@ -2407,5 +2420,5 @@ void ClipView::drawCurves() {
         FillRect(GRID_X + (playStep_ - p0) * STEP_W, GRID_Y - 2, 2, gh + 4, play);
 
     View::EnableNotification();   // el aviso, abajo
-    drawHelpBar("A:nodo;A+flechas:mover;B+A:borrar;X:forma;SEL:notas;A+L:instrumento");
+    drawHelpBar("A:nodo;A+flechas:mover;B+A:borrar;X:forma;Y+<>:nodos;SEL:notas;SEL+>:instrumento");
 }

@@ -115,6 +115,8 @@ class ClipView : public View {
     int curveDenorm(double n);
     void curveTransform(int mode, int d);
     bool curveAPending_;
+    bool curveBAPending_;           // B + A: borra al soltar (si no vino ↑ ↓)
+    void curveDuplicate();
     bool curveAPut_;                // A sola en un paso vacío: el nodo se pone al soltar
     int curveSel_;                  // el nodo elegido con Y + ← → (índice), -1 ninguno
     int curveAccel_;                // sostener una flecha: de a más

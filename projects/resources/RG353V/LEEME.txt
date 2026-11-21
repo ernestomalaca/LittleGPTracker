@@ -121,27 +121,27 @@ Automatización (vista del instrumento)
 
 Curvas en el clip
   En el instrumento, A + gatillo L sobre un parámetro automatizable abre su
-  curva en el clip (el que suena, o el de la celda de la Session). Las
-  notas se ven de fondo. Se edita como el piano roll, con nodos:
+  curva en el clip (el que suena, o el de la celda de la Session). Las notas
+  se ven de fondo. Se edita como las notas:
   - el punto (la cruz): ← → por los pasos, ↑ ↓ por los valores, L / R de a
-    mucho; B + ← → de compás en compás; Y + ← → de nodo en nodo
-  - A pone un nodo en el punto al soltarla (o agarra el que hay ahí);
-    A sostenido + flechas lo mueve (sostenido, acelera). Y + ← → recorre
-    los nodos uno por uno, también dos en el mismo paso
-  - X cambia cómo va al siguiente nodo: rampa, escalón (se queda y salta
-    al llegar) o escalón invertido (salta ya y se queda); X + A + ← →: un poquito
-    antes o después (1/24 de paso)
-  - B + A borra el nodo (o lo marcado); Select, B marca; B copia;
-    Select + A sostenido muestra dónde cae lo copiado (flechas: acomodar,
-    B: cancelar) y al soltar A se pega tal cual: lo de antes se corta ahí y
-    lo de después sigue como estaba
-  - con algo marcado (como con las notas): A + ← → lo mueve en el tiempo,
-    A + ↑ ↓ más arriba o abajo; X + ← → más ancho o angosto, X + ↑ ↓ más
-    alto o más plano; Y + ← → lo inclina (rampa). Select, B otra vez
-    (marcando) marca todo el clip; A sola cancela la marca
+    mucho (sostenido, acelera); B + ← → de compás en compás; Y + ← → de nodo
+    en nodo (uno por uno, también dos en el mismo paso)
+  - A pone un nodo (o agarra el que hay); A + flechas lo mueve; A + L / R de
+    a mucho (como la octava de una nota)
+  - X cambia cómo va al siguiente nodo: rampa, escalón (se queda y salta al
+    llegar) o escalón invertido (salta ya y se queda); X + A + ← →: un
+    poquito antes o después (1/24 de paso)
+  - B + A borra el nodo (o lo marcado); B + A + ↑ borra el compás y
+    B + A + ↓ recorta, como en las notas
+  - Select, B marca (otra B: todo el clip); B copia; Select + A sostenido
+    pega con vista previa (lo de antes se corta ahí y lo de después sigue);
+    Select, B, A duplica lo marcado justo después
+  - con algo marcado: A + flechas lo mueve; X + ← → más ancho o angosto,
+    X + ↑ ↓ más alto o más plano; Y + ↑ ↓ lo inclina (el final sube o baja);
+    A sola cancela la marca
   - Start toca; Select + L / R deshace / rehace; B + L / R marca el loop
-  - Select tocado solo: de la curva a las notas y de vuelta
-  - A + L vuelve al instrumento, en ese parámetro
+  - Select tocado solo: de la curva a las notas y de vuelta; Select + → al
+    instrumento, en ese parámetro
 
 Recortar el clip
   En las notas, B + A + ↓ recorta al loop (quedan solo sus compases y el
