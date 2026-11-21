@@ -1341,8 +1341,9 @@ void ClipView::DrawView() {
             if (notes[cur].tick) sprintf(info + strlen(info), " +%d", notes[cur].tick);
             if (notes[cur].rat > 1) sprintf(info + strlen(info), " x%d", notes[cur].rat);
         } else {
-            sprintf(info, "%s P%d/%d S%d", nn.c_str(), page + 1, npages > 0 ? npages : 1,
-                    cursorStep_ % 16 + 1);
+            // la posición como en Live: compás.tiempo.semicorchea (1.1.1)
+            sprintf(info, "%s %d.%d.%d", nn.c_str(), cursorStep_ / 16 + 1, (cursorStep_ % 16) / 4 + 1,
+                    cursorStep_ % 4 + 1);
         }
         if (!msg_.empty()) {   // el aviso de lo que acaba de pasar
             int w = 8 * int(msg_.size()) + 12;
@@ -1882,8 +1883,8 @@ void ClipView::drawCurves() {
         const char *node = "";
         if (nodeK >= 0) node = lane->points[nodeK].ramp ? "  nodo: rampa" : "  nodo: escalon";
         if (!msg_.empty()) snprintf(info, sizeof(info), "%s", msg_.c_str());
-        else snprintf(info, sizeof(info), "P%d/%d S%d%s%s", page + 1, npages, cursorStep_ % 16 + 1,
-                      has ? "" : "  sin curva", node);
+        else snprintf(info, sizeof(info), "%d.%d.%d%s%s", cursorStep_ / 16 + 1, (cursorStep_ % 16) / 4 + 1,
+                      cursorStep_ % 4 + 1, has ? "" : "  sin curva", node);
         DrawText(w + 16 + 16 * int(strlen(vb)) + 16, 39, info, dim, 0);
     }
 
