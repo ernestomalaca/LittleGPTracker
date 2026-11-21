@@ -110,6 +110,11 @@ class ClipView : public View {
     void curveCopy(bool cut);
     void curvePaste();
     void curveClear(int from, int to);
+    void curveWrite(const std::vector<AutoPoint> &seg, int from, int len);
+    bool curveTake(int from, int to, std::vector<AutoPoint> &seg);
+    int curveDenorm(double n);
+    void curveTransform(int mode, int d);
+    bool curveAPending_;            // A sola con algo marcado: al soltar, cancela la marca
     bool curvePasting_;             // Select + A sostenido: se ve dónde cae
     bool curveBPending_;            // B con algo marcado: copia al soltar (si no vino A)
     void curveToggle();

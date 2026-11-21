@@ -63,7 +63,7 @@ ClipView::ClipView(GUIWindow &w, ViewData *viewData) : View(w, viewData) {
     curveAnchor_ = 0;
     curveClipLen_ = 0;
     selTapC_ = false;
-    curvePasting_ = curveBPending_ = false;
+    curvePasting_ = curveBPending_ = curveAPending_ = false;
 }
 
 ClipView::~ClipView() {}
@@ -1168,6 +1168,11 @@ void ClipView::handleButton(unsigned short mask, bool pressed) {
                 if (curvePasting_) { curvePasting_ = false; curvePaste(); }   // al soltar A se pega
             }
             if (curveBPending_ && !(mask & EPBM_B)) { curveBPending_ = false; curveCopy(false); }   // B sola: copia
+            if (curveAPending_ && !(mask & EPBM_A)) {   // A sola con algo marcado: cancela la marca
+                curveAPending_ = false;
+                curveMarking_ = false;
+                message("Marca cancelada");
+            }
             isDirty_ = true;
             return;
         }
@@ -1873,9 +1878,16 @@ void ClipView::curveClear(int from, int to) {
 // después sigue como estaba
 void ClipView::curvePaste() {
     if (curveClip_.empty()) { message("Nada que pegar"); return; }
+    curveWrite(curveClip_, cursorStep_ * CLIP_TICKS, curveClipLen_ * CLIP_TICKS);
+    message("Pegado");
+}
+
+// escribe un tramo (puntos desde 0) en from..from+len, tal cual: lo de antes
+// se corta ahí y lo de después sigue como estaba
+void ClipView::curveWrite(const std::vector<AutoPoint> &seg, int from, int len) {
     Clip &c = clip();
     unsigned int id = viewData_->curveID_;
-    int from = cursorStep_ * CLIP_TICKS, to = from + curveClipLen_ * CLIP_TICKS;
+    int to = from + len;
     int end = c.Steps() * CLIP_TICKS;
     if (to > end) to = end;
     int base = curveInstrValue();
@@ -1892,21 +1904,116 @@ void ClipView::curvePaste() {
     }
     if (from > 0) l.points.push_back(AutoPoint(from - 1, had ? vb : base, false));   // lo de antes, hasta ahí
     bool cutShort = false;
-    for (size_t k = 0; k < curveClip_.size(); k++) {
-        int p = from + curveClip_[k].pos;
+    for (size_t k = 0; k < seg.size(); k++) {
+        int p = from + seg[k].pos;
         if (p >= to) { cutShort = true; continue; }
-        l.points.push_back(AutoPoint(p, curveClip_[k].value, curveClip_[k].ramp));
+        l.points.push_back(AutoPoint(p, seg[k].value, seg[k].ramp));
     }
     if (cutShort && to - 1 > from) {   // no cupo entero: su forma hasta el final del clip
         AutoLane g;
-        g.points = curveClip_;
+        g.points = seg;
         int gv;
         g.ValueAt(to - 1 - from, gv);
         l.points.push_back(AutoPoint(to - 1, gv, false));
     }
     if (to < end) l.points.push_back(AutoPoint(to, had ? va : base, had ? ra : false));   // y sigue como estaba
     l.Sort();
-    message("Pegado");
+}
+
+// el tramo marcado como puntos desde 0 (con cómo empieza y cómo termina)
+bool ClipView::curveTake(int from, int to, std::vector<AutoPoint> &seg) {
+    AutoLane *l = clip().FindLane(viewData_->curveID_, -1);
+    if (!l || l->points.empty()) return false;
+    int base = curveInstrValue();
+    int v;
+    bool r;
+    seg.clear();
+    laneAt(l, from, base, v, r);
+    seg.push_back(AutoPoint(0, v, r));
+    for (size_t k = 0; k < l->points.size(); k++) {
+        const AutoPoint &p = l->points[k];
+        if (p.pos > from && p.pos < to) seg.push_back(AutoPoint(p.pos - from, p.value, p.ramp));
+    }
+    laneAt(l, to - 1, base, v, r);
+    if (to - 1 - from > 0) seg.push_back(AutoPoint(to - 1 - from, v, false));
+    return true;
+}
+
+// de 0..1 (como se dibuja) al valor
+int ClipView::curveDenorm(double n) {
+    ViewData *d = viewData_;
+    if (n < 0) n = 0;
+    if (n > 1) n = 1;
+    if (d->curveLog_ && d->curveMin_ > 0)
+        return int(exp(log(double(d->curveMin_)) + n * (log(double(d->curveMax_)) - log(double(d->curveMin_)))) + 0.5);
+    double v = d->curveMin_ + n * (d->curveMax_ - d->curveMin_);
+    return int(v < 0 ? v - 0.5 : v + 0.5);
+}
+
+// lo marcado, como con las notas: A + flechas lo mueve; X + ↑ ↓ lo hace más
+// alto o más plano y X + ← → más ancho o angosto (como el largo de una
+// nota); Y + ← → lo inclina (como la rampa de velocity)
+enum { CT_MOVE_T, CT_MOVE_V, CT_HEIGHT, CT_WIDTH, CT_TILT };
+void ClipView::curveTransform(int mode, int d) {
+    int s0, s1;
+    curveRange(s0, s1);
+    int from = s0 * CLIP_TICKS, len = (s1 - s0 + 1) * CLIP_TICKS;
+    int steps = pages() * 16;
+    std::vector<AutoPoint> seg;
+    if (!curveTake(from, from + len, seg)) { message("Nada marcado con curva"); return; }
+    if (mode == CT_MOVE_T) {
+        int ns0 = s0 + d;
+        if (ns0 < 0 || s1 + d >= steps) return;
+        // el hueco que deja: lo de antes sigue plano; luego se escribe en su lugar nuevo
+        curveClear(from, from + len);
+        curveWrite(seg, ns0 * CLIP_TICKS, len);
+        curveAnchor_ += d;
+        cursorStep_ += d;
+        char b[24];
+        snprintf(b, sizeof(b), "%d.%d.%d", ns0 / 16 + 1, (ns0 % 16) / 4 + 1, ns0 % 4 + 1);
+        message(b);
+        return;
+    }
+    if (mode == CT_WIDTH) {
+        int nlenSteps = (s1 - s0 + 1) + d;
+        if (nlenSteps < 1 || s0 + nlenSteps > steps) return;
+        int nlen = nlenSteps * CLIP_TICKS;
+        std::vector<AutoPoint> out;
+        for (size_t k = 0; k < seg.size(); k++) {
+            int p = int((long long)seg[k].pos * nlen / len);
+            if (k + 1 == seg.size() && seg.size() > 1) p = nlen - 1;   // el final, al final
+            out.push_back(AutoPoint(p, seg[k].value, seg[k].ramp));
+        }
+        AutoLane tmp;
+        tmp.points = out;
+        tmp.Sort();
+        if (d < 0) curveClear(from, from + len);   // lo que sobra al encoger
+        curveWrite(tmp.points, from, nlen);
+        if (cursorStep_ >= curveAnchor_) cursorStep_ = s0 + nlenSteps - 1, curveAnchor_ = s0;
+        else curveAnchor_ = s0 + nlenSteps - 1, cursorStep_ = s0;
+        message(nlenSteps == 1 ? "1 paso" : "%d pasos", nlenSteps);
+        return;
+    }
+    // los demás cambian los valores, en su lugar
+    double lo = 1, hi = 0;
+    for (size_t k = 0; k < seg.size(); k++) {
+        double n = curveNorm(seg[k].value);
+        if (n < lo) lo = n;
+        if (n > hi) hi = n;
+    }
+    double mid = (lo + hi) / 2;
+    for (size_t k = 0; k < seg.size(); k++) {
+        AutoPoint &p = seg[k];
+        if (mode == CT_MOVE_V) p.value = curveNudge(p.value, d, false);
+        else if (mode == CT_HEIGHT) {
+            double f = d > 0 ? 1.15 : 1 / 1.15;
+            p.value = curveDenorm(mid + (curveNorm(p.value) - mid) * f);
+        } else if (mode == CT_TILT) {
+            double t = len > 1 ? double(p.pos) / (len - 1) : 0;
+            p.value = curveDenorm(curveNorm(p.value) + d * 0.04 * t);
+        }
+    }
+    curveWrite(seg, from, len);
 }
 
 // Select tocado solo, en el clip: de las notas a la última curva y de vuelta
@@ -1953,7 +2060,13 @@ bool ClipView::curveButton(unsigned short mask, unsigned short v) {
         return true;
     }
     if (mask & EPBM_SELECT) {
-        if (v == EPBM_B) {   // Select, B: marcar
+        if (v == EPBM_B) {   // Select, B: marcar; otra vez (marcando): todo el clip
+            if (curveMarking_) {
+                curveAnchor_ = 0;
+                cursorStep_ = pages() * 16 - 1;
+                message("Marcado todo el clip");
+                return true;
+            }
             curveMarking_ = true;
             curveAnchor_ = cursorStep_;
             message("Marcando: flechas para agrandar");
@@ -1982,6 +2095,23 @@ bool ClipView::curveButton(unsigned short mask, unsigned short v) {
             return true;
         }
         return true;
+    }
+    if (curveMarking_) {   // lo marcado, como con las notas
+        if (mask & EPBM_A) {
+            if (v == EPBM_A) { curveAPending_ = true; return true; }
+            curveAPending_ = false;
+            if (dt) curveTransform(CT_MOVE_T, dt);         // A + ← →: moverlo en el tiempo
+            else if (dv) curveTransform(CT_MOVE_V, dv);    // A + ↑ ↓: más arriba o abajo
+            return true;
+        }
+        if (mask & EPBM_X) {
+            if (dt) { curveTransform(CT_WIDTH, dt); return true; }    // X + ← →: más ancho / angosto
+            if (dv) { curveTransform(CT_HEIGHT, dv); return true; }   // X + ↑ ↓: más alto / plano
+        }
+        if (mask & EPBM_Y) {
+            if (dt) curveTransform(CT_TILT, dt);   // Y + ← →: inclinarlo (rampa)
+            return true;
+        }
     }
     if (mask & EPBM_X) {
         if ((mask & EPBM_A) && dt) { curveNudgeNode(dt); return true; }
