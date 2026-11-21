@@ -1405,10 +1405,12 @@ void ClipView::DrawView() {
             if (pn.empty() && pitch != cursorPitch_) key = Mix(bg, fg, 12);
             FillRect(8, y + 1, 44, RH - 2, key, 2);
             if (!pn.empty()) DrawText(10, y + (RH - 12) / 2, pn.substr(0, 5).c_str(), bg, 0);
-        } else if (scale > 0 ? isRoot : pitch % 12 == 0)
-            DrawText(12, y + (RH - 12) / 2, noteName(pitch).c_str(), bg, 0);
-        else if (pitch == cursorPitch_)   // la tecla del cursor dice qué nota es
-            DrawText(12, y + (RH - 12) / 2, noteName(pitch).c_str(), bg, 0);
+        } else {   // cada tecla dice qué nota es (en las negras, en claro)
+            bool darkKey = black && pitch != cursorPitch_ && !isRoot;
+            GUIColor tc = darkKey ? Mix(bg, fg, 75) : bg;
+            if (scale > 0 && !in && pitch != cursorPitch_) tc = darkKey ? Mix(bg, fg, 40) : Mix(bg, fg, 8);
+            DrawText(12, y + (RH - 12) / 2, noteName(pitch).c_str(), tc, 0);
+        }
     }
     for (int s = 0; s <= 16; s++) {
         GUIColor c = (s % 4 == 0) ? Mix(bg, fg, 28) : Mix(bg, fg, 13);
