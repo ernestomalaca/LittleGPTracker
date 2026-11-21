@@ -25,6 +25,7 @@ ViewData::ViewData(Project *project) {
 	curveName_[0]=0 ;
 	curveFmt_[0]=0 ;
 	curveFocus_=0 ;
+	curveLastID_=0 ;
 	currentGroove_=0 ;
 	mixerCol_=0 ;
 	mixerRow_=0 ;

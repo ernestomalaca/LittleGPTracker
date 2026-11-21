@@ -72,6 +72,7 @@ public:
 	char curveName_[24] ;       // "freq"
 	char curveFmt_[24] ;        // "%+ddB" (lo de después de "nombre: ")
 	unsigned int curveFocus_ ;  // al volver al instrumento: el foco ahí
+	unsigned int curveLastID_ ; // la última curva (Select tocado en el clip vuelve a ella)
 
 	int currentTable_ ;			// .Current edited table
 

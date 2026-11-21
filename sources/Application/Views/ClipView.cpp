@@ -57,6 +57,12 @@ ClipView::ClipView(GUIWindow &w, ViewData *viewData) : View(w, viewData) {
     baPending_ = false;
     prevHas_ = false;
     prevS_ = prevE_ = 0;
+    curveVal_ = 0;
+    curveShownID_ = 0;
+    curveGrab_ = curveMarking_ = false;
+    curveAnchor_ = 0;
+    curveClipLen_ = 0;
+    selTapC_ = false;
 }
 
 ClipView::~ClipView() {}
@@ -1041,6 +1047,7 @@ void ClipView::OnFocus() {
 
 void ClipView::ProcessButtonMask(unsigned short mask, bool pressed) {
     unsigned short v = View::pressedButton_;
+    if (pressed && v != EPBM_SELECT) selTapC_ = false;   // Select con otro botón no es un toque
     // Select + L deshace, Select + R rehace
     if (pressed && (mask & EPBM_SELECT) && (v == EPBM_L || v == EPBM_R)) {
         std::vector<Snap> &from = (v == EPBM_L) ? undo_ : redo_;
@@ -1078,9 +1085,22 @@ void ClipView::ProcessButtonMask(unsigned short mask, bool pressed) {
 
 void ClipView::handleButton(unsigned short mask, bool pressed) {
     unsigned short v = View::pressedButton_;
+    // Select tocado solo: de las notas a la última curva y de vuelta
+    if (pressed) selTapC_ = (v == EPBM_SELECT && mask == EPBM_SELECT);
+    else if (selTapC_ && !(mask & EPBM_SELECT)) {
+        selTapC_ = false;
+        marking_ = false;
+        curveToggle();
+        isDirty_ = true;
+        return;
+    }
     if (curveOn()) {
         // en la curva: sus botones; Start y Select + flechas siguen como siempre
-        if (!pressed) { isDirty_ = true; return; }
+        if (!pressed) {
+            if (!(mask & EPBM_A)) curveGrab_ = false;
+            isDirty_ = true;
+            return;
+        }
         if (curveButton(mask, v)) { isDirty_ = true; return; }
         bool nav = (mask & EPBM_SELECT) && (v == EPBM_LEFT || v == EPBM_RIGHT || v == EPBM_UP || v == EPBM_DOWN);
         if (v != EPBM_START && !nav) return;
@@ -1592,70 +1612,230 @@ int ClipView::curveNudge(int v, int dir, bool big) {
     return v;
 }
 
-// sube o baja el valor de ese paso (solo ese: el de antes y el de después
-// se quedan como estaban)
-void ClipView::curveSetStep(int step, int dir, bool big) {
+// el nodo (punto de la lane) que cae en ese paso; -1 si no hay
+int ClipView::curveNodeAt(int step) {
+    AutoLane *l = clip().FindLane(viewData_->curveID_, -1);
+    if (!l) return -1;
+    for (size_t k = 0; k < l->points.size(); k++)
+        if (l->points[k].pos / CLIP_TICKS == step) return int(k);
+    return -1;
+}
+
+// el punto del cursor arranca donde suena la curva (o el instrumento)
+void ClipView::curveSyncCursor() {
+    AutoLane *l = clip().FindLane(viewData_->curveID_, -1);
+    int v = curveInstrValue();
+    if (l && !l->points.empty()) l->ValueAt(cursorStep_ * CLIP_TICKS, v);
+    curveVal_ = v;
+}
+
+// A: un nodo donde está el punto (o se agarra el que ya está en ese paso)
+void ClipView::curvePutNode() {
     Clip &c = clip();
     unsigned int id = viewData_->curveID_;
+    int k = curveNodeAt(cursorStep_);
+    if (k >= 0) {   // ya hay: se agarra (A + flechas lo mueve)
+        curveVal_ = c.FindLane(id, -1)->points[k].value;
+        curveGrab_ = true;
+        return;
+    }
     AutoLane *old = c.FindLane(id, -1);
-    int base = curveInstrValue();
-    int pos = step * CLIP_TICKS, end = pos + CLIP_TICKS;
-    int cur = base, after = base;
-    bool hadBefore = false, hadAtEnd = false, ramp = false;
-    if (old && !old->points.empty()) {
-        old->ValueAt(pos, cur);
-        old->ValueAt(end, after);
-        for (size_t k = 0; k < old->points.size(); k++) {
-            const AutoPoint &p = old->points[k];
-            if (p.pos <= pos) hadBefore = true;
-            if (p.pos == end) hadAtEnd = true;
-            if (p.pos == pos) ramp = p.ramp;
-        }
-    }
-    int nv = curveNudge(cur, dir, big);
+    bool empty = !old || old->points.empty();
     AutoLane &lane = c.GetLane(id, -1);
-    std::vector<AutoPoint> &pts = lane.points;
-    int before = cur;
-    if (!hadBefore && pos > 0) {   // lo de antes se queda como sonaba
-        int v0 = base;
-        if (old && !old->points.empty()) old->ValueAt(0, v0);
-        before = v0;
-        pts.push_back(AutoPoint(0, before, false));
+    // la primera: lo de antes sigue en el valor del instrumento y sube o
+    // baja en rampa hasta el nodo (como la línea de Live)
+    if (empty && cursorStep_ > 0) lane.points.push_back(AutoPoint(0, curveInstrValue(), true));
+    lane.points.push_back(AutoPoint(cursorStep_ * CLIP_TICKS, curveVal_, true));
+    lane.Sort();
+    curveGrab_ = true;
+}
+
+// A sostenido + flechas: mover el nodo agarrado
+void ClipView::curveMoveNode(int dt, int dv, bool big) {
+    Clip &c = clip();
+    AutoLane *l = c.FindLane(viewData_->curveID_, -1);
+    int k = curveNodeAt(cursorStep_);
+    if (!l || k < 0) return;
+    AutoPoint p = l->points[k];
+    if (dt) {
+        int ns = cursorStep_ + dt;
+        if (ns < 0 || ns >= c.Steps()) return;
+        if (curveNodeAt(ns) >= 0) return;   // ahí ya hay otro
+        p.pos += dt * CLIP_TICKS;
+        cursorStep_ = ns;
     }
-    for (size_t k = 0; k < pts.size();) {
-        if (pts[k].pos >= pos && pts[k].pos < end && !(pts[k].pos == 0 && pos > 0)) pts.erase(pts.begin() + k);
+    if (dv) p.value = curveNudge(p.value, dv, big);
+    l->points.erase(l->points.begin() + k);
+    l->points.push_back(p);
+    l->Sort();
+    curveVal_ = p.value;
+    char vb[24];
+    curveText(p.value, vb, sizeof(vb), false);
+    message(vb);
+}
+
+// X + A + ← →: el nodo un poquito antes o después (1/24 de paso)
+void ClipView::curveNudgeNode(int d) {
+    AutoLane *l = clip().FindLane(viewData_->curveID_, -1);
+    int k = curveNodeAt(cursorStep_);
+    if (!l || k < 0) return;
+    AutoPoint &p = l->points[k];
+    int np = p.pos + d;
+    if (np < 0 || np / CLIP_TICKS != cursorStep_) return;   // se queda en su paso
+    p.pos = np;
+    l->Sort();
+    message("+%d/24", np % CLIP_TICKS);
+}
+
+// lo marcado: de qué paso a qué paso
+void ClipView::curveRange(int &s0, int &s1) {
+    s0 = std::min(curveAnchor_, cursorStep_);
+    s1 = std::max(curveAnchor_, cursorStep_);
+}
+
+// B (copiar) o B + A (cortar) lo marcado, o el nodo del cursor
+void ClipView::curveCopy(bool cut) {
+    AutoLane *l = clip().FindLane(viewData_->curveID_, -1);
+    int s0 = cursorStep_, s1 = cursorStep_;
+    if (curveMarking_) curveRange(s0, s1);
+    curveClip_.clear();
+    curveClipLen_ = s1 - s0 + 1;
+    if (l) {
+        for (size_t k = 0; k < l->points.size();) {
+            const AutoPoint &p = l->points[k];
+            int s = p.pos / CLIP_TICKS;
+            if (s >= s0 && s <= s1) {
+                curveClip_.push_back(AutoPoint(p.pos - s0 * CLIP_TICKS, p.value, p.ramp));
+                if (cut) { l->points.erase(l->points.begin() + k); continue; }
+            }
+            k++;
+        }
+        if (cut && l->points.empty()) clip().RemoveLane(viewData_->curveID_, -1);
+    }
+    curveMarking_ = false;
+    if (curveClip_.empty()) message(cut ? "Nada que cortar" : "Nada que copiar");
+    else message(cut ? "Cortado: %d nodos" : "Copiado: %d nodos", int(curveClip_.size()));
+}
+
+// Select + A: lo copiado desde el cursor (lo que había ahí se reemplaza)
+void ClipView::curvePaste() {
+    if (curveClip_.empty()) { message("Nada que pegar"); return; }
+    Clip &c = clip();
+    int from = cursorStep_ * CLIP_TICKS, to = from + curveClipLen_ * CLIP_TICKS;
+    int endAll = c.Steps() * CLIP_TICKS;
+    AutoLane &l = c.GetLane(viewData_->curveID_, -1);
+    for (size_t k = 0; k < l.points.size();) {
+        if (l.points[k].pos >= from && l.points[k].pos < to) l.points.erase(l.points.begin() + k);
         else k++;
     }
-    pts.push_back(AutoPoint(pos, nv, ramp));
-    if (!hadAtEnd && end < c.Steps() * CLIP_TICKS) pts.push_back(AutoPoint(end, after, false));
-    lane.Sort();
-    char vb[24];
-    curveText(nv, vb, sizeof(vb), false);
-    message(vb);
+    int n = 0;
+    for (size_t k = 0; k < curveClip_.size(); k++) {
+        int p = from + curveClip_[k].pos;
+        if (p >= endAll) continue;
+        l.points.push_back(AutoPoint(p, curveClip_[k].value, curveClip_[k].ramp));
+        n++;
+    }
+    l.Sort();
+    message("Pegado: %d nodos", n);
+}
+
+// Select tocado solo, en el clip: de las notas a la última curva y de vuelta
+void ClipView::curveToggle() {
+    ViewData *d = viewData_;
+    if (d->curveID_) {
+        d->curveLastID_ = d->curveID_;
+        d->curveID_ = 0;
+        message("Notas");
+        return;
+    }
+    if (!d->curveLastID_ || d->curveInstr_ < 0) { message("Sin curva: A + L en el instrumento"); return; }
+    int owner = d->project_->GetTrackInstrument(d->songX_);
+    if (owner != d->curveInstr_) { message("Sin curva en esta pista"); return; }
+    d->curveID_ = d->curveLastID_;
+    curveShownID_ = 0;
+    msg_ = std::string("Curva: ") + d->curveName_;
+    msgTime_ = System::GetInstance()->GetClock();
 }
 
 bool ClipView::curveButton(unsigned short mask, unsigned short v) {
     ViewData *d = viewData_;
+    int dt = (v == EPBM_LEFT) ? -1 : (v == EPBM_RIGHT) ? 1 : 0;
+    int dv = (v == EPBM_UP) ? 1 : (v == EPBM_DOWN) ? -1 : 0;
+    if (curveShownID_ != d->curveID_) {   // recién entrado: el punto donde suena
+        curveShownID_ = d->curveID_;
+        curveSyncCursor();
+    }
     if (v == EPBM_L && (mask & EPBM_A)) {   // A + L: de vuelta al instrumento, en ese parámetro
         d->curveFocus_ = d->curveID_;
+        d->curveLastID_ = d->curveID_;
         d->currentInstrument_ = d->curveInstr_;
         d->instrumentFromSong_ = false;
         d->curveID_ = 0;
+        curveGrab_ = curveMarking_ = false;
         switchView(VT_INSTRUMENT);
         return true;
     }
-    if (mask & EPBM_SELECT) return false;   // Select + flechas: otras pantallas
+    if (mask & EPBM_SELECT) {
+        if (v == EPBM_B) {   // Select, B: marcar
+            curveMarking_ = true;
+            curveAnchor_ = cursorStep_;
+            message("Marcando: flechas para agrandar");
+            return true;
+        }
+        if (v == EPBM_A) { curvePaste(); return true; }
+        return false;   // Select + flechas, Select + L / R: lo de siempre
+    }
     if (v == EPBM_START) return false;
-    if (v == EPBM_LEFT || v == EPBM_RIGHT) {
-        if (mask & EPBM_A) return true;   // dibujar: lo que sigue
-        moveCursor(v == EPBM_LEFT ? -1 : 1, 0);
+    if (mask & EPBM_B) {
+        if (v == EPBM_B) {   // B sola: con algo marcado, copia
+            if (curveMarking_) curveCopy(false);
+            return true;
+        }
+        if (v == EPBM_A) { curveCopy(true); return true; }   // B + A: borrar (cortar)
+        if (dt) {   // de compás en compás
+            int t = pages() * 16;
+            int s = cursorStep_ + dt * 16;
+            if (s >= 0 && s < t) cursorStep_ = s;
+            return true;
+        }
         return true;
     }
-    if (v == EPBM_UP || v == EPBM_DOWN) {
-        curveSetStep(cursorStep_, v == EPBM_UP ? 1 : -1, (mask & EPBM_A) != 0);
+    if (mask & EPBM_X) {
+        if ((mask & EPBM_A) && dt) { curveNudgeNode(dt); return true; }
+        if (v == EPBM_X) {   // X: rampa o escalón hacia el siguiente
+            AutoLane *l = clip().FindLane(d->curveID_, -1);
+            int k = curveNodeAt(cursorStep_);
+            if (l && k >= 0) {
+                l->points[k].ramp = !l->points[k].ramp;
+                message(l->points[k].ramp ? "Rampa" : "Escalon");
+            }
+        }
         return true;
     }
-    return true;   // lo demás no hace nada aquí
+    if (mask & EPBM_A) {
+        if (v == EPBM_A) { curvePutNode(); return true; }
+        if (!curveGrab_) return true;
+        if (dt) curveMoveNode(dt, 0, false);
+        else if (dv) curveMoveNode(0, dv, false);
+        else if (v == EPBM_L) curveMoveNode(0, -1, true);
+        else if (v == EPBM_R) curveMoveNode(0, 1, true);
+        return true;
+    }
+    // sin nada: el punto se mueve por el plano
+    if (dt) {
+        int t = pages() * 16;
+        int s = cursorStep_ + dt;
+        if (s >= 0 && s < t) cursorStep_ = s;
+        if (!curveMarking_) {   // si hay nodo ahí, el punto se va a él
+            int k = curveNodeAt(cursorStep_);
+            if (k >= 0) curveVal_ = clip().FindLane(d->curveID_, -1)->points[k].value;
+        }
+        return true;
+    }
+    if (dv) { curveVal_ = curveNudge(curveVal_, dv, false); return true; }
+    if (v == EPBM_L) { curveVal_ = curveNudge(curveVal_, -1, true); return true; }
+    if (v == EPBM_R) { curveVal_ = curveNudge(curveVal_, 1, true); return true; }
+    return true;
 }
 
 void ClipView::drawCurves() {
@@ -1668,6 +1848,10 @@ void ClipView::drawCurves() {
     GUIColor play = ColorOf(CD_PLAY);
     GUIColor curveC = Mix(hi, fg, 25);
 
+    if (curveShownID_ != d->curveID_) {   // recién entrado: el punto donde suena
+        curveShownID_ = d->curveID_;
+        curveSyncCursor();
+    }
     Clip &c = clip();
     AutoLane *lane = c.FindLane(d->curveID_, -1);
     bool has = lane && !lane->points.empty();
@@ -1683,9 +1867,9 @@ void ClipView::drawCurves() {
                       (cn.empty() ? std::string(cname) : cn);
     drawTopBar(TAB_CLIP, ctx.c_str());
 
-    // encabezado: el parámetro (en su color) y su valor en el cursor
-    int curV = base;
-    if (has) lane->ValueAt(cursorStep_ * CLIP_TICKS, curV);
+    // encabezado: el parámetro (en su color) y el valor del punto
+    int curV = curveVal_;
+    int nodeK = curveNodeAt(cursorStep_);
     {
         std::string nm = d->curveName_;
         for (size_t i = 0; i < nm.size(); i++) nm[i] = toupper(nm[i]);
@@ -1695,13 +1879,11 @@ void ClipView::drawCurves() {
         char vb[24], info[64];
         curveText(curV, vb, sizeof(vb), false);
         DrawText(w + 16, 35, vb, fg, 1);
-        bool rampHere = false;
-        if (has)
-            for (size_t k = 0; k < lane->points.size(); k++)
-                if (lane->points[k].pos / CLIP_TICKS == cursorStep_ && lane->points[k].ramp) rampHere = true;
+        const char *node = "";
+        if (nodeK >= 0) node = lane->points[nodeK].ramp ? "  nodo: rampa" : "  nodo: escalon";
         if (!msg_.empty()) snprintf(info, sizeof(info), "%s", msg_.c_str());
         else snprintf(info, sizeof(info), "P%d/%d S%d%s%s", page + 1, npages, cursorStep_ % 16 + 1,
-                      has ? "" : "  sin curva", rampHere ? "  rampa" : "");
+                      has ? "" : "  sin curva", node);
         DrawText(w + 16 + 16 * int(strlen(vb)) + 16, 39, info, dim, 0);
     }
 
@@ -1712,7 +1894,13 @@ void ClipView::drawCurves() {
         GUIColor lc = Mix(bg, fg, (s % 4 == 0) ? 16 : 8);
         FillRect(GRID_X + s * STEP_W, GRID_Y, 1, gh, lc);
     }
-    FillRect(GRID_X + (cursorStep_ - p0) * STEP_W, GRID_Y, STEP_W, gh, Mix(bg, hi2, 14));
+    if (curveMarking_) {   // lo marcado
+        int s0, s1;
+        curveRange(s0, s1);
+        int a = std::max(s0, p0) - p0, b = std::min(s1, p0 + 15) - p0;
+        if (b >= a) FillRect(GRID_X + a * STEP_W, GRID_Y, (b - a + 1) * STEP_W, gh, Mix(bg, hi2, 22));
+    }
+    FillRect(GRID_X + (cursorStep_ - p0) * STEP_W, GRID_Y, STEP_W, gh, Mix(bg, hi2, 10));
     {
         std::vector<Note> notes;
         readNotes(notes);
@@ -1774,16 +1962,19 @@ void ClipView::drawCurves() {
             FillRect(x - 4, y - 4, 9, 9, (p.pos / CLIP_TICKS == cursorStep_) ? fg : curveC, 4);
         }
     }
-    // el valor del cursor, junto a su paso
+    // el punto: donde A pone un nodo
     {
         int x = GRID_X + (cursorStep_ - p0) * STEP_W;
+        if (nodeK >= 0) x = GRID_X + (lane->points[nodeK].pos - p0 * CLIP_TICKS) * STEP_W / CLIP_TICKS;
         int y = top + int((1.0 - curveNorm(curV)) * h + 0.5);
-        FrameRect(x, y - 2, STEP_W, 5, fg, 2, 1);
+        FillRect(x - 10, y, 21, 1, fg);
+        FillRect(x, y - 10, 1, 21, fg);
+        FrameRect(x - 7, y - 7, 15, 15, curveGrab_ ? play : fg, 7, 2);
     }
 
     // el cabezal
     if (playStep_ >= p0 && playStep_ < p0 + 16)
         FillRect(GRID_X + (playStep_ - p0) * STEP_W, GRID_Y - 2, 2, gh + 4, play);
 
-    drawHelpBar("<>:paso;^v:valor;A+^v:valor x10;START:play;A+L:al instrumento");
+    drawHelpBar("A:nodo;A+flechas:mover;B+A:borrar;X:rampa;SEL:notas;A+L:instrumento");
 }

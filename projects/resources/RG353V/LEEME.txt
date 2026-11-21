@@ -122,7 +122,16 @@ Automatización (vista del instrumento)
 Curvas en el clip
   En el instrumento, A + gatillo L sobre un parámetro automatizable abre su
   curva en el clip (el que suena, o el de la celda de la Session). Las
-  notas se ven de fondo. ← → paso, ↑ ↓ sube o baja el valor de ese paso
-  (A + ↑ ↓: de a mucho), Start toca, Select + L / R deshace / rehace.
-  A + L otra vez vuelve al instrumento, en ese mismo parámetro.
+  notas se ven de fondo. Se edita como el piano roll, con nodos:
+  - el punto (la cruz): ← → por los pasos, ↑ ↓ por los valores, L / R de a
+    mucho; B + ← → de compás en compás
+  - A pone un nodo en el punto (o agarra el que hay en ese paso);
+    A sostenido + flechas lo mueve (L / R: de a mucho)
+  - X: rampa o escalón hacia el siguiente nodo; X + A + ← →: un poquito
+    antes o después (1/24 de paso)
+  - B + A borra el nodo; Select, B marca; B copia; B + A corta;
+    Select + A pega desde el punto
+  - Start toca; Select + L / R deshace / rehace
+  - Select tocado solo: de la curva a las notas y de vuelta
+  - A + L vuelve al instrumento, en ese parámetro
   En el instrumento, Select es Select (como en LSDJ) y L es el gatillo.

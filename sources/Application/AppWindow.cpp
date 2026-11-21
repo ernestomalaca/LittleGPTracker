@@ -881,7 +881,10 @@ void AppWindow::Update(Observable &o, I_ObservableData *d) {
             _currentView->LooseFocus();
         }
         // trk2als: la curva del clip es solo mientras se está ahí
-        if (*vt != VT_CLIP && _viewData) _viewData->curveID_ = 0;
+        if (*vt != VT_CLIP && _viewData && _viewData->curveID_) {
+            _viewData->curveLastID_ = _viewData->curveID_;
+            _viewData->curveID_ = 0;
+        }
         switch (*vt) {
         case VT_SONG:
             _currentView = _songView;

@@ -2869,6 +2869,7 @@ bool InstrumentView::openCurve() {
 	if (touching_) cancelTouch() ;   // la A del combo no graba nada
 	ViewData *vd=viewData_ ;
 	vd->curveID_=id ;
+	vd->curveLastID_=id ;
 	vd->curveInstr_=vd->currentInstrument_ ;
 	vd->curveMin_=fld->GetMin() ;
 	vd->curveMax_=fld->GetMax() ;

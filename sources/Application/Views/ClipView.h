@@ -96,8 +96,24 @@ class ClipView : public View {
     double curveNorm(int v);
     void curveText(int v, char *buf, int size, bool shortForm);
     int curveNudge(int v, int dir, bool big);
-    void curveSetStep(int step, int dir, bool big);
     bool curveButton(unsigned short mask, unsigned short v);
+    int curveNodeAt(int step);
+    void curveSyncCursor();
+    void curvePutNode();
+    void curveMoveNode(int dt, int dv, bool big);
+    void curveNudgeNode(int d);
+    void curveRange(int &s0, int &s1);
+    void curveCopy(bool cut);
+    void curvePaste();
+    void curveToggle();
+    int curveVal_;                  // el punto: su valor (su paso es cursorStep_)
+    unsigned int curveShownID_;     // la curva que se estaba viendo
+    bool curveGrab_;                // A agarró un nodo
+    bool curveMarking_;
+    int curveAnchor_;
+    std::vector<AutoPoint> curveClip_;   // nodos copiados (desde el paso 0)
+    int curveClipLen_;
+    bool selTapC_;                  // Select tocado solo
     void drawCurves();
     void audition(int step);
     void stopAudition();
