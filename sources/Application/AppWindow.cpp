@@ -318,7 +318,13 @@ void AppWindow::Flush() {
     memset(_shapeCells, 0, sizeof(_shapeCells));
     if (shapesOn) markCells(_shapes);
     if (layersOn) for (int l = 1; l < 4; l++) markCells(_layers[l]);
-    bool anyOn = shapesOn || layersOn;
+    // trk2als: el aviso de abajo (en todas las pantallas, donde la Session lo
+    // pone): una franja con fondo encima de todo; tapa las filas 27 a 29
+    std::string notice;
+    bool noticeOn = SupportsShapes() && _currentView && _currentView->NoticeText(notice);
+    if (noticeOn)
+        for (int cell = 27 * 40; cell < 1200; cell++) _shapeCells[cell] = true;
+    bool anyOn = shapesOn || layersOn || noticeOn;
 
     // Las celdas tapadas solo se redibujan si las figuras cambiaron o si cambió
     // el texto de alguna de ellas (entonces se repinta todo el bloque de figuras)
@@ -396,6 +402,14 @@ void AppWindow::Flush() {
         }
         // las ventanas con figuras, encima de todo lo de abajo
         if (layersOn) for (int l = 1; l < 4; l++) paintShapes(_layers[l]);
+    }
+    if (noticeOn) {
+        GUIColor bg = GetColor(CD_BACKGROUND), fg = GetColor(CD_NORMAL);
+        GUIRect band(0, 432, 640, 480);
+        GUIWindow::FillRoundRect(band, 0, bg);
+        GUIPoint p(44, 450);
+        if (notice.size() <= 36) GUIWindow::BlendText(notice.c_str(), p, fg, 1);
+        else { p._y = 454; GUIWindow::BlendText(notice.substr(0, 74).c_str(), p, fg, 0); }
     }
     // trk2als: la ayuda va encima de todo (rejilla y figuras)
     if (_overlayOn && (_overlayDirty || count > 0 || (anyOn && _shapesDirty))) {

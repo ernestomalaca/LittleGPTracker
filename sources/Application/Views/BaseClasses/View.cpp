@@ -6,6 +6,7 @@
 #include "Application/Utils/char.h"
 #include "Application/AppWindow.h"
 #include "Application/Model/Config.h"
+#include "Application/Utils/Latin1.h"
 #include "ModalView.h"
 #include "Application/Views/ModalDialogs/MessageBox.h"
 #include "Application/Model/Scale.h"
@@ -307,24 +308,7 @@ void View::DrawString(int x,int y,const char *txt,GUITextProperties &props) {
 void View::EnableNotification() {
 	// trk2als: con figuras, el aviso va abajo en letras blancas, en el mismo
 	// lugar que en la Session (en todas las pantallas)
-	if (SupportsShapes() && !miniLayout_) {
-		if (displayNotification_.empty()) return ;
-		if ((SDL_GetTicks() - notificationTime_) > NOTIFICATION_TIMEOUT) { displayNotification_ = "" ; return ; }
-		std::string m = displayNotification_ ;
-		size_t nl = m.find('\n') ;
-		if (nl != std::string::npos) m = m.substr(0, nl) + " " + m.substr(nl + 1) ;
-		GUIColor bg = ColorOf(CD_BACKGROUND), fg = ColorOf(CD_NORMAL) ;
-		// la última fila (464-480): ahí no hay nada en ninguna pantalla
-		FillRect(0, 464, 640, 16, bg) ;
-		{   // y las letras de la rejilla de esa fila (van encima de las figuras)
-			GUITextProperties props ;
-			SetColor(CD_NORMAL) ;
-			DrawString(0, 29, "                                        ", props) ;
-		}
-		if (m.size() <= 36) DrawText(44, 464, m.c_str(), fg, 1) ;
-		else DrawText(44, 466, m.substr(0, 74).c_str(), fg, 0) ;
-		return ;
-	}
+	if (SupportsShapes() && !miniLayout_) return ;   // lo pinta AppWindow encima de todo (NoticeText)
 	if ((SDL_GetTicks() - notificationTime_) <= NOTIFICATION_TIMEOUT) {
 		SetColor(CD_NORMAL);
 		GUITextProperties props;
@@ -362,6 +346,16 @@ void View::SetNotification(const char *notification, int offset) {
         e.type = SDL_WINDOWEVENT; e.window.event = SDL_WINDOWEVENT_EXPOSED;
         SDL_PushEvent(&e); return 0; } };
     SDL_AddTimer(NOTIFICATION_TIMEOUT + 40, W::wake, 0);
+}
+
+// el aviso que se está viendo (con figuras: AppWindow lo pinta abajo)
+bool View::NoticeText(std::string &out) {
+    if (miniLayout_ || displayNotification_.empty() ||
+        (SDL_GetTicks() - notificationTime_) > NOTIFICATION_TIMEOUT) return false;
+    out = ToLatin1(displayNotification_.c_str());
+    size_t nl = out.find('\n');
+    if (nl != std::string::npos) out = out.substr(0, nl) + " " + out.substr(nl + 1);
+    return true;
 }
 
 bool View::NoticeExpired() {
