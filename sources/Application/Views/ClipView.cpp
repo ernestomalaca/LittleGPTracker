@@ -1355,25 +1355,28 @@ void ClipView::DrawView() {
             if (scale > 0) {   // la escala, como en Live (si cabe)
                 std::string sc = std::string(viewData_->project_->GetFold() ? "FOLD " : "") + scaleNotes[root] + " " + scaleNames[scale];
                 if (sc.size() > 18) sc = sc.substr(0, 18);
-                int sx = 466 - 8 * int(sc.size());
+                int sx = 634 - 16 * 17 - 10 - 8 * int(sc.size());
                 if (sx > used + 8) DrawText(sx, 38, sc.c_str(), hi, 0);
             }
         }
         // las páginas, a la derecha (y el loop debajo)
         int loopS = 0, loopE = 0;
         bool hasLoop = viewData_->song_->GetClipLoop(viewData_->currentChain_, loopS, loopE);
-        int bx = 632 - 16 * 10;
+        // trk2als: más grandes (14 x 11): el que se ve, claro; el que suena,
+        // con marco; la llave del loop debajo
+        const int CW = 17;
+        int bx = 634 - 16 * CW;
         for (int i = 0; i < 16; i++) {
-            int x = bx + i * 10;
+            int x = bx + i * CW;
             if (i < npages) {
                 bool playing = playStep_ >= 0 && playStep_ / 16 == i;
                 bool inLoop = !hasLoop || (i >= loopS && i <= loopE);
                 GUIColor c = (i == page) ? hi2 : Mix(bg, fg, inLoop ? 45 : 12);
-                if (hasLoop && inLoop) FillRect(x - 1, 50, 9, 2, hi);   // la llave del loop
-                FillRect(x, 36, 7, 8, c, 2);
-                if (playing) FillRect(x, 46, 7, 2, play);
+                if (hasLoop && inLoop) FillRect(x - 2, 49, CW, 3, hi);   // la llave del loop
+                FillRect(x, 35, 14, 11, c, 2);
+                if (playing) FrameRect(x - 2, 33, 18, 15, play, 3, 2);
             } else {
-                FillRect(x + 3, 39, 2, 2, Mix(bg, fg, 20));
+                FillRect(x + 5, 39, 3, 3, Mix(bg, fg, 20));
             }
         }
     }
