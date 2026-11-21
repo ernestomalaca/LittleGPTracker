@@ -2115,7 +2115,7 @@ void ClipView::drawCurves() {
             int s0 = n.start - p0, s1 = std::min(16, n.start + n.len - p0);
             if (r < 0 || s1 <= 0 || s0 >= 16) continue;
             if (s0 < 0) s0 = 0;
-            FillRect(GRID_X + s0 * STEP_W + 1, GRID_Y + r * RH + 1, (s1 - s0) * STEP_W - 2, RH - 2, Mix(bg, fg, 13), 3);
+            FillRect(GRID_X + s0 * STEP_W + 1, GRID_Y + r * RH + 1, (s1 - s0) * STEP_W - 2, RH - 2, Mix(bg, hi2, 30), 3);   // las notas: silueta del color de la pista
         }
     }
 
@@ -2205,8 +2205,7 @@ void ClipView::drawCurves() {
         int from = cursorStep_ * CLIP_TICKS;
         int a = std::max(cursorStep_, p0) - p0, b = std::min(cursorStep_ + curveClipLen_ - 1, p0 + 15) - p0;
         if (b >= a) {
-            FillRect(GRID_X + a * STEP_W, GRID_Y, (b - a + 1) * STEP_W, gh, Mix(bg, fg, 8));
-            FrameRect(GRID_X + a * STEP_W, GRID_Y, (b - a + 1) * STEP_W, gh, fg, 2, 1);
+            FrameRect(GRID_X + a * STEP_W, GRID_Y, (b - a + 1) * STEP_W, gh, fg, 2, 1);   // solo el marco: las notas se siguen viendo
         }
         int prev = -1;
         for (int x = 0; x < gw; x++) {
