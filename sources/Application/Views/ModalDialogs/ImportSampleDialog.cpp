@@ -1,4 +1,8 @@
 #include "ImportSampleDialog.h"
+#include "Application/Instruments/WarpStretch.h"
+#include "Application/Model/Config.h"
+#include <strings.h>
+#include <math.h>
 #include "Application/Instruments/SampleInstrument.h"
 #include "Application/Instruments/SamplePool.h"
 #include "Application/Views/ModalDialogs/MessageBox.h"
@@ -128,7 +132,33 @@ void ImportSampleDialog::OnFocus() {
 
 // trk2als: la pre-escucha de un archivo (también la usa el navegador nuevo):
 // un .sf2 suena su C3; un loop, al tempo y en fase con la canción
+// trk2als: la prueba en complex que se está estirando
+static int cplxJob_=0, cplxBars_=1, cplxTempo_=120 ;
+static Path cplxOut_("root:loopcplx0.wav") ;
+
+// cuando la prueba en complex ya está: a sonar en loop, en fase con la canción
+bool SampleFilePreviewTick() {
+	if (!cplxJob_) return false ;
+	if (WarpPreview::Failed(cplxJob_)) { cplxJob_=0 ; return false ; }
+	if (!WarpPreview::Ready(cplxJob_)) return false ;
+	cplxJob_=0 ;
+	Player *player=Player::GetInstance() ;
+	double delay=0,startFrac=0 ;
+	if (player->IsRunning()) {
+		double beat=60.0/cplxTempo_ ;
+		double t=player->GetPlayTime() ;
+		long next=long(floor(t/beat))+1 ;
+		delay=next*beat-t ;
+		startFrac=double(next%(4*cplxBars_))/(4.0*cplxBars_) ;
+	}
+	player->StartStreaming(cplxOut_,1.0,delay,startFrac,true) ;
+	return true ;
+}
+
+void SampleFilePreviewCancel() { cplxJob_=0 ; }
+
 void SampleFilePreview(Path element, ViewData *viewData_, int toInstr_, bool audioOnly_) {
+	cplxJob_=0 ;   // lo que se estaba estirando ya no
 	// trk2als: de un .sf2 se escucha su sample del C3 (se escribe aparte)
 	if (element.Matches("*.sf2")) {
 		Path tmp("root:sf2preview.wav") ;
@@ -161,6 +191,22 @@ void SampleFilePreview(Path element, ViewData *viewData_, int toInstr_, bool aud
 			int bars=int(secs*bpm/240.0f+0.5f) ;
 			if (bars<1) bars=1 ;
 			double speed=(secs*tempo)/(bars*240.0) ; // la región dura 'bars' compases
+			// trk2als: si los loops entran en complex, la prueba también: se
+			// estira por detrás y suena cuando está (SampleFilePreviewTick)
+			const char *lw=Config::GetInstance()->GetValue("LOOPWARP") ;
+			if (lw && !strcasecmp(lw,"complex") && WarpStretch::Available()) {
+				WavFile *w2=WavFile::Open(element.GetPath().c_str()) ;
+				int rate=w2?w2->GetSampleRate(-1):44100 ;
+				delete w2 ;
+				player->StopStreaming() ;
+				cplxBars_=bars ;
+				cplxTempo_=tempo ;
+				cplxOut_=Path((cplxJob_+1)%2?"root:loopcplx1.wav":"root:loopcplx0.wav") ;
+				cplxJob_=WarpPreview::Request(element.GetPath().c_str(),cplxOut_.GetPath().c_str(),
+				                              double(rate)/44100.0*speed,float(rate)/44100.0f) ;
+				return ;
+			}
+			cplxJob_=0 ;
 			double delay=0,startFrac=0 ;
 			if (player->IsRunning()) {
 				double beat=60.0/tempo ;

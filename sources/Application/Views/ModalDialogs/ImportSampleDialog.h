@@ -10,6 +10,10 @@ class ViewData ;
 // trk2als: escuchar / importar un archivo de la samplelib (lo usan este
 // diálogo y el navegador nuevo)
 void SampleFilePreview(Path element, ViewData *vd, int toInstr, bool audioOnly) ;
+// trk2als: la prueba de un loop en complex se estira por detrás: Tick la
+// hace sonar cuando está (true = empezó); Cancel la olvida
+bool SampleFilePreviewTick() ;
+void SampleFilePreviewCancel() ;
 bool SampleFileImport(Path element, ViewData *vd, int toInstr, std::string &msg) ;
 
 class ImportSampleDialog:public ModalView {

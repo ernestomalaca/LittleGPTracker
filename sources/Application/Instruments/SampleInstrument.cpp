@@ -112,6 +112,7 @@ SampleInstrument::SampleInstrument() {
 		 renderParams_[ch].simpler_=false ;
 		 renderParams_[ch].warpCache_=0 ;
 		 renderParams_[ch].cacheIdx_=0 ;
+		 renderParams_[ch].cacheFrac_=0 ;
 		 renderParams_[ch].finished_=true ;
 		 renderParams_[ch].envStage_=4 ;
 		 renderParams_[ch].envLevel_=0 ;
@@ -630,6 +631,8 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 	rp->complexPrimed_=false ; // trk2als
 	dropCache(rp) ;
 	rp->warpFresh_=true ;
+	rp->warpReqSpeed_=0 ;
+	rp->warpReqAt_=0 ;
 	rp->warpWaited_=0 ;
 	rp->warpWaitSince_=0 ;
 	rp->warpFadeIn_=0 ;
@@ -1874,6 +1877,39 @@ void SampleInstrument::renderComplex(int channel,renderParams *rp,int size) {
 			readCache(rp,size,speed) ;
 			return ;
 		}
+		// trk2als: un clip de audio nunca estira en tiempo real (con varias
+		// pistas no alcanza). Cambió el tempo: mientras se estira la versión
+		// nueva, la que ya tiene suena a la nueva velocidad (como re-pitch, a
+		// tiempo); cuando está, se pasa a ella en el mismo punto del sample
+		if (!rp->simpler_) {
+			WarpCacheKey nk ;
+			void *old=rp->warpCache_ ;
+			if (cacheKey(rp,WarpCache::Start(old),speed,transpose,nk)) {
+				// moviendo el tempo de 1 en 1: se pide cuando lleva 350 ms quieto
+				unsigned long nowc=System::GetInstance()->GetClock() ;
+				double dv=speed-rp->warpReqSpeed_ ;
+				if (dv<0) dv=-dv ;
+				if (dv>speed*0.0015) { rp->warpReqSpeed_=speed ; rp->warpReqAt_=nowc ; }
+				void *h2=(nowc-rp->warpReqAt_>=350)?WarpCache::Acquire(nk):0 ;
+				if (h2) {
+					double p=rp->complexPos_ ;
+					int ls2=WarpCache::LoopStart(h2), st2=WarpCache::Start(h2) ;
+					double idx2=(ls2>=0 && p>=rp->rendLoopStart_)?ls2+(p-rp->rendLoopStart_)/speed:(p-st2)/speed ;
+					if (idx2<0) idx2=0 ;
+					dropCache(rp) ;
+					rp->warpCache_=h2 ;
+					rp->cacheIdx_=int(idx2) ;
+					rp->cacheFrac_=0 ;
+					readCache(rp,size,speed) ;
+					for (int i=0;i<size && i<88;i++)   // 2 ms, sin click al pasar
+						for (int c=0;c<ch;c++) warpOut_[i*ch+c]=short(warpOut_[i*ch+c]*(i/88.0f)) ;
+					if (getenv("TRK_LOADLOG")) fprintf(stderr,"[WARP] nuevo tempo: ya estirado, se pasa a él\n") ;
+					return ;
+				}
+				readCacheVar(rp,size,speed/WarpCache::Speed(old)) ;
+				return ;
+			}
+		}
 		// cambió el tempo o la nota (glide, comandos): seguir en tiempo real
 		// desde donde va
 		dropCache(rp) ;
@@ -1882,6 +1918,22 @@ void SampleInstrument::renderComplex(int channel,renderParams *rp,int size) {
 	WarpCacheKey key ;
 	if (!rp->complexPrimed_) {
 		if (cacheKey(rp,int(rp->position_),speed,transpose,key)) {
+			// trk2als: clip de audio que arranca: si ya hay una versión de otro
+			// tempo, a sonar con ella ya (a la nueva velocidad); la nueva se
+			// pide en el camino de "cambió el tempo"
+			if (!rp->simpler_ && rp->warpFresh_ && rp->warpWaited_==0) {
+				void *hn=WarpCache::AcquireAny(key) ;
+				if (hn && !WarpCache::Matches(hn,speed,transpose)) {
+					rp->warpCache_=hn ;
+					rp->cacheIdx_=0 ;
+					rp->cacheFrac_=0 ;
+					rp->complexPrimed_=true ;
+					rp->warpFresh_=false ;
+					readCacheVar(rp,size,speed/WarpCache::Speed(hn)) ;
+					return ;
+				}
+				if (hn) WarpCache::Release(hn) ;
+			}
 			void *h=WarpCache::Acquire(key) ;
 			bool waitBar=false ;
 			// un clip de audio que ya esperó: entra solo en un 1 (en fase con
@@ -1899,6 +1951,7 @@ void SampleInstrument::renderComplex(int channel,renderParams *rp,int size) {
 			if (h) {
 				rp->warpCache_=h ;
 				rp->cacheIdx_=rp->warpWaited_ ;
+				rp->cacheFrac_=0 ;
 				rp->complexPrimed_=true ;
 				if (rp->warpWaited_>0) rp->warpFadeIn_=176 ;   // 4 ms, sin click
 				if (rp->warpWaited_>0 && getenv("TRK_LOADLOG")) {
@@ -1920,6 +1973,23 @@ void SampleInstrument::renderComplex(int channel,renderParams *rp,int size) {
 			// del time-stretch es un pico que con latencia baja hace saltar el
 			// audio). Las notas del Sampler no esperan: tienen que sonar ya
 			unsigned long now=System::GetInstance()->GetClock() ;
+			// trk2als: el mismo loop ya está estirado a otro tempo (se acaba de
+			// mover): suena ya con ese, a la nueva velocidad, y se pasa al
+			// nuevo cuando esté (ver arriba). Así no se calla al cambiar el tempo
+			if (!rp->simpler_ && rp->warpFresh_ && !waitBar && WarpCache::Building(key)) {
+				void *hn=WarpCache::AcquireAny(key) ;
+				if (hn) {
+					double ratio=speed/WarpCache::Speed(hn) ;
+					rp->warpCache_=hn ;
+					double at=rp->warpWaited_*ratio ;
+					rp->cacheIdx_=int(at) ;
+					rp->cacheFrac_=at-int(at) ;
+					rp->complexPrimed_=true ;
+					rp->warpFresh_=false ;
+					readCacheVar(rp,size,ratio) ;
+					return ;
+				}
+			}
 			if (waitBar || (!rp->simpler_ && rp->warpFresh_ && WarpCache::Building(key))) {
 				if (!rp->warpWaitSince_) rp->warpWaitSince_=now ;
 				if (now-rp->warpWaitSince_<15000) {
@@ -1943,6 +2013,7 @@ void SampleInstrument::renderComplex(int channel,renderParams *rp,int size) {
 			if (into<0) into=0 ;
 			rp->warpCache_=h ;
 			rp->cacheIdx_=ls+int(fmod(into,double(period))) ;
+			rp->cacheFrac_=0 ;
 			readCache(rp,size,speed) ;
 			return ;
 		}
@@ -2054,6 +2125,47 @@ void SampleInstrument::readCache(renderParams *rp,int size,double speed) {
 	rp->complexPos_=int(p) ;
 	rp->complexLatency_=0 ;
 	// que el ajuste de después (p<complexFirst_ -> +len) no la mueva
+	int st=WarpCache::Start(h) ;
+	rp->complexFirst_=st<rp->rendLoopStart_?st:rp->rendLoopStart_ ;
+}
+
+// trk2als: como readCache, pero avanzando 'ratio' cuadros del pre-render por
+// cuadro de salida (interpolado): el pre-render de otro tempo, a tiempo
+static inline long wrapCache(long j,int len,int ls) {
+	if (j<len) return j ;
+	if (ls<0) return -1 ;
+	return ls+(j-ls)%(len-ls) ;
+}
+
+void SampleInstrument::readCacheVar(renderParams *rp,int size,double ratio) {
+	void *h=rp->warpCache_ ;
+	const short *f=WarpCache::Frames(h) ;
+	int len=WarpCache::Length(h), ls=WarpCache::LoopStart(h) ;
+	int ch=rp->channelCount_>1?2:1 ;
+	double cs=WarpCache::Speed(h) ;
+	if ((int)warpOut_.size()<(size+2)*ch) warpOut_.resize((size+2)*ch) ;
+	double pos=rp->cacheIdx_+rp->cacheFrac_ ;
+	for (int i=0;i<size+2;i++) {
+		double q=pos+i*ratio ;
+		long j0=long(q) ;
+		float fr=float(q-j0) ;
+		long a=wrapCache(j0,len,ls), b=wrapCache(j0+1,len,ls) ;
+		for (int c=0;c<ch;c++) {
+			float va=a<0?0:f[a*ch+c], vb=b<0?0:f[b*ch+c] ;
+			warpOut_[i*ch+c]=short(va+(vb-va)*fr) ;
+		}
+	}
+	pos+=size*ratio ;
+	long idx=long(pos) ;
+	rp->cacheFrac_=pos-idx ;
+	if (ls>=0 && idx>=len) idx=ls+(idx-ls)%(len-ls) ;
+	rp->cacheIdx_=int(idx) ;
+	double p ;
+	if (ls>=0 && idx>=ls) p=rp->rendLoopStart_+(idx-ls)*cs ;
+	else p=WarpCache::Start(h)+idx*cs ;
+	if (ls<0 && idx>=len) p=rp->rendLoopEnd_ ;
+	rp->complexPos_=int(p) ;
+	rp->complexLatency_=0 ;
 	int st=WarpCache::Start(h) ;
 	rp->complexFirst_=st<rp->rendLoopStart_?st:rp->rendLoopStart_ ;
 }

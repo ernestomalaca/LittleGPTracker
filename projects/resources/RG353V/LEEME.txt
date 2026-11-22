@@ -126,6 +126,11 @@ Loops en complex
   tempo), Chancho lo estira por detrás y el clip entra en el siguiente 1
   ya listo: puede tardar un compás o dos, pero no se traba. La segunda vez
   entra al instante.
+  Al cambiar el tempo, cada loop sigue con su versión de antes a la nueva
+  velocidad (un poquito más agudo o grave) mientras se estira la nueva, y
+  se pasa a ella al estar lista. Moviendo el tempo de 1 en 1, se estira
+  solo cuando lo dejas quieto. En el navegador, la prueba de un loop
+  también suena en complex si LOOPWARP lo pide (tarda un momento en sonar).
   Los loops nuevos entran en re-pitch; para que entren en complex, en
   chancho6/config.xml: <LOOPWARP value="complex"/>
 

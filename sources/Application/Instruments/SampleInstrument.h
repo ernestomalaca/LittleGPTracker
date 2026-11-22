@@ -351,6 +351,7 @@ private:
 	   int lastNote_ ;
 	   bool cacheKey(renderParams *rp,int start,double speed,float transpose,WarpCacheKey &k) ;
 	   void readCache(renderParams *rp,int size,double speed) ;
+	   void readCacheVar(renderParams *rp,int size,double ratio) ;   // trk2als: a otra velocidad
 	   void dropCache(renderParams *rp) ;
 	   bool startSimpler(renderParams *rp,int channel,unsigned char note,int &first,bool &sliced,float &offset) ;
 	   void simplerBlock(renderParams *rp,int size) ; // envolvente -> corte, glide

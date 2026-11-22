@@ -405,6 +405,7 @@ void PresetDialog::schedulePreview() {
 
 void PresetDialog::stopPreview() {
 	previewAt_ = 0 ;
+	SampleFilePreviewCancel() ;   // trk2als: la prueba en complex que se estiraba ya no
 	if (inClip_) {
 		inClip_ = false ;
 		if (launcher_) launcher_->LaunchPreviewStop() ;
@@ -431,6 +432,7 @@ bool PresetDialog::Tick() {
 		startPreview() ;
 		return true ;
 	}
+	if (SampleFilePreviewTick()) return true ;   // trk2als: la prueba en complex ya está
 	return false ;
 }
 

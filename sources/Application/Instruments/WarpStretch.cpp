@@ -223,6 +223,25 @@ void worker() {
 
 } // namespace
 
+void *WarpCache::AcquireAny(const WarpCacheKey &k) {
+	if (!enabled || !k.data) return 0 ;
+	unsigned fp=fingerprintOf(k) ;
+	std::lock_guard<std::mutex> lk(mtx) ;
+	Entry *best=0 ;
+	double bd=0 ;
+	for (size_t i=0;i<entries.size();i++) {
+		Entry *e=entries[i] ;
+		const WarpCacheKey &a=e->key ;
+		if (!e->ready || a.data!=k.data || a.channels!=k.channels || a.start!=k.start ||
+		    a.loopStart!=k.loopStart || a.loopEnd!=k.loopEnd || a.loop!=k.loop || e->fingerprint!=fp) continue ;
+		double d=a.speed-k.speed ;
+		if (d<0) d=-d ;
+		if (!best || d<bd) { best=e ; bd=d ; }
+	}
+	if (best) { best->refs++ ; best->lastUse=++useClock ; }
+	return best ;
+}
+
 bool WarpCache::Building(const WarpCacheKey &k) {
 	if (!enabled || !k.data) return false ;
 	unsigned fp=fingerprintOf(k) ;
@@ -262,6 +281,21 @@ void *WarpCache::Acquire(const WarpCacheKey &k) {
 	}
 	e->srcLo=lo ;
 	e->src.assign(k.data+size_t(lo)*k.channels,k.data+size_t(lo)*k.channels+n) ;
+	// trk2als: lo del mismo loop a otra velocidad que todavía no empieza ya
+	// no sirve (al mover el tempo de 1 en 1 se formaban todos los de en medio)
+	for (size_t i=0;i<pending.size();) {
+		Entry *o=pending[i] ;
+		const WarpCacheKey &a=o->key ;
+		if (o!=e && a.data==k.data && a.channels==k.channels && a.start==k.start &&
+		    a.loopStart==k.loopStart && a.loopEnd==k.loopEnd && a.loop==k.loop &&
+		    o->fingerprint==fp && o->refs.load()==0) {
+			pending.erase(pending.begin()+i) ;
+			for (size_t j=0;j<entries.size();j++) if (entries[j]==o) { entries.erase(entries.begin()+j) ; break ; }
+			delete o ;
+			continue ;
+		}
+		i++ ;
+	}
 	pending.push_back(e) ;
 	if (!workerStarted) {
 		// un hilo por núcleo libre (la RG353V tiene 4: el audio usa uno)
@@ -281,9 +315,13 @@ const short *WarpCache::Frames(void *h) { return &((Entry *)h)->frames[0] ; }
 int WarpCache::Length(void *h) { return ((Entry *)h)->length ; }
 int WarpCache::LoopStart(void *h) { return ((Entry *)h)->loopStart ; }
 int WarpCache::Start(void *h) { return ((Entry *)h)->key.start ; }
+double WarpCache::Speed(void *h) { return ((Entry *)h)->key.speed ; }
 bool WarpCache::Matches(void *h,double speed,float transpose) {
 	Entry *e=(Entry *)h ;
-	return e->key.speed==speed && e->key.transpose==transpose ;
+	// trk2als: una diferencia de menos de 0.15% no se oye: el mismo
+	double d=e->key.speed-speed ;
+	if (d<0) d=-d ;
+	return d<=speed*0.0015 && e->key.transpose==transpose ;
 }
 void WarpCache::SetBudget(int mb) {
 	std::lock_guard<std::mutex> lk(mtx) ;
@@ -291,6 +329,109 @@ void WarpCache::SetBudget(int mb) {
 }
 void WarpCache::SetEnabled(bool on) { enabled=on ; }
 bool WarpCache::Enabled() { return enabled ; }
+
+
+/************************************************************
+ trk2als: pre-escucha de un loop en complex
+ ************************************************************/
+#include "Application/Instruments/WavFile.h"
+#include <fstream>
+
+namespace {
+std::atomic<int> pvGen(0), pvDone(0), pvFail(0) ;
+
+void pvPut16(std::ofstream &f,int v) { f.put(char(v&255)) ; f.put(char((v>>8)&255)) ; }
+void pvPut32(std::ofstream &f,long v) { pvPut16(f,int(v&0xFFFF)) ; pvPut16(f,int((v>>16)&0xFFFF)) ; }
+
+void pvJob(int gen,std::string in,std::string out,double ratio,float transpose) {
+#ifdef __linux__
+	setpriority(PRIO_PROCESS,(id_t)syscall(SYS_gettid),10) ;   // el audio primero
+#endif
+	WavFile *w=WavFile::Open(in.c_str()) ;
+	long n=w?w->GetSize(-1):0 ;
+	int ch=w?w->GetChannelCount(-1):0 ;
+	if (!w || n<=0 || ch<1 || ch>2 || ratio<=0 || !w->GetBuffer(0,n)) {
+		delete w ;
+		if (pvGen.load()==gen) pvFail.store(gen) ;
+		return ;
+	}
+	std::vector<short> src((short *)w->GetSampleBuffer(-1),(short *)w->GetSampleBuffer(-1)+n*ch) ;
+	delete w ;
+	if (pvGen.load()!=gen) return ;   // ya pidieron otro
+	Stretch st ;
+	if (quality_==1) st.presetCheaper(ch,44100.0f,split_) ;
+	else st.presetDefault(ch,44100.0f,split_) ;
+	st.setTransposeFactor(transpose) ;
+	long total=long(double(n)/ratio+0.5) ;   // una vuelta a tempo
+	if (total<=0) { if (pvGen.load()==gen) pvFail.store(gen) ; return ; }
+	std::vector<float> in0,in1,out0(512),out1(512) ;
+	long pos=0 ;
+	auto readLoop=[&](int k) {   // en círculo: el loop se repite
+		if ((int)in0.size()<k) { in0.resize(k) ; in1.resize(k) ; }
+		for (int i=0;i<k;i++) {
+			const short *f=&src[(pos%n)*ch] ;
+			in0[i]=f[0]/32768.0f ;
+			in1[i]=ch>1?f[1]/32768.0f:in0[i] ;
+			pos++ ;
+		}
+	} ;
+	float *ins[2], *outs[2]={&out0[0],&out1[0]} ;
+	double acc=0 ;
+	st.reset() ;
+	int pre=st.inputLatency() ;
+	readLoop(pre) ;
+	ins[0]=&in0[0] ; ins[1]=&in1[0] ;
+	st.seek(ins,pre,ratio) ;
+	int skip=st.outputLatency() ;
+	while (skip>0) {
+		int k=skip<512?skip:512 ;
+		acc+=k*ratio ;
+		int nin=int(acc) ;
+		acc-=nin ;
+		readLoop(nin) ;
+		ins[0]=in0.empty()?0:&in0[0] ; ins[1]=in1.empty()?0:&in1[0] ;
+		st.process(ins,nin,outs,k) ;
+		skip-=k ;
+	}
+	std::vector<short> frames(size_t(total)*ch) ;
+	for (long done=0;done<total;) {
+		if (pvGen.load()!=gen) return ;
+		int k=int(total-done<512?total-done:512) ;
+		acc+=k*ratio ;
+		int nin=int(acc) ;
+		acc-=nin ;
+		readLoop(nin) ;
+		ins[0]=in0.empty()?0:&in0[0] ; ins[1]=in1.empty()?0:&in1[0] ;
+		st.process(ins,nin,outs,k) ;
+		for (int i=0;i<k;i++)
+			for (int c=0;c<ch;c++) {
+				float v=outs[c][i]*32768.0f ;
+				if (v>32767.0f) v=32767.0f ;
+				if (v<-32768.0f) v=-32768.0f ;
+				frames[(done+i)*ch+c]=short(v) ;
+			}
+		done+=k ;
+	}
+	std::ofstream f(out.c_str(),std::ios::binary) ;
+	if (!f) { if (pvGen.load()==gen) pvFail.store(gen) ; return ; }
+	long bytes=long(frames.size()*2) ;
+	f.write("RIFF",4) ; pvPut32(f,36+bytes) ; f.write("WAVEfmt ",8) ;
+	pvPut32(f,16) ; pvPut16(f,1) ; pvPut16(f,ch) ; pvPut32(f,44100) ;
+	pvPut32(f,44100L*ch*2) ; pvPut16(f,ch*2) ; pvPut16(f,16) ;
+	f.write("data",4) ; pvPut32(f,bytes) ;
+	f.write((const char *)&frames[0],bytes) ;
+	f.close() ;
+	if (pvGen.load()==gen) pvDone.store(gen) ;
+}
+}
+
+int WarpPreview::Request(const char *in,const char *out,double ratio,float transpose) {
+	int gen=++pvGen ;
+	std::thread(pvJob,gen,std::string(in),std::string(out),ratio,transpose).detach() ;
+	return gen ;
+}
+bool WarpPreview::Ready(int job) { return job>0 && pvDone.load()==job && pvGen.load()==job ; }
+bool WarpPreview::Failed(int job) { return job>0 && pvFail.load()==job ; }
 
 #else   // compilador viejo: sin complex (se toca como re-pitch)
 
@@ -300,6 +441,10 @@ bool WarpStretch::Available() { return false ; }
 void WarpStretch::SetQuality(int,bool) {}
 void *WarpCache::Acquire(const WarpCacheKey &) { return 0 ; }
 bool WarpCache::Building(const WarpCacheKey &) { return false ; }
+void *WarpCache::AcquireAny(const WarpCacheKey &) { return 0 ; }
+int WarpPreview::Request(const char *,const char *,double,float) { return 0 ; }
+bool WarpPreview::Ready(int) { return false ; }
+bool WarpPreview::Failed(int) { return true ; }
 void WarpCache::AddRef(void *) {}
 void WarpCache::Release(void *) {}
 const short *WarpCache::Frames(void *) { return 0 ; }
@@ -307,6 +452,7 @@ int WarpCache::Length(void *) { return 0 ; }
 int WarpCache::LoopStart(void *) { return -1 ; }
 int WarpCache::Start(void *) { return 0 ; }
 bool WarpCache::Matches(void *,double,float) { return false ; }
+double WarpCache::Speed(void *) { return 1.0 ; }
 void WarpCache::SetBudget(int) {}
 void WarpCache::SetEnabled(bool) {}
 bool WarpCache::Enabled() { return false ; }

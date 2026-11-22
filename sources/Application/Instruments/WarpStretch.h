@@ -52,6 +52,8 @@ public:
 	static void *Acquire(const WarpCacheKey &k) ;
 	// pedido y estirándose (todavía no está, pero va a estar)
 	static bool Building(const WarpCacheKey &k) ;
+	// el mismo loop ya estirado a otra velocidad (el más cercano), o 0
+	static void *AcquireAny(const WarpCacheKey &k) ;
 	static void AddRef(void *h) ;
 	static void Release(void *h) ;
 	static const short *Frames(void *h) ;   // intercalado, 'channels' por cuadro
@@ -59,9 +61,22 @@ public:
 	static int LoopStart(void *h) ;
 	static int Start(void *h) ;            // cuadro del sample donde arranca         // cuadro donde vuelve; -1 sin loop
 	static bool Matches(void *h,double speed,float transpose) ;
+	static double Speed(void *h) ;          // la velocidad con que se estiró
 	static void SetBudget(int megabytes) ;
 	static void SetEnabled(bool on) ;
 	static bool Enabled() ;
+} ;
+
+// trk2als: la pre-escucha de un loop en complex (el navegador): el archivo
+// se estira entero en un hilo aparte a un .wav de 44.1 kHz que dura justo
+// una vuelta a tempo. Uno a la vez: pedir otro deja el anterior sin efecto
+class WarpPreview {
+public:
+	// ratio: cuadros del archivo por cuadro de salida; transpose: el factor
+	// para que suene en su altura (frecuencia del archivo / 44100)
+	static int Request(const char *in,const char *out,double ratio,float transpose) ;
+	static bool Ready(int job) ;     // ya está escrito (y es el último pedido)
+	static bool Failed(int job) ;
 } ;
 
 #endif
