@@ -122,8 +122,8 @@ Automatización (vista del instrumento)
   A + flechas mientras el clip sonaba se escribe en su curva al apretar R2.
   Solo la última vuelta del loop y solo los tramos que tocaste: lo demás
   queda como estaba (con curva o sin ella). Funciona desde cualquier
-  pantalla, pero solo la pista donde estás (lo de otras pistas espera a
-  que vayas a ellas). Select + L en el instrumento la quita.
+  pantalla y va a la pista donde moviste algo por última vez (aunque ya
+  estés en otra). Select + L en el instrumento la quita.
 
 Curvas en el clip
   En el instrumento, A + gatillo L sobre un parámetro automatizable abre su

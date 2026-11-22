@@ -3130,11 +3130,13 @@ void InstrumentView::capWrite(const CapSeg &s) {
 
 const char *InstrumentView::CaptureAutomation(int track) {
 	if (capping_) capEnd() ;
-	// solo la pista donde estás; lo de otras pistas se queda anotado
-	if (track<0) track=autoChannel() ;
-	bool any=false ;
-	for (size_t i=0;i<capSegs_.size();i++) if (capSegs_[i].ch==track) any=true ;
-	if (!any) return "nada que capturar en esta pista" ;
+	// la pista donde moviste algo por última vez (no importa dónde estés
+	// ahora); solo esa. Sin nada anotado, R2 no hace nada (ni avisa)
+	if (capSegs_.empty()) return 0 ;
+	track=capSegs_[0].ch ;
+	unsigned long newest=capSegs_[0].tEnd ;
+	for (size_t i=1;i<capSegs_.size();i++)
+		if (capSegs_[i].tEnd>=newest) { newest=capSegs_[i].tEnd ; track=capSegs_[i].ch ; }
 	// solo la última vuelta de cada parámetro en cada clip (como Live): lo
 	// que se movió antes de eso se olvida
 	int tempo=viewData_->project_->GetTempo() ;
