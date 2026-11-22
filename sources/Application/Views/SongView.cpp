@@ -316,6 +316,7 @@ void SongView::OnAudioPicked(bool imported) {
         SampleInstrument *si = (SampleInstrument *)instr;
         si->FindVariable(SIP_LOOPBPM)->SetInt(si->DetectLoopBpm());   // y con él los compases
         si->FindVariable(SIP_CLIP)->SetInt(1);                         // un loop cargado
+        si->InitAudioClip();   // trk2als: ganancia y warp de un loop nuevo (LOOPWARP)
     }
     viewData_->song_->data_[pickCell_] = (unsigned char)pickClip_;
     lastClip_ = (unsigned char)pickClip_;
