@@ -3195,9 +3195,10 @@ const char *InstrumentView::CaptureAutomation(int track) {
 		int last=-1 ;
 		for (size_t i=0;i<capSegs_.size();i++)
 			if (keep[i] && (last<0 || capSegs_[i].tEnd>=capSegs_[last].tEnd)) last=int(i) ;
-		if (last>=0 && !viewData_->curveID_) {
+		if (last>=0) {   // gana siempre lo último que se movió
 			applyCurveMeta(capSegs_[last].meta) ;
 			viewData_->curveLastID_=capSegs_[last].id ;
+			if (viewData_->curveID_) viewData_->curveID_=capSegs_[last].id ;   // si el clip ya muestra una curva, pasa a esta
 		}
 	}
 	for (size_t i=0;i<capSegs_.size();)   // lo de esta pista ya se usó (o era viejo)

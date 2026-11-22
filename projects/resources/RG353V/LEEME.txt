@@ -124,7 +124,8 @@ Automatización (vista del instrumento)
   queda como estaba (con curva o sin ella). Funciona desde cualquier
   pantalla y va a la pista donde moviste algo por última vez (aunque ya
   estés en otra). Select + L en el instrumento la quita. Lo capturado
-  pasa a ser la última curva: en el clip, Select la muestra.
+  pasa a ser la última curva: en el clip, Select la muestra (y si el
+  clip ya mostraba otra curva, cambia a esta).
 
 Curvas en el clip
   En el instrumento, A + gatillo L sobre un parámetro automatizable abre su
