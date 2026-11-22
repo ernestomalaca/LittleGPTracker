@@ -2863,6 +2863,57 @@ void InstrumentView::takeOver() {
 	if (!player->IsAutoRec()) player->OverrideAutomation(autoChannel(),id) ;
 }
 
+// el rango, el formato y el nombre de un parámetro, para dibujar su curva
+void InstrumentView::curveMeta(UIIntVarField *fld,CurveMeta &m) {
+	m.instr=viewData_->currentInstrument_ ;
+	m.min=fld->GetMin() ;
+	m.max=fld->GetMax() ;
+	m.step=fld->GetStep()>0?fld->GetStep():1 ;
+	m.big=fld->GetBigStep()>0?fld->GetBigStep():m.step*10 ;
+	m.disp=fld->GetDisplayOffset() ;
+	m.log=fld->IsLog() ;
+	// "volume: %+ddB" -> nombre "volume", formato "%+ddB"
+	const char *fmt=fld->GetFormat() ;
+	const char *colon=fmt?strstr(fmt,": "):0 ;
+	if (colon) {
+		int n=int(colon-fmt) ;
+		if (n>23) n=23 ;
+		memcpy(m.name,fmt,n) ;
+		m.name[n]=0 ;
+		snprintf(m.fmt,sizeof(m.fmt),"%s",colon+2) ;
+	} else {
+		snprintf(m.name,sizeof(m.name),"%s",fmt?fmt:"") ;
+		snprintf(m.fmt,sizeof(m.fmt),"%%d") ;
+	}
+	if (m.log) snprintf(m.fmt,sizeof(m.fmt),"%%dHz") ;
+	// un parámetro de lista (el tipo de filtro): el formato lleva %s y se
+	// imprime con el nombre, nunca con el número
+	Variable &var=fld->GetVariable() ;
+	m.list=0 ;
+	m.listN=0 ;
+	if (var.GetType()==Variable::CHAR_LIST && var.GetListPointer()) {
+		m.list=var.GetListPointer() ;
+		m.listN=var.GetListSize() ;
+	} else if (strstr(m.fmt,"%s")) {
+		snprintf(m.fmt,sizeof(m.fmt),"%%d") ;
+	}
+}
+
+void InstrumentView::applyCurveMeta(const CurveMeta &m) {
+	ViewData *vd=viewData_ ;
+	vd->curveInstr_=m.instr ;
+	vd->curveMin_=m.min ;
+	vd->curveMax_=m.max ;
+	vd->curveStep_=m.step ;
+	vd->curveBig_=m.big ;
+	vd->curveDisp_=m.disp ;
+	vd->curveLog_=m.log ;
+	memcpy(vd->curveName_,m.name,sizeof(vd->curveName_)) ;
+	memcpy(vd->curveFmt_,m.fmt,sizeof(vd->curveFmt_)) ;
+	vd->curveList_=m.list ;
+	vd->curveListN_=m.listN ;
+}
+
 // A + L: al clip, a la curva del parámetro del foco
 bool InstrumentView::openCurve() {
 	UIField *f=GetFocus() ;
@@ -2875,40 +2926,11 @@ bool InstrumentView::openCurve() {
 	if (clip<0) return false ;
 	if (touching_) cancelTouch() ;   // la A del combo no graba nada
 	ViewData *vd=viewData_ ;
+	CurveMeta m ;
+	curveMeta(fld,m) ;
+	applyCurveMeta(m) ;
 	vd->curveID_=id ;
 	vd->curveLastID_=id ;
-	vd->curveInstr_=vd->currentInstrument_ ;
-	vd->curveMin_=fld->GetMin() ;
-	vd->curveMax_=fld->GetMax() ;
-	vd->curveStep_=fld->GetStep()>0?fld->GetStep():1 ;
-	vd->curveBig_=fld->GetBigStep()>0?fld->GetBigStep():vd->curveStep_*10 ;
-	vd->curveDisp_=fld->GetDisplayOffset() ;
-	vd->curveLog_=fld->IsLog() ;
-	// "volume: %+ddB" -> nombre "volume", formato "%+ddB"
-	const char *fmt=fld->GetFormat() ;
-	const char *colon=fmt?strstr(fmt,": "):0 ;
-	if (colon) {
-		int n=int(colon-fmt) ;
-		if (n>23) n=23 ;
-		memcpy(vd->curveName_,fmt,n) ;
-		vd->curveName_[n]=0 ;
-		snprintf(vd->curveFmt_,sizeof(vd->curveFmt_),"%s",colon+2) ;
-	} else {
-		snprintf(vd->curveName_,sizeof(vd->curveName_),"%s",fmt?fmt:"") ;
-		snprintf(vd->curveFmt_,sizeof(vd->curveFmt_),"%%d") ;
-	}
-	if (vd->curveLog_) snprintf(vd->curveFmt_,sizeof(vd->curveFmt_),"%%dHz") ;
-	// un parámetro de lista (el tipo de filtro): el formato lleva %s y se
-	// imprime con el nombre, nunca con el número
-	Variable &var=fld->GetVariable() ;
-	vd->curveList_=0 ;
-	vd->curveListN_=0 ;
-	if (var.GetType()==Variable::CHAR_LIST && var.GetListPointer()) {
-		vd->curveList_=var.GetListPointer() ;
-		vd->curveListN_=var.GetListSize() ;
-	} else if (strstr(vd->curveFmt_,"%s")) {
-		snprintf(vd->curveFmt_,sizeof(vd->curveFmt_),"%%d") ;
-	}
 	vd->currentChain_=clip ;
 	vd->songX_=ch ;
 	lastFocusID_=id ;
@@ -3026,6 +3048,7 @@ void InstrumentView::capBegin() {
 	capCur_.ch=ch ;
 	capCur_.clip=clip ;
 	capCur_.base=preTouchVal_ ;   // lo de antes de tocar (si no había curva)
+	curveMeta((UIIntVarField *)GetFocus(),capCur_.meta) ;   // focusID ya dijo que es un campo
 	capCur_.pts.clear() ;
 	capLast_=-1 ;
 	capping_=true ;
@@ -3167,6 +3190,16 @@ const char *InstrumentView::CaptureAutomation(int track) {
 		Player::GetInstance()->ReleaseOverride(capSegs_[i].ch,capSegs_[i].id) ;
 	}
 	MixerService::GetInstance()->Unlock() ;
+	// lo último capturado es la curva que muestra Select en el clip
+	{
+		int last=-1 ;
+		for (size_t i=0;i<capSegs_.size();i++)
+			if (keep[i] && (last<0 || capSegs_[i].tEnd>=capSegs_[last].tEnd)) last=int(i) ;
+		if (last>=0 && !viewData_->curveID_) {
+			applyCurveMeta(capSegs_[last].meta) ;
+			viewData_->curveLastID_=capSegs_[last].id ;
+		}
+	}
 	for (size_t i=0;i<capSegs_.size();)   // lo de esta pista ya se usó (o era viejo)
 		if (capSegs_[i].ch==track) capSegs_.erase(capSegs_.begin()+i) ;
 		else i++ ;

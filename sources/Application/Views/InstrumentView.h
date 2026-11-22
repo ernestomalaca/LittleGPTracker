@@ -1,6 +1,7 @@
 #ifndef _INSTRUMENT_VIEW_H_
 #define _INSTRUMENT_VIEW_H_
 
+class UIIntVarField ;
 #include "Application/Views/SoundLauncher.h"
 #include "Application/FX/FxPrinter.h"
 #include "BaseClasses/FieldView.h"
@@ -171,7 +172,11 @@ private:
 	// captura (R2, como Capture en Live): lo que se mueve sin grabar se anota
 	// por tramos; al capturar, cada tramo se escribe en su lugar y el resto de
 	// la curva queda como estaba
-	struct CapSeg { FourCC id ; int ch ; int clip ; int base ; unsigned long tEnd ; std::vector<AutoPoint> pts ; } ;
+	// cómo se ve la curva de un parámetro en el clip (rango, formato...)
+	struct CurveMeta { int instr, min, max, step, big, disp, listN ; bool log ; char name[24], fmt[24] ; char **list ; } ;
+	void curveMeta(UIIntVarField *fld,CurveMeta &m) ;
+	void applyCurveMeta(const CurveMeta &m) ;
+	struct CapSeg { FourCC id ; int ch ; int clip ; int base ; unsigned long tEnd ; std::vector<AutoPoint> pts ; CurveMeta meta ; } ;
 	std::vector<CapSeg> capSegs_ ;
 	CapSeg capCur_ ;
 	bool capping_ ;

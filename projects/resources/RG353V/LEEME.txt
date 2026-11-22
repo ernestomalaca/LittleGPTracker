@@ -123,7 +123,8 @@ Automatización (vista del instrumento)
   Solo la última vuelta del loop y solo los tramos que tocaste: lo demás
   queda como estaba (con curva o sin ella). Funciona desde cualquier
   pantalla y va a la pista donde moviste algo por última vez (aunque ya
-  estés en otra). Select + L en el instrumento la quita.
+  estés en otra). Select + L en el instrumento la quita. Lo capturado
+  pasa a ser la última curva: en el clip, Select la muestra.
 
 Curvas en el clip
   En el instrumento, A + gatillo L sobre un parámetro automatizable abre su
