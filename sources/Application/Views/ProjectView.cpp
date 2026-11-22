@@ -183,13 +183,13 @@ ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
         {VAR_TRANSPOSE, 19, 7, -48, 48, 1, 12}, {VAR_FOLD, 28, 7, 0, 1, 1, 1},
     };
     // trk2als: la ficha 4 (era la salida MIDI de LGPT, que aquí no hay) es
-    // la latencia: baja 256/1, media 512/2, alta 512/4 (bloque / reserva)
+    // la latencia: baja 256/2, media 512/2, alta 512/4 (bloque / reserva)
     {
         static char *latNames[3] = {(char *)"baja", (char *)"media", (char *)"alta"};
         Config *cfg = Config::GetInstance();
         const char *bs = cfg->GetValue("AUDIOBUFFERSIZE"), *pb = cfg->GetValue("AUDIOPREBUFFERCOUNT");
         int b = bs ? atoi(bs) : 512, p = pb ? atoi(pb) : 4;
-        latLast_ = (b <= 256 && p <= 1) ? 0 : (p <= 2 ? 1 : 2);
+        latLast_ = b <= 256 ? 0 : (p <= 2 ? 1 : 2);
         latVar_ = new Variable("latencia", 0, latNames, 3, latLast_);
     }
     for (int k = 0; k < 8; k++) {
@@ -232,7 +232,7 @@ void ProjectView::ProcessButtonMask(unsigned short mask,bool pressed) {
     // trk2als: la latencia cambió: a config.xml (al reiniciar toma efecto)
     if (latVar_ && latVar_->GetInt() != latLast_) {
         latLast_ = latVar_->GetInt();
-        static const char *bsz[3] = {"256", "512", "512"}, *pre[3] = {"1", "2", "4"};
+        static const char *bsz[3] = {"256", "512", "512"}, *pre[3] = {"2", "2", "4"};   // baja: 2 de reserva (con 1, clicks sueltos)
         Config *cfg = Config::GetInstance();
         bool ok = cfg->SetPersistent("AUDIOBUFFERSIZE", bsz[latLast_]) &&
                   cfg->SetPersistent("AUDIOPREBUFFERCOUNT", pre[latLast_]);

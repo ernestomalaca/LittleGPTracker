@@ -42,4 +42,7 @@ void Mixer::RestoreContent(TiXmlElement *element) {
         }
         current = current->NextSiblingElement();
     }
+    // trk2als: cada pista suena en su bus (los medidores lo dan por hecho);
+    // proyectos guardados tras borrar pistas traían el ruteo recorrido
+    for (int i = 0; i < SONG_CHANNEL_COUNT; i++) channelBus_[i] = i;
 }

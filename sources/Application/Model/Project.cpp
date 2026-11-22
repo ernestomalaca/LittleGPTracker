@@ -32,6 +32,9 @@ tempoNudge_(0)
     if (startTempo < 20 || startTempo > 999) startTempo = 120;
     WatchedVariable *tempo = new WatchedVariable("tempo", VAR_TEMPO, startTempo);
     this->Insert(tempo);
+    // trk2als: el mezclador es uno solo: un proyecto nuevo no hereda los
+    // volúmenes ni el ruteo del anterior (el que se abre trae los suyos)
+    Mixer::GetInstance()->Clear();
     Variable *masterVolume = new Variable("master", VAR_MASTERVOL, 100, 100);
     this->Insert(masterVolume) ;
     // trk2als: metrónomo (un click por tiempo, más agudo en el 1 del compás)
@@ -390,7 +393,7 @@ void Project::DeleteTrack(int channel) {
     // trk2als: y lo de su canal en el mezclador (volumen, bus, filtros)
     Mixer *mx = Mixer::GetInstance();
     for (int c = channel; c < SONG_CHANNEL_COUNT - 1; c++) {
-        mx->SetBus(c, mx->GetBus(c + 1));
+        mx->SetBus(c, c);   // el bus es del lugar (el medidor de la pista N mira el bus N)
         mx->SetChannelVolume(c, mx->GetChannelVolume(c + 1));
         mx->SetChannelHPF(c, mx->GetChannelHPF(c + 1));
         mx->SetChannelLPF(c, mx->GetChannelLPF(c + 1));
