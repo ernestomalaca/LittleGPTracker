@@ -128,6 +128,7 @@ class SongView : public View, public LaunchHost {
     bool noticeOn();
     std::string lastBlockState_;
     int blockVu_[8];
+    bool soloed_[SONG_CHANNEL_COUNT];   // trk2als: pistas en solo (la "S" de la cabecera)
     bool inBlockRedraw_;
     unsigned long lastVuDraw_;
     int lastPlayedPosition_[8]; // .Last position played for song

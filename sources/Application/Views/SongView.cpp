@@ -76,6 +76,7 @@ SongView::SongView(GUIWindow &w, ViewData *viewData, const char *song)
         this->lastQueuedPosition_[i] = 0;
     }
     for (int i = 0; i < 8; i++) blockVu_[i] = 0;   // trk2als
+    for (int i = 0; i < SONG_CHANNEL_COUNT; i++) soloed_[i] = false;
     inBlockRedraw_ = false;
     lastVuDraw_ = 0;
     sesNowValid_ = false;
@@ -753,7 +754,9 @@ void SongView::switchSoloMode() {
         from = r.Left();
         to = r.Right();
     };
-    controller->SwitchSoloMode(from, to, (viewMode_ != VM_SOLOON));
+    bool soloing = (viewMode_ != VM_SOLOON);
+    controller->SwitchSoloMode(from, to, soloing);
+    for (int i = 0; i < SONG_CHANNEL_COUNT; i++) soloed_[i] = soloing && i >= from && i <= to;   // trk2als: la "S"
     viewMode_ = (viewMode_ != VM_SOLOON) ? VM_SOLOON : VM_NORMAL;
     isDirty_ = true;
 };
@@ -1284,6 +1287,7 @@ void SongView::handleButtonMask(unsigned short mask, bool pressed) {
         if (bTap_ && !(mask & EPBM_B)) {
             bTap_ = false;
             unMuteAll();   // trk2als: quita mutes y solos (sin restaurar nada)
+            for (int i = 0; i < SONG_CHANNEL_COUNT; i++) soloed_[i] = false;
             if (viewMode_ == VM_SOLOON || viewMode_ == VM_MUTEON) viewMode_ = VM_NORMAL;
             isDirty_ = true;
             return;
@@ -1608,7 +1612,9 @@ void SongView::OnSf2Done(bool ok) {
         Player::GetInstance()->HoldTrack(ch, false);
         if (!sesUndo_.empty()) sesUndo_.pop_back();   // no cambió nada
         if (newTrack_) {
-            project->DeleteTrack(ch);   // la pista nueva se queda sin nada: fuera
+            project->DeleteTrack(ch);
+            for (int c = ch; c < SONG_CHANNEL_COUNT - 1; c++) soloed_[c] = soloed_[c + 1];   // la "S" va con su pista
+            soloed_[SONG_CHANNEL_COUNT - 1] = false;   // la pista nueva se queda sin nada: fuera
             clampTrackCursor();
         }
     }
@@ -1624,6 +1630,8 @@ void SongView::OnTrackBrowser(int code, const std::string &name) {
             newTrack_ = false;  // ya va un sonido en camino: se queda
         if (newTrack_) {        // pista nueva y no se lanzó nada: fuera
             project->DeleteTrack(ch);
+            for (int c = ch; c < SONG_CHANNEL_COUNT - 1; c++) soloed_[c] = soloed_[c + 1];   // la "S" va con su pista
+            soloed_[SONG_CHANNEL_COUNT - 1] = false;
             newTrack_ = false;
             clampTrackCursor();
         } else if (project->TrackExists(ch)) {
@@ -1669,6 +1677,8 @@ void SongView::OnTrackBrowser(int code, const std::string &name) {
     // cancelar: si la pista era nueva, se quita
     if (newTrack_) {
         project->DeleteTrack(ch);
+            for (int c = ch; c < SONG_CHANNEL_COUNT - 1; c++) soloed_[c] = soloed_[c + 1];   // la "S" va con su pista
+            soloed_[SONG_CHANNEL_COUNT - 1] = false;
         newTrack_ = false;
         clampTrackCursor();
         isDirty_ = true;
@@ -2631,6 +2641,7 @@ void SongView::drawBlockGrid() {
         GUIColor ncol = here ? bg : (player->IsChannelMuted(i) ? dim : fg);
         DrawText(x + 5, HY + 5, trackKind(project, i), ncol, 1);
         if (player->IsChannelMuted(i)) DrawText(x + COLW - GAP - 12, HY + 7, "M", ColorOf(CD_MUTE), 0);
+        else if (soloed_[i]) DrawText(x + COLW - GAP - 12, HY + 7, "S", hi2, 0);   // trk2als: en solo
         if (launcher_->Phase() && i == launcher_->PendingTrack()) {   // trk2als: un sonido lanzado: cargando / esperando el 1
             int pm = launcher_->Permille();
             int bw = COLW - GAP - 8;
@@ -2668,6 +2679,15 @@ void SongView::drawBlockGrid() {
             int tci = project->GetTrackColor(i);
         GUIColor tc(trackColors[tci][0], trackColors[tci][1], trackColors[tci][2]);
             if (muted) tc = Mix(tc, bg, 55);
+            // trk2als: se borró el clip que suena: sigue a la vista, apagado,
+            // hasta que de verdad termina su vuelta (si no, el marco de
+            // "sonando" quedaba sobre una celda vacía)
+            if (empty && player->IsRunning() && player->IsChannelPlaying(i) &&
+                viewData_->currentPlayChain_[i] != 0xFF && viewData_->songPlayPos_[i] == row) {
+                d = viewData_->currentPlayChain_[i];
+                empty = false;
+                tc = Mix(tc, bg, 60);
+            }
             bool lit = (i == curCol) || hereRow;
             if (lit) tc = Mix(tc, fg, 12);
             if (empty) {
