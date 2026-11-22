@@ -120,6 +120,13 @@ Mute y solo (Session, como el live mode de LSDJ)
   demás se quedan calladas; soltando Start primero, vuelven todas.
   En la cabecera: M roja = muteada, S azul = en solo.
 
+Modo live (Session, como el live mode de LSDJ; B + izquierda / derecha)
+  Start: el clip entra cuando termina el que suena en esa pista.
+  Start, Start: entra en el siguiente compás. Select + Start: la pista se
+  detiene al terminar su clip; Select + Start, Start: en el siguiente
+  compás. Una pista callada entra en el siguiente compás. Con Link todo
+  cae en compás, igual que en Live. En modo song nada cambia.
+
 Teclado MIDI por USB
   Conecta un controlador MIDI (probado: Arturia MiniLab 3) al USB-C, con
   adaptador OTG si hace falta; se reconoce solo, también si lo conectas

@@ -432,16 +432,30 @@ void Player::OnSongStartButton(unsigned int from,unsigned int to,bool requestSto
 
                     uchar row = songPos;
 
+                    // trk2als: como el live mode de LSDJ: START espera a que
+                    // termine el clip que suena; START, START entra al compás.
+                    // Select+Start detiene al terminar el clip; Select+Start,
+                    // Start, al compás. Una pista callada entra al compás.
+                    QueueingMode q = liveQueueingMode_[i];
+                    bool playing = mixer_->IsChannelPlaying(i);
+                    bool stopQueued = (q == QM_CHAINSTOP || q == QM_PHRASESTOP);
                     if (!requestStop) {
-                        if (findPlayable(&row, i, 0)) {
-                            if (!forceImmediate) {
-                                mode = QM_PHRASESTART;   // trk2als: al compás, como el Move
-                            } else {
+                        if (stopQueued) {
+                            mode = QM_PHRASESTOP;
+                            row = liveQueuePosition_[i];
+                        } else if (findPlayable(&row, i, 0)) {
+                            if (forceImmediate) {
                                 mode = QM_TICKSTART;
+                            } else {
+                                bool again = (q == QM_CHAINSTART || q == QM_PHRASESTART) &&
+                                             liveQueuePosition_[i] == row;
+                                mode = (again || !playing) ? QM_PHRASESTART : QM_CHAINSTART;
                             }
                         }
+                    } else if (!playing) { // nada que detener: quita lo que esperaba
+                        QueueChannel(i, QM_NONE, row, 0);
                     } else { // modifier = onStop from song screen
-                        mode = QM_PHRASESTOP;   // trk2als: se detiene al compás
+                        mode = stopQueued ? QM_PHRASESTOP : QM_CHAINSTOP;
                     }
                     if (mode != QM_NONE) {
                         QueueChannel(i, mode, row, 0);
@@ -593,7 +607,16 @@ unsigned char Player::GetQueueChainPosition(int i) {
     return liveQueueChainPosition_[i];
 }
 
+// trk2als: TRK_LIVELOG=1 (pruebas): cuándo entra / sale cada pista en live
+static void liveLog(const char *what, int ch, int row) {
+    static int on = -1;
+    if (on < 0) on = getenv("TRK_LIVELOG") ? 1 : 0;
+    if (on) fprintf(stderr, "[LIVE] %u %s ch%d row%d\n", SDL_GetTicks(), what, ch, row);
+}
+
 void Player::QueueChannel(int i,QueueingMode mode,unsigned char position,unsigned char chainpos) {
+    static const char *qn[] = {"queue-none", "queue-clip", "queue-bar", "stop-clip", "stop-bar", "queue-tick"};
+    liveLog(qn[mode], i, position);
     liveQueueingMode_[i] = mode;
     liveQueuePosition_[i] = position;
     liveQueueChainPosition_[i] = chainpos;
@@ -857,6 +880,7 @@ void Player::triggerLiveChains() {
                  (liveQueueingMode_[i] == QM_PHRASESTART))) {
                 if (findPlayable(&(liveQueuePosition_[i]), i,
                                  liveQueueChainPosition_[i])) {
+                    liveLog("start@idle", i, liveQueuePosition_[i]);
                     mixer_->StartChannel(i);
                     updateSongPos(liveQueuePosition_[i], i,
                                   liveQueueChainPosition_[i]);
@@ -1026,6 +1050,7 @@ void Player::moveToNextPhrase(int channel, int hop) {
         case QM_PHRASESTART:
             if (findPlayable(&(liveQueuePosition_[channel]), channel,
                              liveQueueChainPosition_[channel])) {
+                liveLog("start@bar", channel, liveQueuePosition_[channel]);
                 updateSongPos(liveQueuePosition_[channel], channel,
                               liveQueueChainPosition_[channel], hop);
             }
@@ -1033,6 +1058,7 @@ void Player::moveToNextPhrase(int channel, int hop) {
             return;
             break;
         case QM_PHRASESTOP:
+            liveLog("stop@bar", channel, 0);
             mixer_->StopChannel(channel);
             liveQueueingMode_[channel] = QM_NONE;
             return;
@@ -1108,6 +1134,7 @@ void Player::moveToNextChain(int channel, int hop) {
             if (findPlayable(&(liveQueuePosition_[channel]), channel,
                              liveQueueChainPosition_[channel])) {
                 nextPos = liveQueuePosition_[channel];
+                liveLog("start@clipend", channel, nextPos);
                 searchNext = false;
                 liveQueueingMode_[channel] = QM_NONE;
                 chainPosition = liveQueueChainPosition_[channel];
@@ -1118,6 +1145,7 @@ void Player::moveToNextChain(int channel, int hop) {
 
         case QM_CHAINSTOP:
         case QM_PHRASESTOP:
+            liveLog("stop@clipend", channel, 0);
             mixer_->StopChannel(channel);
             liveQueueingMode_[channel] = QM_NONE;
             return;
