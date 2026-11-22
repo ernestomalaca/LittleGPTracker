@@ -50,6 +50,8 @@ public:
 	// Si ya está estirado, devuelve una referencia (soltarla con Release). Si
 	// no, pide que se estire (una sola vez) y devuelve 0
 	static void *Acquire(const WarpCacheKey &k) ;
+	// pedido y estirándose (todavía no está, pero va a estar)
+	static bool Building(const WarpCacheKey &k) ;
 	static void AddRef(void *h) ;
 	static void Release(void *h) ;
 	static const short *Frames(void *h) ;   // intercalado, 'channels' por cuadro

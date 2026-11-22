@@ -121,6 +121,12 @@ Teclado MIDI por USB
   rápido al tocar; si con proyectos pesados el audio se corta, sube a
   media. Se guarda en config.xml y toma efecto al reiniciar Chancho.
 
+Loops en complex
+  La primera vez que suena un loop en complex (o después de cambiar el
+  tempo), Chancho lo estira por detrás y el clip entra en el siguiente 1
+  ya listo: puede tardar un compás o dos, pero no se traba. La segunda vez
+  entra al instante.
+
 Automatización (vista del instrumento)
   Y + Start graba (con precuenta si no suena; si suena, desde el siguiente
   compás). Mientras graba, A + flechas sobre un parámetro escribe su curva

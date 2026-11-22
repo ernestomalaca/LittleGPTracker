@@ -40,6 +40,12 @@ struct renderParams {
     bool justWrapped_ ;      // trk2als: el loop acaba de volver al principio
     void *warpCache_ ;       // trk2als: complex ya estirado que lee esta voz (WarpCache), o 0
     int cacheIdx_ ;          // trk2als: cuadro de salida siguiente en warpCache_
+    // trk2als: clip de audio en complex que espera su pre-render en silencio
+    // (sin estirar en tiempo real) y entra en un 1, en fase
+    bool warpFresh_ ;        // todavía no ha sonado nada en complex
+    int warpWaited_ ;        // cuadros de salida esperados
+    unsigned long warpWaitSince_ ;
+    int warpFadeIn_ ;        // cuadros de entrada suave que faltan
     // trk2als: sampler estilo Simpler (pistas MIDI)
     bool simpler_ ;          // la voz usa los parámetros del Sampler
     int simplerLoop_ ;       // loop mode efectivo (ONESHOT o LOOP)

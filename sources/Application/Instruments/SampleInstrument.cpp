@@ -629,6 +629,10 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 	if (loopmode!=SILM_LOOPSYNC && rp->sWarp_==SW_OFF) rp->syncTickSamples_=0 ;
 	rp->complexPrimed_=false ; // trk2als
 	dropCache(rp) ;
+	rp->warpFresh_=true ;
+	rp->warpWaited_=0 ;
+	rp->warpWaitSince_=0 ;
+	rp->warpFadeIn_=0 ;
 	rp->warpMode_=warp_->GetInt() ;
 	rp->justWrapped_=false ;
 
@@ -1875,12 +1879,54 @@ void SampleInstrument::renderComplex(int channel,renderParams *rp,int size) {
 	if (!rp->complexPrimed_) {
 		if (cacheKey(rp,int(rp->position_),speed,transpose,key)) {
 			void *h=WarpCache::Acquire(key) ;
+			bool waitBar=false ;
+			// un clip de audio que ya esperó: entra solo en un 1 (en fase con
+			// donde habría ido)
+			if (h && rp->warpWaited_>0) {
+				long bar=long(96.0f*SyncMaster::GetInstance()->GetTickSampleCount()+0.5f) ;
+				if (bar<1) bar=1 ;
+				long next=((rp->warpWaited_+bar-1)/bar)*bar ;
+				if (next-rp->warpWaited_>=size) {   // listo: falta llegar al 1
+					WarpCache::Release(h) ;
+					h=0 ;
+					waitBar=true ;
+				}
+			}
 			if (h) {
 				rp->warpCache_=h ;
-				rp->cacheIdx_=0 ;
+				rp->cacheIdx_=rp->warpWaited_ ;
 				rp->complexPrimed_=true ;
+				if (rp->warpWaited_>0) rp->warpFadeIn_=176 ;   // 4 ms, sin click
+				if (rp->warpWaited_>0 && getenv("TRK_LOADLOG")) {
+					long bar=long(96.0f*SyncMaster::GetInstance()->GetTickSampleCount()+0.5f) ;
+					fprintf(stderr,"[WARP] esperó %d cuadros (%.2f compases): entra ya estirado\n",rp->warpWaited_,bar>0?double(rp->warpWaited_)/bar:0.0) ;
+				}
+				rp->warpFresh_=false ;
 				readCache(rp,size,speed) ;
+				if (rp->warpFadeIn_>0) {
+					for (int i=0;i<size && rp->warpFadeIn_>0;i++,rp->warpFadeIn_--) {
+						float g=1.0f-float(rp->warpFadeIn_)/176.0f ;
+						for (int c=0;c<ch;c++) warpOut_[i*ch+c]=short(warpOut_[i*ch+c]*g) ;
+					}
+				}
 				return ;
+			}
+			// trk2als: un clip de audio que recién arranca y su pre-render va
+			// en camino: en silencio, sin estirar en tiempo real (el arranque
+			// del time-stretch es un pico que con latencia baja hace saltar el
+			// audio). Las notas del Sampler no esperan: tienen que sonar ya
+			unsigned long now=System::GetInstance()->GetClock() ;
+			if (waitBar || (!rp->simpler_ && rp->warpFresh_ && WarpCache::Building(key))) {
+				if (!rp->warpWaitSince_) rp->warpWaitSince_=now ;
+				if (now-rp->warpWaitSince_<15000) {
+					if ((int)warpOut_.size()<(size+2)*ch) warpOut_.resize((size+2)*ch) ;
+					for (int i=0;i<(size+2)*ch;i++) warpOut_[i]=0 ;
+					rp->complexPos_=int(rp->position_) ;
+					rp->complexLatency_=0 ;
+					rp->complexFirst_=rp->rendLoopStart_ ;
+					rp->warpWaited_+=size ;
+					return ;
+				}
 			}
 		}
 	} else if (rp->justWrapped_ && cacheKey(rp,rp->complexFirst_,speed,transpose,key) && key.loop) {
@@ -1898,6 +1944,8 @@ void SampleInstrument::renderComplex(int channel,renderParams *rp,int size) {
 		}
 	}
 	g_warpRealtimeBlocks++ ;   // trk2als: para TRK_LOADLOG
+	if (!rp->complexPrimed_ && getenv("TRK_LOADLOG")) fprintf(stderr,"[WARP] arranque en tiempo real (canal %d)\n",channel) ;
+	rp->warpFresh_=false ;
 	if (!rp->complexPrimed_) {
 		ws->Reset() ;
 		rp->complexPos_=int(rp->position_) ;

@@ -223,6 +223,17 @@ void worker() {
 
 } // namespace
 
+bool WarpCache::Building(const WarpCacheKey &k) {
+	if (!enabled || !k.data) return false ;
+	unsigned fp=fingerprintOf(k) ;
+	std::lock_guard<std::mutex> lk(mtx) ;
+	for (size_t i=0;i<entries.size();i++) {
+		Entry *e=entries[i] ;
+		if (sameKey(e,k,fp)) return !e->ready && !e->failed ;
+	}
+	return false ;
+}
+
 void *WarpCache::Acquire(const WarpCacheKey &k) {
 	if (!enabled || !k.data || k.channels<1 || k.channels>2) return 0 ;
 	if (k.loopEnd<=k.loopStart || k.speed<=0 || k.start<0 || k.start>=k.loopEnd) return 0 ;
@@ -288,6 +299,7 @@ WarpStretch::~WarpStretch() {}
 bool WarpStretch::Available() { return false ; }
 void WarpStretch::SetQuality(int,bool) {}
 void *WarpCache::Acquire(const WarpCacheKey &) { return 0 ; }
+bool WarpCache::Building(const WarpCacheKey &) { return false ; }
 void WarpCache::AddRef(void *) {}
 void WarpCache::Release(void *) {}
 const short *WarpCache::Frames(void *) { return 0 ; }
