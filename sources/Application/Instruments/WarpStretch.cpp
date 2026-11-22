@@ -78,7 +78,8 @@ struct Entry {
 	bool failed ;               // no cabe o no aplica: no volver a intentarlo
 	bool diskTried ;            // ya se buscó en la tarjeta
 	std::string diskMine ;      // apartado en la tarjeta para guardarlo al terminar
-	Entry():srcLo(0),length(0),loopStart(-1),refs(0),lastUse(0),ready(false),failed(false),diskTried(false) {}
+	unsigned long long content ;   // hash del pedazo de sample (para la tarjeta)
+	Entry():content(0),srcLo(0),length(0),loopStart(-1),refs(0),lastUse(0),ready(false),failed(false),diskTried(false) {}
 } ;
 
 std::mutex mtx ;
@@ -225,6 +226,7 @@ std::mutex diskMtx ;                     // archivos a medio hacer + el índice
 std::condition_variable diskCv ;
 std::set<std::string> inflight ;         // nombres que alguien está estirando
 std::map<std::string,std::string> indexMap ;   // "tempo|tamaño|ruta" -> nombre
+std::map<std::string,int> pathCount ;          // "tamaño|ruta" -> a cuántos tempos
 bool indexLoaded=false ;
 
 unsigned long long fnv64(const void *p,size_t n,unsigned long long h=1469598103934665603ULL) {
@@ -258,6 +260,57 @@ std::string diskName(const WarpCacheKey &k,unsigned long long content,int srcLo,
 // la velocidad en escalones de 0.05% (el reproductor redondea el compás a
 // ticks enteros: la misma velocidad sale distinta por ~0.1%)
 long long speedQ(double speed) { return llround(log(speed)/log(1.0005)) ; }
+
+// el mismo loop y región a cualquier velocidad (para sonar con la de otro
+// tempo mientras se estira la buena)
+std::string regionKey(const WarpCacheKey &k,unsigned long long content,int srcLo) {
+	long long f[9]={(long long)content,k.channels,k.start-srcLo,k.loopStart-srcLo,k.loopEnd-srcLo,
+	                k.simpler,k.loop,llround(k.transpose*10000.0),quality_} ;
+	char b[24] ;
+	snprintf(b,sizeof(b),"%016llx",fnv64(f,sizeof(f))) ;
+	return b ;
+}
+
+std::map<std::string,std::vector<std::pair<double,std::string> > > speedsMap ;   // región -> (velocidad, archivo)
+bool speedsLoaded=false ;
+
+void speedsLoadLocked() {
+	if (speedsLoaded || diskDir.empty()) return ;
+	speedsLoaded=true ;
+	FILE *f=fopen((diskDir+"/speeds.txt").c_str(),"r") ;
+	if (!f) return ;
+	char r[40], n[40] ;
+	double sp ;
+	while (fscanf(f,"%39s %lf %39s",r,&sp,n)==3) speedsMap[r].push_back(std::make_pair(sp,std::string(n))) ;
+	fclose(f) ;
+}
+
+void speedsPut(const std::string &region,double speed,const std::string &name) {
+	if (diskDir.empty() || region.empty()) return ;
+	std::lock_guard<std::mutex> lk(diskMtx) ;
+	speedsLoadLocked() ;
+	std::vector<std::pair<double,std::string> > &v=speedsMap[region] ;
+	for (size_t i=0;i<v.size();i++) if (v[i].second==name) return ;
+	v.push_back(std::make_pair(speed,name)) ;
+	FILE *f=fopen((diskDir+"/speeds.txt").c_str(),"a") ;
+	if (f) { fprintf(f,"%s %.9g %s\n",region.c_str(),speed,name.c_str()) ; fclose(f) ; }
+}
+
+// la versión de otra velocidad más cercana que sigue en la tarjeta
+bool speedsNearest(const std::string &region,double speed,double &found,std::string &name) {
+	std::lock_guard<std::mutex> lk(diskMtx) ;
+	speedsLoadLocked() ;
+	std::map<std::string,std::vector<std::pair<double,std::string> > >::iterator it=speedsMap.find(region) ;
+	if (it==speedsMap.end()) return false ;
+	double best=1e9 ;
+	for (size_t i=0;i<it->second.size();i++) {
+		struct stat st ;
+		if (stat((diskDir+"/"+it->second[i].second).c_str(),&st)) continue ;   // ya se borró
+		double d=fabs(log(it->second[i].first/speed)) ;
+		if (d<best) { best=d ; found=it->second[i].first ; name=it->second[i].second ; }
+	}
+	return best<1e9 ;
+}
 
 struct DiskHdr { char magic[4] ; int ch ; long long length ; long long loopAt ; } ;
 
@@ -325,14 +378,17 @@ void diskSave(const std::string &name,int ch,const std::vector<short> &frames,lo
 // lo busca en la tarjeta (también hasta 0.15% de velocidad de distancia: no
 // se oye, y es lo que ya acepta WarpCache::Matches). Si alguien lo está estirando, espera a que termine. Si no está,
 // queda apartado a nombre de quien llama (soltarlo con diskDone)
-bool diskFind(const WarpCacheKey &k,unsigned long long content,int srcLo,std::vector<short> &frames,
-              long long &length,long long &loopAt,std::string &mine,std::string *hit=0) {
+// 1 = estaba; 0 = no (y queda apartado); -1 = otro lo está estirando y no
+// se quiso esperar (no queda nada apartado)
+int diskFind(const WarpCacheKey &k,unsigned long long content,int srcLo,std::vector<short> &frames,
+              long long &length,long long &loopAt,std::string &mine,std::string *hit=0,bool wait=true) {
 	mine.clear() ;
-	if (diskDir.empty()) return false ;
+	if (diskDir.empty()) return 0 ;
 	long long q=speedQ(k.speed) ;
 	std::string own=diskName(k,content,srcLo,q) ;
 	{
 		std::unique_lock<std::mutex> lk(diskMtx) ;
+		if (!wait && inflight.count(own)) return -1 ;
 		diskCv.wait(lk,[&]{ return !inflight.count(own) ; }) ;
 		inflight.insert(own) ;
 	}
@@ -344,22 +400,29 @@ bool diskFind(const WarpCacheKey &k,unsigned long long content,int srcLo,std::ve
 			std::lock_guard<std::mutex> lk(diskMtx) ;
 			inflight.erase(own) ;
 			diskCv.notify_all() ;
-			return true ;
+			return 1 ;
 		}
 	}
 	mine=own ;
-	return false ;
+	return 0 ;
 }
+
+std::atomic<bool> diskWake(false) ;
+std::condition_variable diskQCv ;
 
 void diskDone(const std::string &mine) {
 	if (mine.empty()) return ;
-	std::lock_guard<std::mutex> lk(diskMtx) ;
-	inflight.erase(mine) ;
-	diskCv.notify_all() ;
+	{
+		std::lock_guard<std::mutex> lk(diskMtx) ;
+		inflight.erase(mine) ;
+		diskCv.notify_all() ;
+	}
+	diskWake=true ;          // lo que esperaba a este, a buscarlo otra vez
+	diskQCv.notify_all() ;
 }
 
 std::deque<Entry *> diskQueue ;    // por buscar en la tarjeta (antes de estirar)
-std::condition_variable diskQCv ;
+std::vector<Entry *> diskWaiting ; // otro lo está estirando: a esperar que acabe
 
 void finish(Entry *e,std::vector<short> &frames,long long total,long long loopAt,bool fromDisk,
             std::chrono::steady_clock::time_point t0) {
@@ -386,7 +449,8 @@ void build(Entry *e) {
 	bool fromDisk=false ;
 	if (!e->diskTried) {
 		unsigned long long content=contentHash(&e->src[0],e->src.size()) ;
-		fromDisk=diskFind(k,content,e->srcLo,frames,total,loopAt,mine) ;
+		e->content=content ;
+		fromDisk=diskFind(k,content,e->srcLo,frames,total,loopAt,mine)==1 ;
 	}
 	if (!fromDisk) {
 		if (dbg) fprintf(stderr,"[WARP] %ld estirando %p st %d loop %d-%d sp %.5f tr %.4f loop %d\n",warpMs(),(void*)k.data,k.start,k.loopStart,k.loopEnd,k.speed,k.transpose,k.loop) ;
@@ -396,6 +460,7 @@ void build(Entry *e) {
 			return ;
 		}
 		diskSave(mine,k.channels,frames,total,loopAt) ;
+		if (!mine.empty()) speedsPut(regionKey(k,e->content,e->srcLo),k.speed,mine) ;
 		diskDone(mine) ;
 	}
 	finish(e,frames,total,loopAt,fromDisk,t0) ;
@@ -435,7 +500,12 @@ void diskLoader() {
 		Entry *e ;
 		{
 			std::unique_lock<std::mutex> lk(mtx) ;
-			diskQCv.wait(lk,[]{ return !diskQueue.empty() ; }) ;
+			diskQCv.wait(lk,[]{ return !diskQueue.empty() || (diskWake.load() && !diskWaiting.empty()) ; }) ;
+			if (diskWake.exchange(false)) {
+				for (size_t i=0;i<diskWaiting.size();i++) diskQueue.push_back(diskWaiting[i]) ;
+				diskWaiting.clear() ;
+			}
+			if (diskQueue.empty()) continue ;
 			e=diskQueue.front() ;
 			diskQueue.pop_front() ;
 		}
@@ -443,18 +513,59 @@ void diskLoader() {
 		std::vector<short> frames ;
 		long long total=0, loopAt=-1 ;
 		std::string mine ;
-		unsigned long long content=contentHash(&e->src[0],e->src.size()) ;
-		if (diskFind(e->key,content,e->srcLo,frames,total,loopAt,mine)) {
+		if (!e->content) e->content=contentHash(&e->src[0],e->src.size()) ;
+		std::string hit ;
+		int r=diskFind(e->key,e->content,e->srcLo,frames,total,loopAt,mine,&hit,false) ;
+		if (r==1) {
+			speedsPut(regionKey(e->key,e->content,e->srcLo),e->key.speed,hit) ;   // (los de antes no estaban anotados)
 			finish(e,frames,total,loopAt,true,t0) ;
 			std::lock_guard<std::mutex> lk(mtx) ;
 			std::vector<short>().swap(e->src) ;
 			continue ;
 		}
+		if (r<0) {   // otro lo estira: cuando acabe, se busca otra vez (sin trabar a los demás)
+			std::lock_guard<std::mutex> lk(mtx) ;
+			diskWaiting.push_back(e) ;
+			continue ;
+		}
+		WarpCacheKey k=e->key ;
+		unsigned fp=e->fingerprint ;
+		{
+			std::lock_guard<std::mutex> lk(mtx) ;
+			e->diskMine=mine ;
+			e->diskTried=true ;
+			pending.push_back(e) ;
+			cv.notify_one() ;
+		}
+		// trk2als: mientras se estira, la versión de otro tempo que ya está en
+		// la tarjeta: la voz suena con ella a la nueva velocidad (como al
+		// mover el tempo) y se pasa a la buena cuando esté
+		double altSpeed=0 ;
+		std::string alt ;
+		if (k.simpler || !speedsNearest(regionKey(k,e->content,e->srcLo),k.speed,altSpeed,alt)) continue ;
+		std::vector<short> af ;
+		long long alen=0, aloop=-1 ;
+		if (!diskLoad(alt,k.channels,af,alen,aloop)) continue ;
+		Entry *a=new Entry() ;
+		a->key=k ;
+		a->key.speed=altSpeed ;
+		a->fingerprint=fp ;
+		a->content=e->content ;
+		a->diskTried=true ;
+		bool dup=false ;
 		std::lock_guard<std::mutex> lk(mtx) ;
-		e->diskMine=mine ;
-		e->diskTried=true ;
-		pending.push_back(e) ;
-		cv.notify_one() ;
+		for (size_t i=0;i<entries.size();i++) if (sameKey(entries[i],a->key,fp)) dup=true ;
+		if (dup) { delete a ; continue ; }
+		a->frames.swap(af) ;
+		a->length=int(alen) ;
+		a->loopStart=int(aloop) ;
+		a->ready=true ;
+		a->lastUse=++useClock ;
+		entries.push_back(a) ;
+		bytes+=a->frames.size()*sizeof(short) ;
+		evictLocked(a) ;
+		if (getenv("TRK_LOADLOG")) fprintf(stderr,"[WARP] %ld otro tempo del disco %p sp %.5f (pidió %.5f): suena con esa mientras\n",
+		                                   warpMs(),(void*)k.data,altSpeed,k.speed) ;
 	}
 }
 
@@ -623,7 +734,7 @@ void pvJob(int gen,std::string in,std::string out,double ratio,float transpose,i
 	long long total=0, loopAt=-1 ;
 	unsigned long long content=contentHash(&src[0],src.size()) ;
 	std::string mine, hit ;
-	if (diskFind(k,content,0,frames,total,loopAt,mine,&hit)) {
+	if (diskFind(k,content,0,frames,total,loopAt,mine,&hit)==1) {
 		if (pvGen.load()!=gen) return ;
 		if (loopAt>0 && pvWrite(out,&frames[0],ch,long(loopAt))) {
 			indexPut(in,tempo,hit) ;
@@ -653,6 +764,7 @@ void pvJob(int gen,std::string in,std::string out,double ratio,float transpose,i
 	}
 	if (ok && !mine.empty()) {
 		diskSave(mine,ch,frames,total,loopAt) ;
+		speedsPut(regionKey(k,content,0),ratio,mine) ;
 		indexPut(in,tempo,mine) ;
 	} else if (!ok && !sounded && pvGen.load()==gen) pvFail.store(gen) ;
 	diskDone(mine) ;
@@ -675,7 +787,10 @@ void indexLoadLocked() {
 	std::string line ;
 	while (std::getline(f,line)) {
 		size_t t=line.rfind('\t') ;
-		if (t!=std::string::npos) indexMap[line.substr(0,t)]=line.substr(t+1) ;
+		if (t==std::string::npos) continue ;
+		std::string key=line.substr(0,t) ;
+		if (!indexMap.count(key)) pathCount[key.substr(key.find('|')+1)]++ ;
+		indexMap[key]=line.substr(t+1) ;
 	}
 }
 
@@ -686,6 +801,7 @@ void indexPut(const std::string &file,int tempo,const std::string &name) {
 		std::lock_guard<std::mutex> lk(diskMtx) ;
 		indexLoadLocked() ;
 		if (indexMap.count(key) && indexMap[key]==name) return ;
+		if (!indexMap.count(key)) pathCount[key.substr(key.find('|')+1)]++ ;
 		indexMap[key]=name ;
 		if (indexMap.size()>4000) {   // muy grande: se reescribe sin lo que ya no está
 			std::ofstream f((diskDir+"/index.txt").c_str(),std::ios::trunc) ;
@@ -722,21 +838,27 @@ void WarpDisk::SetDir(const char *dir,int mb) {
 	diskMax=size_t(mb)*1024*1024 ;
 	indexLoaded=false ;
 	indexMap.clear() ;
+	pathCount.clear() ;
+	speedsLoaded=false ;
+	speedsMap.clear() ;
 }
 
-bool WarpDisk::Prepared(const char *file,int tempo) {
-	if (!file) return false ;
+int WarpDisk::Prepared(const char *file,int tempo) {
+	if (!file) return 0 ;
 	std::string name ;
+	bool other=false ;
 	{
 		std::lock_guard<std::mutex> lk(diskMtx) ;
-		if (diskDir.empty()) return false ;
+		if (diskDir.empty()) return 0 ;
 		indexLoadLocked() ;
-		std::map<std::string,std::string>::iterator it=indexMap.find(indexKey(file,tempo)) ;
-		if (it==indexMap.end()) return false ;
-		name=it->second ;
+		std::string key=indexKey(file,tempo) ;
+		std::map<std::string,std::string>::iterator it=indexMap.find(key) ;
+		if (it!=indexMap.end()) name=it->second ;
+		other=pathCount[key.substr(key.find('|')+1)]>0 ;
 	}
 	struct stat st ;
-	return !stat((diskDir+"/"+name).c_str(),&st) ;
+	if (!name.empty() && !stat((diskDir+"/"+name).c_str(),&st)) return 2 ;
+	return other?1:0 ;
 }
 
 int WarpDisk::Generation() { return diskGen.load() ; }
@@ -752,7 +874,7 @@ bool WarpCache::Building(const WarpCacheKey &) { return false ; }
 void *WarpCache::AcquireAny(const WarpCacheKey &) { return 0 ; }
 int WarpPreview::Request(const char *,const char *,double,float,int) { return 0 ; }
 void WarpDisk::SetDir(const char *,int) {}
-bool WarpDisk::Prepared(const char *,int) { return false ; }
+int WarpDisk::Prepared(const char *,int) { return 0 ; }
 int WarpDisk::Generation() { return 0 ; }
 bool WarpPreview::Ready(int) { return false ; }
 bool WarpPreview::Failed(int) { return true ; }

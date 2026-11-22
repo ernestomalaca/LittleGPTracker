@@ -1951,7 +1951,7 @@ void SampleInstrument::renderComplex(int channel,renderParams *rp,int size) {
 			// donde habría ido)
 			// trk2als: si tardó poquito (salió de la tarjeta), entra ya, en fase
 			// (con 4 ms de fundido); perder un compás entero se nota más
-			if (h && rp->warpWaited_>5300) {
+			if (h && rp->warpWaited_>11025) {
 				long bar=long(96.0f*SyncMaster::GetInstance()->GetTickSampleCount()+0.5f) ;
 				if (bar<1) bar=1 ;
 				long next=((rp->warpWaited_+bar-1)/bar)*bar ;

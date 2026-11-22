@@ -799,13 +799,16 @@ void PresetDialog::drawShapes() {
 		DrawText(nx, y + 7, name.c_str(), fg, 1) ;
 		// trk2als: un loop ya preparado en la tarjeta para este tempo (como
 		// el .asd de Live): entra sin esperar. Un puntito verde
-		bool ready = false ;
+		// (un aro del mismo verde: preparado, pero para otro tempo)
+		int ready = 0 ;
 		if (pick_ == PICK_LOOP && e.kind == K_PRESET)
 			ready = WarpDisk::Prepared(InstrumentPresets::LibPath(full(e.name)).GetPath().c_str(),
 			                           viewData_->project_->GetTempo()) ;
 		if (ready) {
 			int dx = nx + 16 * TextLen(name) + 10 ;
-			FillRect(dx, y + 15, 9, 9, GUIColor(0x5E, 0xC9, 0x72), 4) ;
+			GUIColor green(0x5E, 0xC9, 0x72) ;
+			if (ready == 2) FillRect(dx, y + 15, 9, 9, green, 4) ;
+			else FrameRect(dx, y + 15, 9, 9, green, 4, 2) ;
 		}
 		DrawText(nx, y + 29, sub.c_str(), dim, 0) ;
 		if (lst == PresetLauncher::LS_SOUNDING && !(sel && col_ == 1)) {   // en la pista: el play de los clips

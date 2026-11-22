@@ -157,7 +157,10 @@ Loops en complex
   que ya pasaste, el loop entra al instante sin volver a estirarse. En el
   navegador, al escuchar un loop se deja preparado para el tempo del
   proyecto: un puntito verde junto al nombre = ya está listo, entra en
-  cuanto lo pones. Ocupa hasta 1 GB (lo menos usado se borra solo); se
+  cuanto lo pones. Un aro verde = preparado, pero a otro tempo: entra
+  igual en seguida con esa versión a la nueva velocidad (un poquito más
+  agudo o grave) y se pasa a la buena cuando termina de estirarse. Lo
+  mismo al abrir un proyecto a un tempo nuevo. Ocupa hasta 1 GB (lo menos usado se borra solo); se
   cambia con <WARPDISK value="1024"/> (MB; 0 = no guardar). Se puede
   borrar la carpeta cuando quieras.
 

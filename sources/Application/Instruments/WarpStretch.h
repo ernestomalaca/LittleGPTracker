@@ -87,8 +87,9 @@ public:
 class WarpDisk {
 public:
 	static void SetDir(const char *dir,int megabytes) ;   // megabytes 0 = apagado
-	// el navegador: este archivo ya está preparado para este tempo
-	static bool Prepared(const char *file,int tempo) ;
+	// el navegador: 2 = preparado para este tempo; 1 = solo para otro (entra
+	// ya con ese a la nueva velocidad mientras se estira); 0 = nada
+	static int Prepared(const char *file,int tempo) ;
 	static int Generation() ;   // cambia cada vez que se prepara algo
 } ;
 
