@@ -114,9 +114,11 @@ Pistas
   <MAXTRACKS value="6"/>. Los proyectos con más pistas se abren igual.
 
 Mute y solo (Session, como el live mode de LSDJ)
-  B, luego Select: mute de la pista (otra vez lo quita). B, luego Start:
-  solo (otra vez lo quita). En la cabecera: M roja = muteada, S azul = en
-  solo. B tocado solo quita todos los mute y solo.
+  Igual que el manual de LSDJ. B + Select: mute de la pista mientras lo
+  sostienes. Si sueltas B antes que Select, se queda muteada hasta que
+  vuelvas a presionar B. B + Start: solo, igual: soltando B primero, las
+  demás se quedan calladas; soltando Start primero, vuelven todas.
+  En la cabecera: M roja = muteada, S azul = en solo.
 
 Teclado MIDI por USB
   Conecta un controlador MIDI (probado: Arturia MiniLab 3) al USB-C, con

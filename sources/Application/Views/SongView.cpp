@@ -754,8 +754,7 @@ void SongView::switchSoloMode() {
         from = r.Left();
         to = r.Right();
     };
-    // trk2als: una pista ya en solo: otra vez lo quita (conmuta, como LSDJ)
-    bool soloing = (viewMode_ != VM_SOLOON) && !soloed_[from];
+    bool soloing = (viewMode_ != VM_SOLOON);
     controller->SwitchSoloMode(from, to, soloing);
     for (int i = 0; i < SONG_CHANNEL_COUNT; i++) soloed_[i] = soloing && i >= from && i <= to;   // la "S"
     viewMode_ = soloing ? VM_SOLOON : VM_NORMAL;
@@ -1266,8 +1265,18 @@ void SongView::handleButtonMask(unsigned short mask, bool pressed) {
     // sola quita los mute y solo fijos
     if (pressed) {
         if (mask != EPBM_A) aOpenPending_ = false;
-        bTap_ = (mask == EPBM_B && !clipboard_.active_ && viewMode_ != VM_MUTEON &&
-                 viewMode_ != VM_SOLOON);
+        // LSDJ: lo que quedó muteado o en solo dura "hasta presionar B otra vez"
+        if (mask == EPBM_B && !clipboard_.active_ && viewMode_ != VM_MUTEON && viewMode_ != VM_SOLOON) {
+            bool any = false;
+            Player *pl = Player::GetInstance();
+            for (int i = 0; i < SONG_CHANNEL_COUNT; i++) if (pl->IsChannelMuted(i) || soloed_[i]) any = true;
+            if (any) {
+                unMuteAll();
+                for (int i = 0; i < SONG_CHANNEL_COUNT; i++) soloed_[i] = false;
+                isDirty_ = true;
+            }
+        }
+        bTap_ = false;
     } else {
         if (newSlotCell_ >= 0 && !(mask & EPBM_A)) {   // trk2als: soltó A en '+'
             int cell = newSlotCell_;
@@ -1296,20 +1305,20 @@ void SongView::handleButtonMask(unsigned short mask, bool pressed) {
     }
 
     if (!pressed) {
-        // trk2als: B, Select / B, Start (LSDJ) conmutan: al soltar no se
-        // deshace. Solo con el R de verdad apretado es "mientras lo sostienes"
-        bool holdR = (View::physMask_ & EPBM_R) != 0 && !(View::physMask_ & EPBM_B);
+        // trk2als: como el manual de LSDJ: B + Select / B + Start valen
+        // mientras se sostienen; soltando B primero, se quedan (hasta
+        // presionar B otra vez); soltando Select / Start primero, se quitan
         if (viewMode_ == VM_MUTEON) {
-            if ((mask & EPBM_R) && holdR) {
+            if (mask & EPBM_R) {
                 toggleMute();
-            } else if (!(mask & (EPBM_B | EPBM_A)) || !holdR) {
+            } else if (!(mask & (EPBM_B | EPBM_A))) {
                 viewMode_ = VM_NORMAL;   // trk2als: quedó fijo
             }
         };
         if (viewMode_ == VM_SOLOON) {
-            if ((mask & EPBM_R) && holdR) {
+            if (mask & EPBM_R) {
                 switchSoloMode();
-            } else if (!(mask & (EPBM_B | EPBM_A)) || !holdR) {
+            } else if (!(mask & (EPBM_B | EPBM_A))) {
                 viewMode_ = VM_NORMAL;   // trk2als: quedó fijo
             }
         };
