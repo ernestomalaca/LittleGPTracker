@@ -118,6 +118,11 @@ Automatización (vista del instrumento)
   Select + L deshace y Select + R rehace lo grabado (cada vez que soltaste
   A es un paso) y las curvas borradas.
   B + A sobre un parámetro con curva la borra (Select + L la regresa).
+  R2 captura (como Capture en Live): sin grabar, lo que moviste con
+  A + flechas mientras el clip sonaba se escribe en su curva al apretar R2.
+  Solo la última vuelta del loop y solo los tramos que tocaste: lo demás
+  queda como estaba (con curva o sin ella). Funciona desde cualquier
+  pantalla; Select + L en el instrumento la quita.
 
 Curvas en el clip
   En el instrumento, A + gatillo L sobre un parámetro automatizable abre su

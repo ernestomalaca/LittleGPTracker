@@ -324,6 +324,8 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data),
 	laneUndoClip_=-1 ;
 	laneUndoTime_=0 ;
 	selTap_=false ;
+	capping_=false ;
+	capLast_=-1 ;
 	recShown_=0 ;
 	markTap_=false ;
 	waveEdit_=false ;
@@ -957,7 +959,14 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 	}
 	if (pressed && (mask&EPBM_A) && (mask&(EPBM_LEFT|EPBM_RIGHT|EPBM_UP|EPBM_DOWN)) && !(mask&EPBM_B))
 		takeOver() ;
+	if (!pressed && capping_ && !(mask&EPBM_A)) capEnd() ;
 	processButtonMask(mask,pressed) ;
+	// sin grabar: lo que se mueve con A + flechas se anota para la captura
+	if (pressed && (mask&EPBM_A) && (mask&(EPBM_LEFT|EPBM_RIGHT|EPBM_UP|EPBM_DOWN)) && !(mask&EPBM_B) &&
+	    !Player::GetInstance()->IsAutoRec()) {
+		if (!capping_) capBegin() ;
+		if (capping_) capTick() ;
+	}
 	if (pressed) { kitSync() ; kitTrack() ; }
 	// A sostenido en un parámetro mientras se graba: se escribe la lane
 	if (pressed && (mask&EPBM_A) && !(mask&EPBM_B) && Player::GetInstance()->IsAutoRec()) {
@@ -1375,7 +1384,7 @@ void InstrumentView::drawWaveform() {
 	if (!helpText_ && GetFocus() && !GetFocus()->IsStatic() &&
 	    automatable(((UIIntVarField *)GetFocus())->GetVariableID()))
 		help=Player::GetInstance()->AutoRecState() ? "A sostenido+<>:grabar;Y+START:dejar de grabar"
-		                                        : "A+<>:valor;Y+START:grabar automatización;B+A:borrarla" ;
+		                                        : "A+<>:valor;R2:capturar;Y+START:grabar;B+A:borrarla" ;
 	drawHelpBar(help) ;
 	drawAutoMarks() ;   // trk2als
 }
@@ -1793,6 +1802,7 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 
 // trk2als: ~25 veces por segundo; si el cursor se movió, redibujar las figuras
 bool InstrumentView::Tick() {
+	if (capping_) capTick() ;
 	if (!touching_ || HasModal()) return false ;
 	recordTouch() ;
 	return !touching_ ;   // se acabó: a redibujar
@@ -2999,6 +3009,161 @@ void InstrumentView::endTouch() {
 	}
 	MixerService::GetInstance()->Unlock() ;
 	isDirty_=true ;
+}
+
+/************************************************************
+ trk2als: captura de automatización (R2)
+ ************************************************************/
+
+void InstrumentView::capBegin() {
+	if (kitMode_ || !current_ || current_->GetType()!=IT_SAMPLE) return ;
+	FourCC id=focusID(*this) ;
+	if (!automatable(id)) return ;
+	int ch=autoChannel() ;
+	int clip=autoClip(ch) ;
+	if (clip<0 || Player::GetInstance()->ClipTickPos(ch)<0) return ;
+	capCur_.id=id ;
+	capCur_.ch=ch ;
+	capCur_.clip=clip ;
+	capCur_.base=preTouchVal_ ;   // lo de antes de tocar (si no había curva)
+	capCur_.pts.clear() ;
+	capLast_=-1 ;
+	capping_=true ;
+}
+
+void InstrumentView::capTick() {
+	if (!capping_) return ;
+	Player *player=Player::GetInstance() ;
+	int pos=player->ClipTickPos(capCur_.ch) ;
+	if (pos<0 || viewData_->currentPlayChain_[capCur_.ch]!=capCur_.clip || player->IsAutoRec() ||
+	    !current_ || current_->GetType()!=IT_SAMPLE) {
+		capEnd() ;
+		return ;
+	}
+	Variable *v=current_->FindVariable(capCur_.id) ;
+	if (!v) { capEnd() ; return ; }
+	if (capLast_>=0 && pos<capLast_) {   // el clip dio la vuelta: otro tramo
+		// el de antes cubre hasta el final del loop y el nuevo empieza en su
+		// inicio (sin huecos que vuelvan a lo de antes)
+		Clip &c=viewData_->song_->clips_->Get(capCur_.clip) ;
+		int loopFrom=(c.loopStart>=0?c.loopStart:0)*CLIP_STEPS_PER_PAGE*CLIP_TICKS ;
+		int loopTo=((c.loopStart>=0 && c.loopEnd>=c.loopStart)?(c.loopEnd+1)*CLIP_STEPS_PER_PAGE:c.Steps())*CLIP_TICKS-1 ;
+		if (loopTo>capLast_) capLast_=loopTo ;
+		CapSeg keep=capCur_ ;
+		int lastV=capCur_.pts.empty()?v->GetInt():capCur_.pts.back().value ;
+		capEnd() ;
+		capCur_=keep ;
+		capCur_.pts.clear() ;
+		if (pos>loopFrom) capCur_.pts.push_back(AutoPoint(loopFrom,lastV,false)) ;
+		capLast_=loopFrom ;
+		capping_=true ;
+	}
+	int value=v->GetInt() ;
+	std::vector<AutoPoint> &p=capCur_.pts ;
+	if (!p.empty() && p.back().pos==pos) p.back().value=value ;
+	else if (p.empty() || p.back().value!=value) p.push_back(AutoPoint(pos,value,false)) ;
+	capLast_=pos ;
+}
+
+void InstrumentView::capEnd() {
+	if (!capping_) return ;
+	capping_=false ;
+	if (capCur_.pts.empty()) return ;
+	// el tramo llega hasta donde se soltó (aunque el valor no cambiara)
+	if (capLast_>capCur_.pts.back().pos)
+		capCur_.pts.push_back(AutoPoint(capLast_,capCur_.pts.back().value,false)) ;
+	capCur_.tEnd=System::GetInstance()->GetClock() ;
+	capSegs_.push_back(capCur_) ;
+	if (capSegs_.size()>64) capSegs_.erase(capSegs_.begin()) ;
+}
+
+// un tramo en su lugar: antes y después la curva sigue como estaba (o, si no
+// había, con el valor de antes de tocar)
+void InstrumentView::capWrite(const CapSeg &s) {
+	Clip &c=viewData_->song_->clips_->Get(s.clip) ;
+	if (c.IsEmpty() || s.pts.empty()) return ;
+	int total=c.Steps()*CLIP_TICKS ;
+	int from=s.pts.front().pos, to=s.pts.back().pos ;
+	if (from>=total) return ;
+	if (to>=total) to=total-1 ;
+	AutoLane *ol=c.FindLane(s.id,-1) ;
+	bool had=ol && !ol->points.empty() ;
+	AutoLane old ;
+	if (had) old=*ol ;
+	AutoLane &lane=c.GetLane(s.id,-1) ;
+	std::vector<AutoPoint> &p=lane.points ;
+	for (size_t k=0;k<p.size();) {
+		if (p[k].pos>=from && p[k].pos<=to) p.erase(p.begin()+k) ;
+		else k++ ;
+	}
+	bool atBefore=false, atAfter=false ;
+	for (size_t k=0;k<p.size();k++) {
+		if (p[k].pos==from-1) atBefore=true ;
+		if (p[k].pos==to+1) atAfter=true ;
+	}
+	if (from>0 && !atBefore) {
+		int v=s.base ;
+		if (had) old.ValueAt(from-1,v) ;
+		p.push_back(AutoPoint(from-1,v,false)) ;
+	}
+	for (size_t k=0;k<s.pts.size() && s.pts[k].pos<=to;k++) p.push_back(s.pts[k]) ;
+	if (to+1<total && !atAfter) {
+		int v=s.base ;
+		bool ramp=false ;
+		if (had) {
+			old.ValueAt(to+1,v) ;
+			// si ahí iba en rampa, sigue en rampa hacia el siguiente nodo
+			for (size_t k=0;k<old.points.size() && old.points[k].pos<=to+1;k++)
+				ramp=old.points[k].ramp && old.points[k].pos<to+1 ;
+		}
+		p.push_back(AutoPoint(to+1,v,ramp)) ;
+	}
+	lane.Sort() ;
+	std::vector<AutoPoint> out ;
+	for (size_t k=0;k<p.size();k++) {
+		const AutoPoint &a=p[k] ;
+		if (!out.empty() && !out.back().ramp && !out.back().inv && !a.ramp && !a.inv && out.back().value==a.value) continue ;
+		out.push_back(a) ;
+	}
+	p=out ;
+}
+
+const char *InstrumentView::CaptureAutomation() {
+	if (capping_) capEnd() ;
+	if (capSegs_.empty()) return "nada que capturar" ;
+	// solo la última vuelta de cada parámetro en cada clip (como Live): lo
+	// que se movió antes de eso se olvida
+	int tempo=viewData_->project_->GetTempo() ;
+	if (tempo<20) tempo=120 ;
+	std::vector<bool> keep(capSegs_.size(),true) ;
+	for (size_t i=0;i<capSegs_.size();i++) {
+		const CapSeg &s=capSegs_[i] ;
+		Clip &c=viewData_->song_->clips_->Get(s.clip) ;
+		int steps=(c.loopStart>=0 && c.loopEnd>=c.loopStart) ? (c.loopEnd-c.loopStart+1)*CLIP_STEPS_PER_PAGE : c.Steps() ;
+		unsigned long loopMs=(unsigned long)(steps*15000L/tempo) ;
+		unsigned long last=s.tEnd ;
+		for (size_t j=i+1;j<capSegs_.size();j++)
+			if (capSegs_[j].id==s.id && capSegs_[j].clip==s.clip && capSegs_[j].tEnd>last) last=capSegs_[j].tEnd ;
+		if (last-s.tEnd>loopMs) keep[i]=false ;
+	}
+	std::vector<int> snapped ;
+	for (size_t i=0;i<capSegs_.size();i++) {
+		if (!keep[i]) continue ;
+		int clip=capSegs_[i].clip ;
+		bool done=false ;
+		for (size_t k=0;k<snapped.size();k++) if (snapped[k]==clip) done=true ;
+		if (!done) { pushLaneSnap(clip) ; snapped.push_back(clip) ; }   // Select + L lo quita
+	}
+	MixerService::GetInstance()->Lock() ;
+	for (size_t i=0;i<capSegs_.size();i++) {
+		if (!keep[i]) continue ;
+		capWrite(capSegs_[i]) ;
+		Player::GetInstance()->ReleaseOverride(capSegs_[i].ch,capSegs_[i].id) ;
+	}
+	MixerService::GetInstance()->Unlock() ;
+	capSegs_.clear() ;
+	isDirty_=true ;
+	return "automatización capturada" ;
 }
 
 bool InstrumentView::deleteLane() {

@@ -102,6 +102,7 @@ AppWindow::AppWindow(I_GUIWindowImp &imp) : GUIWindow(imp) {
         _lastInput = System::GetInstance()->GetClock();
         _swallow = 0;
         _helpMask = 0;
+        _r2Solo = false;
         const char *sp = Config::GetInstance()->GetValue("SPLASH");
         int ms = sp ? atoi(sp) : 2000;
         _splashUntil = ms > 0 ? System::GetInstance()->GetClock() + ms : 0;
@@ -641,6 +642,9 @@ bool AppWindow::onEvent(GUIEvent &event) {
         // ayuda; esos botones no llegan a las pantallas
         if (v & ((1 << EPBT_L2) | (1 << EPBT_R2) | (1 << EPBT_HELP))) {
             bool again = (_helpMask & v) != 0;
+            // R2 solo (sin L2 en ningún momento): captura al soltarlo
+            if (v & (1 << EPBT_R2)) { if (!again) _r2Solo = !(_helpMask & (1 << EPBT_L2)) && !_overlayOn; }
+            else _r2Solo = false;
             _helpMask |= v;
             bool combo = (_helpMask & (1 << EPBT_L2)) && (_helpMask & (1 << EPBT_R2));
             if (!again && (combo || (v & (1 << EPBT_HELP)))) {
@@ -669,6 +673,15 @@ bool AppWindow::onEvent(GUIEvent &event) {
         _lastInput = System::GetInstance()->GetClock();
         if (v & ((1 << EPBT_L2) | (1 << EPBT_R2) | (1 << EPBT_HELP))) {
             _helpMask &= ~v;
+            if ((v & (1 << EPBT_R2)) && _r2Solo) {
+                _r2Solo = false;
+                if (!_overlayOn && _instrumentView && _currentView && !_currentView->HasModal()) {
+                    const char *m = _instrumentView->CaptureAutomation();
+                    if (m) _currentView->SetNotification(m);
+                    if (_currentView != _instrumentView) _currentView->SetDirty(true);
+                    _isDirty = true;
+                }
+            }
             break;
         }
         if (_swallow & v) {   // el que cerró la ayuda

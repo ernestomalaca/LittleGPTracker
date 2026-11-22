@@ -148,6 +148,7 @@ class AppWindow : public GUIWindow, I_Observer, Status {
     unsigned short _swallow;    // botones que cerraron la ayuda (se ignoran al soltar)
     int _helpIdleMs;
     unsigned short _helpMask;   // L2 / R2 / ayuda apretados
+    bool _r2Solo;               // R2 sin L2: al soltarlo, captura la automatización
     void showHelp();
     void hideHelp();
     bool _shapesDirty;          // las figuras cambiaron: redibujar sus celdas

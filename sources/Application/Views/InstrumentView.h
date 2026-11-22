@@ -168,8 +168,22 @@ private:
 	int preTouchVal_ ;   // la perilla antes de este toque
 	std::vector<LaneSnap> autoUndo_, autoRedo_ ;
 	void pushLaneSnap(int clip) ;
+	// captura (R2, como Capture en Live): lo que se mueve sin grabar se anota
+	// por tramos; al capturar, cada tramo se escribe en su lugar y el resto de
+	// la curva queda como estaba
+	struct CapSeg { FourCC id ; int ch ; int clip ; int base ; unsigned long tEnd ; std::vector<AutoPoint> pts ; } ;
+	std::vector<CapSeg> capSegs_ ;
+	CapSeg capCur_ ;
+	bool capping_ ;
+	int capLast_ ;
+	void capBegin() ;
+	void capTick() ;
+	void capEnd() ;
+	void capWrite(const CapSeg &s) ;
 public:
 	virtual bool Undo(bool redo) ;
+	// R2: escribe lo anotado; devuelve el aviso
+	const char *CaptureAutomation() ;
 private:
 	std::vector<int> autoShown_ ;  // los valores en vivo que se dibujaron
 	int recShown_ ;   // cómo se dibujó el REC (0 no, 1/3 parpadeo, 2 grabando)

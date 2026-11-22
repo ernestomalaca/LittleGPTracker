@@ -1429,6 +1429,13 @@ void Player::OverrideAutomation(int ch, unsigned int id) {
     if (autoInstr_[ch]) autoInstr_[ch]->ClearAutomated(id);   // ya suena lo de la mano
 }
 
+void Player::ReleaseOverride(int ch, unsigned int id) {
+    if (ch < 0 || ch >= SONG_CHANNEL_COUNT) return;
+    std::vector<unsigned int> &o = autoOverride_[ch];
+    for (size_t k = 0; k < o.size(); k++)
+        if (o[k] == id) { o.erase(o.begin() + k); return; }
+}
+
 void Player::updateAutomation() {
     for (int ch = 0; ch < SONG_CHANNEL_COUNT; ch++) {
         int chain = viewData_->currentPlayChain_[ch];

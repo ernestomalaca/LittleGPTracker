@@ -107,6 +107,7 @@ public:
 	// se movió a mano un parámetro automatizado: manda la mano hasta que el
 	// clip vuelva a empezar su loop (no se borra nada)
 	void OverrideAutomation(int track, unsigned int id) ;
+	void ReleaseOverride(int track, unsigned int id) ;   // la curva vuelve a mandar ya
 	// ya nadie lo mezcla ni lo va a tocar (antes de cambiarle o quitarle samples)
 	void KillInstrument(I_Instrument *in) ;
 
