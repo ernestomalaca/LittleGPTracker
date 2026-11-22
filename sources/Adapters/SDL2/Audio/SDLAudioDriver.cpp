@@ -1,4 +1,8 @@
 #include "SDLAudioDriver.h"
+#ifdef __linux__
+#include <glob.h>
+#include <stdio.h>
+#endif
 #include "Services/Midi/MidiService.h"
 #include "Services/Time/TimeService.h"
 #include "System/Console/Trace.h"
@@ -99,6 +103,27 @@ bool SDLAudioDriver::InitDriver() {
     // SDL_OpenAudioDevice(NULL,0,&input,&returned,0); The above may return 0
     // meaning an error or success.
     int ret = SDL_OpenAudio(&input, &returned);
+#ifdef __linux__
+    // trk2als: un aparato USB que se anuncia como tarjeta de sonido (un
+    // teclado MIDI como el MiniLab) puede volverse la salida por defecto sin
+    // tener salida de audio. Si falla, la primera tarjeta que sí suena
+    if (ret != 0) {
+        Trace::Log("AUDIO", "salida por defecto: %s; se busca otra", SDL_GetError());
+        glob_t g;
+        if (glob("/proc/asound/card*/pcm0p", 0, 0, &g) == 0) {
+            for (size_t i = 0; i < g.gl_pathc && ret != 0; i++) {
+                int card = -1;
+                if (sscanf(g.gl_pathv[i], "/proc/asound/card%d/", &card) != 1) continue;
+                char dev[32];
+                snprintf(dev, sizeof(dev), "plughw:%d,0", card);
+                SDL_setenv("AUDIODEV", dev, 1);
+                ret = SDL_OpenAudio(&input, &returned);
+                Trace::Log("AUDIO", "probando %s: %s", dev, ret == 0 ? "bien" : SDL_GetError());
+            }
+            globfree(&g);
+        }
+    }
+#endif
     if (ret != 0) {
         Trace::Error("AUDIO", "Couldn't open sdl audio: %s", SDL_GetError());
         return false;
