@@ -1688,6 +1688,8 @@ int ClipView::curveInstrValue() {
     return v ? v->GetInt() : viewData_->curveMin_;
 }
 
+static const double CURVE_TIME_K = 10.0;   // ms: hasta ~10 ms casi lineal, luego logarítmico
+
 double ClipView::curveNorm(int v) {
     ViewData *d = viewData_;
     double lo = d->curveMin_, hi = d->curveMax_;
@@ -1695,6 +1697,7 @@ double ClipView::curveNorm(int v) {
     if (v < lo) v = int(lo);
     if (v > hi) v = int(hi);
     if (d->curveLog_ && lo > 0) return (log(double(v)) - log(lo)) / (log(hi) - log(lo));
+    if (d->curveTime_) return log1p((v - lo) / CURVE_TIME_K) / log1p((hi - lo) / CURVE_TIME_K);
     return (v - lo) / (hi - lo);
 }
 
@@ -1969,6 +1972,12 @@ int ClipView::curveDenorm(double n) {
     if (n > 1) n = 1;
     if (d->curveLog_ && d->curveMin_ > 0)
         return int(exp(log(double(d->curveMin_)) + n * (log(double(d->curveMax_)) - log(double(d->curveMin_)))) + 0.5);
+    if (d->curveTime_ && d->curveMax_ > d->curveMin_) {
+        double v = d->curveMin_ + CURVE_TIME_K * expm1(n * log1p((d->curveMax_ - d->curveMin_) / CURVE_TIME_K));
+        int r = int(v + 0.5);
+        if (d->curveStep_ > 1) r = (r + d->curveStep_ / 2) / d->curveStep_ * d->curveStep_;   // al paso de la perilla
+        return r < d->curveMin_ ? d->curveMin_ : (r > d->curveMax_ ? d->curveMax_ : r);
+    }
     double v = d->curveMin_ + n * (d->curveMax_ - d->curveMin_);
     return int(v < 0 ? v - 0.5 : v + 0.5);
 }
@@ -2328,12 +2337,16 @@ void ClipView::drawCurves() {
     const int top = GRID_Y + 8, h = gh - 16;
     // en Hz: valores redondos (50, 200, 1k, 5k, 20k); si no, en cuartos
     static const int hzTicks[] = {50, 200, 1000, 5000, 20000};
+    static const int msTicks[] = {0, 10, 100, 1000, -1};   // -1: el máximo
     for (int k = 0; k <= 4; k++) {
         double t = 1.0 - k / 4.0;
         int v;
         if (d->curveLog_ && d->curveMin_ > 0) {
             v = hzTicks[4 - k];
             if (v < d->curveMin_ || v > d->curveMax_) continue;
+        } else if (d->curveTime_) {
+            v = msTicks[4 - k] < 0 ? d->curveMax_ : msTicks[4 - k];
+            if (v < d->curveMin_ || v > d->curveMax_ || (msTicks[4 - k] >= 0 && v * 3 > d->curveMax_ * 2 && v != d->curveMax_)) continue;
         } else
             v = int(d->curveMin_ + t * (d->curveMax_ - d->curveMin_) + (t >= 0 ? 0.5 : -0.5));
         char lb[16];

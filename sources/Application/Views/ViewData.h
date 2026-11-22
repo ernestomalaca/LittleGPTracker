@@ -69,6 +69,7 @@ public:
 	int curveInstr_ ;           // de qué instrumento es
 	int curveMin_, curveMax_, curveStep_, curveBig_, curveDisp_ ;
 	bool curveLog_ ;
+	bool curveTime_ ;           // tiempos (ms): escala que abre los valores chicos
 	char curveName_[24] ;       // "freq"
 	char curveFmt_[24] ;        // "%+ddB" (lo de después de "nombre: ")
 	char **curveList_ ;         // parámetros de lista ("LP","BP","HP"): sus nombres

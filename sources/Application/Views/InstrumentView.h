@@ -173,7 +173,7 @@ private:
 	// por tramos; al capturar, cada tramo se escribe en su lugar y el resto de
 	// la curva queda como estaba
 	// cómo se ve la curva de un parámetro en el clip (rango, formato...)
-	struct CurveMeta { int instr, min, max, step, big, disp, listN ; bool log ; char name[24], fmt[24] ; char **list ; } ;
+	struct CurveMeta { int instr, min, max, step, big, disp, listN ; bool log, time ; char name[24], fmt[24] ; char **list ; } ;
 	void curveMeta(UIIntVarField *fld,CurveMeta &m) ;
 	void applyCurveMeta(const CurveMeta &m) ;
 	struct CapSeg { FourCC id ; int ch ; int clip ; int base ; unsigned long tEnd ; std::vector<AutoPoint> pts ; CurveMeta meta ; } ;

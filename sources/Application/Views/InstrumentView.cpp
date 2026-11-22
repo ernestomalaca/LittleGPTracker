@@ -2886,6 +2886,9 @@ void InstrumentView::curveMeta(UIIntVarField *fld,CurveMeta &m) {
 		snprintf(m.fmt,sizeof(m.fmt),"%%d") ;
 	}
 	if (m.log) snprintf(m.fmt,sizeof(m.fmt),"%%dHz") ;
+	// los tiempos (attack, decay, glide...): como en Live, los valores chicos
+	// ocupan más altura (si no, 40 a 120 ms de 5000 ni se ven)
+	m.time=!m.log && m.min>=0 && strstr(m.fmt,"ms")!=0 ;
 	// un parámetro de lista (el tipo de filtro): el formato lleva %s y se
 	// imprime con el nombre, nunca con el número
 	Variable &var=fld->GetVariable() ;
@@ -2908,6 +2911,7 @@ void InstrumentView::applyCurveMeta(const CurveMeta &m) {
 	vd->curveBig_=m.big ;
 	vd->curveDisp_=m.disp ;
 	vd->curveLog_=m.log ;
+	vd->curveTime_=m.time ;
 	memcpy(vd->curveName_,m.name,sizeof(vd->curveName_)) ;
 	memcpy(vd->curveFmt_,m.fmt,sizeof(vd->curveFmt_)) ;
 	vd->curveList_=m.list ;
