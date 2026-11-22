@@ -93,6 +93,11 @@ void AudioOutDriver::Trigger() {
         g_busyCpu += cpuSeconds() - beforeCpu;
         g_span += sampleCount_ / 44100.0;
         g_loadNow = load;
+        // trk2als: diagnóstico (TRK_LOADLOG): cada bloque que llegó tarde
+        static int dbgLate = -1;
+        if (dbgLate < 0) dbgLate = getenv("TRK_LOADLOG") ? 1 : 0;
+        if (dbgLate && load > 100)
+            fprintf(stderr, "[LOAD] %lu bloque tarde: %d%%\n", (unsigned long)System::GetInstance()->GetClock(), load);
         if (load > g_loadWindow) g_loadWindow = load;
         if (now - g_loadSince >= 1.0) {      // el pico del último segundo
             g_loadPeak = g_loadWindow;

@@ -1,4 +1,5 @@
 #include "WarpStretch.h"
+#include "System/System/System.h"
 #include <stddef.h>
 
 #if __cplusplus >= 201103L
@@ -47,8 +48,12 @@ void WarpStretch::Process(float **in,int inSamples,float **out,int outSamples) {
 #include <unistd.h>
 #endif
 #include <cstdlib>
+#include <chrono>
 
 namespace {
+
+// ms desde que arrancó (para empatar el log con lo que se oye)
+long warpMs() { return (long)System::GetInstance()->GetClock() ; }
 
 struct Entry {
 	WarpCacheKey key ;
@@ -119,7 +124,9 @@ void evictLocked(Entry *keep) {
 // pero de una vez y fuera del hilo de audio
 void build(Entry *e) {
 	const WarpCacheKey &k=e->key ;
-	if (getenv("TRK_LOADLOG")) fprintf(stderr,"[WARP] estirando %p st %d loop %d-%d sp %.5f tr %.4f loop %d\n",(void*)k.data,k.start,k.loopStart,k.loopEnd,k.speed,k.transpose,k.loop) ;
+	bool dbg=getenv("TRK_LOADLOG")!=0 ;
+	auto t0=std::chrono::steady_clock::now() ;
+	if (dbg) fprintf(stderr,"[WARP] %ld estirando %p st %d loop %d-%d sp %.5f tr %.4f loop %d\n",warpMs(),(void*)k.data,k.start,k.loopStart,k.loopEnd,k.speed,k.transpose,k.loop) ;
 	const int ch=k.channels ;
 	Stretch st ;
 	if (quality_==1) st.presetCheaper(ch,44100.0f,split_) ;
@@ -202,6 +209,8 @@ void build(Entry *e) {
 	bytes+=e->frames.size()*sizeof(short) ;
 	e->ready=true ;
 	evictLocked(e) ;
+	if (dbg) fprintf(stderr,"[WARP] %ld listo %p sp %.5f en %ld ms (%lld cuadros)\n",warpMs(),(void*)k.data,k.speed,
+	                 (long)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-t0).count(),(long long)total) ;
 }
 
 // trk2als: los hilos de estirado corren solo con lo que sobra del procesador

@@ -1911,7 +1911,7 @@ void SampleInstrument::renderComplex(int channel,renderParams *rp,int size) {
 						for (int c=0;c<ch;c++)
 							warpOut_[i*ch+c]=short(prev[i*ch+c]*(1.0f-g)+warpOut_[i*ch+c]*g) ;
 					}
-					if (getenv("TRK_LOADLOG")) fprintf(stderr,"[WARP] nuevo tempo: ya estirado, se pasa a él\n") ;
+					if (getenv("TRK_LOADLOG")) fprintf(stderr,"[WARP] %lu canal %d: pasa al tempo nuevo\n",System::GetInstance()->GetClock(),channel) ;
 					return ;
 				}
 				readCacheVar(rp,size,speed/WarpCache::Speed(old)) ;
@@ -1964,7 +1964,7 @@ void SampleInstrument::renderComplex(int channel,renderParams *rp,int size) {
 				if (rp->warpWaited_>0) rp->warpFadeIn_=176 ;   // 4 ms, sin click
 				if (rp->warpWaited_>0 && getenv("TRK_LOADLOG")) {
 					long bar=long(96.0f*SyncMaster::GetInstance()->GetTickSampleCount()+0.5f) ;
-					fprintf(stderr,"[WARP] esperó %d cuadros (%.2f compases): entra ya estirado\n",rp->warpWaited_,bar>0?double(rp->warpWaited_)/bar:0.0) ;
+					fprintf(stderr,"[WARP] %lu esperó %d cuadros (%.2f compases): entra ya estirado\n",System::GetInstance()->GetClock(),rp->warpWaited_,bar>0?double(rp->warpWaited_)/bar:0.0) ;
 				}
 				rp->warpFresh_=false ;
 				readCache(rp,size,speed) ;
@@ -2027,7 +2027,7 @@ void SampleInstrument::renderComplex(int channel,renderParams *rp,int size) {
 		}
 	}
 	g_warpRealtimeBlocks++ ;   // trk2als: para TRK_LOADLOG
-	if (!rp->complexPrimed_ && getenv("TRK_LOADLOG")) fprintf(stderr,"[WARP] arranque en tiempo real (canal %d)\n",channel) ;
+	if (!rp->complexPrimed_ && getenv("TRK_LOADLOG")) fprintf(stderr,"[WARP] %lu arranque en tiempo real (canal %d)\n",System::GetInstance()->GetClock(),channel) ;
 	rp->warpFresh_=false ;
 	if (!rp->complexPrimed_) {
 		ws->Reset() ;
