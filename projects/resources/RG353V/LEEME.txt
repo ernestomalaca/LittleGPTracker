@@ -152,6 +152,14 @@ Loops en complex
   también suena en complex si LOOPWARP lo pide (tarda un momento en sonar).
   Los loops nuevos entran en re-pitch; para que entren en complex, en
   chancho6/config.xml: <LOOPWARP value="complex"/>
+  Lo estirado se guarda en la tarjeta (chancho6/warpcache, como los .asd
+  de Live): al abrir otra vez el proyecto, o al volver a un tempo por el
+  que ya pasaste, el loop entra al instante sin volver a estirarse. En el
+  navegador, al escuchar un loop se deja preparado para el tempo del
+  proyecto: un puntito verde junto al nombre = ya está listo, entra en
+  cuanto lo pones. Ocupa hasta 1 GB (lo menos usado se borra solo); se
+  cambia con <WARPDISK value="1024"/> (MB; 0 = no guardar). Se puede
+  borrar la carpeta cuando quieras.
 
 Automatización (vista del instrumento)
   Y + Start graba (con precuenta si no suena; si suena, desde el siguiente

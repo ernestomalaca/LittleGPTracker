@@ -197,13 +197,20 @@ void SampleFilePreview(Path element, ViewData *viewData_, int toInstr_, bool aud
 			if (lw && !strcasecmp(lw,"complex") && WarpStretch::Available()) {
 				WavFile *w2=WavFile::Open(element.GetPath().c_str()) ;
 				int rate=w2?w2->GetSampleRate(-1):44100 ;
+				long frames=w2?w2->GetSize(-1):0 ;
 				delete w2 ;
+				// trk2als: la misma velocidad que usará el clip (el compás del
+				// reproductor son ticks enteros: SampleInstrument, SILM_LOOPSYNC),
+				// para que lo preparado aquí le sirva tal cual
+				double ratio=double(rate)/44100.0*speed ;
+				int tick=int(60.0f*44100.0f*2.0f/tempo/8.0f/6.0f) ;
+				if (frames>0 && tick>0) ratio=double(frames)/(double(tick)*96.0*bars) ;
 				player->StopStreaming() ;
 				cplxBars_=bars ;
 				cplxTempo_=tempo ;
 				cplxOut_=Path((cplxJob_+1)%2?"root:loopcplx1.wav":"root:loopcplx0.wav") ;
 				cplxJob_=WarpPreview::Request(element.GetPath().c_str(),cplxOut_.GetPath().c_str(),
-				                              double(rate)/44100.0*speed,float(rate)/44100.0f) ;
+				                              ratio,float(rate)/44100.0f,tempo) ;
 				return ;
 			}
 			cplxJob_=0 ;

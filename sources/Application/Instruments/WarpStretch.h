@@ -74,9 +74,22 @@ class WarpPreview {
 public:
 	// ratio: cuadros del archivo por cuadro de salida; transpose: el factor
 	// para que suene en su altura (frecuencia del archivo / 44100)
-	static int Request(const char *in,const char *out,double ratio,float transpose) ;
+	// tempo: el del proyecto (para el puntito del navegador). De paso deja el
+	// loop preparado en la tarjeta para cuando se ponga en una pista
+	static int Request(const char *in,const char *out,double ratio,float transpose,int tempo=0) ;
 	static bool Ready(int job) ;     // ya está escrito (y es el último pedido)
 	static bool Failed(int job) ;
+} ;
+
+// trk2als: el pre-render también en la tarjeta (como los .asd de Live): lo
+// que se estiró una vez, al abrir el proyecto o al cambiar a un tempo por el
+// que ya se pasó, se lee del disco en vez de estirarse otra vez
+class WarpDisk {
+public:
+	static void SetDir(const char *dir,int megabytes) ;   // megabytes 0 = apagado
+	// el navegador: este archivo ya está preparado para este tempo
+	static bool Prepared(const char *file,int tempo) ;
+	static int Generation() ;   // cambia cada vez que se prepara algo
 } ;
 
 #endif

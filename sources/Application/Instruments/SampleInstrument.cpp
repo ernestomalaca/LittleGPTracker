@@ -96,6 +96,9 @@ SampleInstrument::SampleInstrument() {
 			 if (mb<=0) WarpCache::SetEnabled(false) ;
 			 else WarpCache::SetBudget(mb) ;
 		 }
+		 // trk2als: lo estirado también en la tarjeta (WARPDISK = MB; 0 = no)
+		 const char *wd=Config::GetInstance()->GetValue("WARPDISK") ;
+		 WarpDisk::SetDir(Path("root:warpcache").GetPath().c_str(),wd?atoi(wd):1024) ;
 	 }
 	 kitStarting_=false ;
 	 for (int i=0;i<SONG_CHANNEL_COUNT;i++) lastKitSlot_[i]=i ;
@@ -1946,7 +1949,9 @@ void SampleInstrument::renderComplex(int channel,renderParams *rp,int size) {
 			bool waitBar=false ;
 			// un clip de audio que ya esperó: entra solo en un 1 (en fase con
 			// donde habría ido)
-			if (h && rp->warpWaited_>0) {
+			// trk2als: si tardó poquito (salió de la tarjeta), entra ya, en fase
+			// (con 4 ms de fundido); perder un compás entero se nota más
+			if (h && rp->warpWaited_>5300) {
 				long bar=long(96.0f*SyncMaster::GetInstance()->GetTickSampleCount()+0.5f) ;
 				if (bar<1) bar=1 ;
 				long next=((rp->warpWaited_+bar-1)/bar)*bar ;

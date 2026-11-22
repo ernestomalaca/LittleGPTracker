@@ -102,6 +102,7 @@ private:
 	int treeSel_ ;
 	int treeTop_ ;
 	unsigned long previewAt_ ;   // cuándo arranca la muestra (0 = nada)
+	int diskGen_ ;               // trk2als: lo preparado en la tarjeta que ya se dibujó
 	std::string playing_ ;       // lo que está sonando
 	bool inClip_ ;
 	unsigned long bAt_ ;         // cuándo se apretó B (0 = suelto): dejarlo apretado cierra

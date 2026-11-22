@@ -2,6 +2,7 @@
 #include "PresetDialog.h"
 #include "Application/Instruments/InstrumentPresets.h"
 #include "Application/Instruments/WavFile.h"
+#include "Application/Instruments/WarpStretch.h"
 #include "Application/Player/Player.h"
 #include "Application/Utils/Latin1.h"
 #include "NewProjectDialog.h"
@@ -71,7 +72,7 @@ static Uint32 previewWake(Uint32, void *) {
 
 PresetDialog::PresetDialog(View &view, bool forSave, int kind)
     : ModalView(view), forSave_(forSave), kind_(kind), selected_(0), top_(0),
-      emptyOptions_(false), col_(1), treeSel_(0), treeTop_(0), previewAt_(0) {
+      emptyOptions_(false), col_(1), treeSel_(0), treeTop_(0), previewAt_(0), diskGen_(-1) {
 	launcher_ = 0 ;
 	inClip_ = false ;
 	bAt_ = 0 ;
@@ -433,6 +434,11 @@ bool PresetDialog::Tick() {
 		return true ;
 	}
 	if (SampleFilePreviewTick()) return true ;   // trk2als: la prueba en complex ya está
+	if (pick_ == PICK_LOOP && WarpDisk::Generation() != diskGen_) {   // se preparó algo: el puntito
+		diskGen_ = WarpDisk::Generation() ;
+		isDirty_ = true ;
+		return true ;
+	}
 	return false ;
 }
 
@@ -791,6 +797,16 @@ void PresetDialog::drawShapes() {
 		int room = (LX + LW - 50 - nx) / 16 ;
 		if (TextLen(name) > room) name = name.substr(0, room - 2) + ".." ;
 		DrawText(nx, y + 7, name.c_str(), fg, 1) ;
+		// trk2als: un loop ya preparado en la tarjeta para este tempo (como
+		// el .asd de Live): entra sin esperar. Un puntito verde
+		bool ready = false ;
+		if (pick_ == PICK_LOOP && e.kind == K_PRESET)
+			ready = WarpDisk::Prepared(InstrumentPresets::LibPath(full(e.name)).GetPath().c_str(),
+			                           viewData_->project_->GetTempo()) ;
+		if (ready) {
+			int dx = nx + 16 * TextLen(name) + 10 ;
+			FillRect(dx, y + 15, 9, 9, GUIColor(0x5E, 0xC9, 0x72), 4) ;
+		}
 		DrawText(nx, y + 29, sub.c_str(), dim, 0) ;
 		if (lst == PresetLauncher::LS_SOUNDING && !(sel && col_ == 1)) {   // en la pista: el play de los clips
 			int tx = LX + LW - 30, ty = y + 15 ;
