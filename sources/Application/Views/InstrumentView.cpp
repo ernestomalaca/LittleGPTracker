@@ -3128,9 +3128,13 @@ void InstrumentView::capWrite(const CapSeg &s) {
 	p=out ;
 }
 
-const char *InstrumentView::CaptureAutomation() {
+const char *InstrumentView::CaptureAutomation(int track) {
 	if (capping_) capEnd() ;
-	if (capSegs_.empty()) return "nada que capturar" ;
+	// solo la pista donde estás; lo de otras pistas se queda anotado
+	if (track<0) track=autoChannel() ;
+	bool any=false ;
+	for (size_t i=0;i<capSegs_.size();i++) if (capSegs_[i].ch==track) any=true ;
+	if (!any) return "nada que capturar en esta pista" ;
 	// solo la última vuelta de cada parámetro en cada clip (como Live): lo
 	// que se movió antes de eso se olvida
 	int tempo=viewData_->project_->GetTempo() ;
@@ -3144,7 +3148,7 @@ const char *InstrumentView::CaptureAutomation() {
 		unsigned long last=s.tEnd ;
 		for (size_t j=i+1;j<capSegs_.size();j++)
 			if (capSegs_[j].id==s.id && capSegs_[j].clip==s.clip && capSegs_[j].tEnd>last) last=capSegs_[j].tEnd ;
-		if (last-s.tEnd>loopMs) keep[i]=false ;
+		if (last-s.tEnd>loopMs || s.ch!=track) keep[i]=false ;
 	}
 	std::vector<int> snapped ;
 	for (size_t i=0;i<capSegs_.size();i++) {
@@ -3161,7 +3165,9 @@ const char *InstrumentView::CaptureAutomation() {
 		Player::GetInstance()->ReleaseOverride(capSegs_[i].ch,capSegs_[i].id) ;
 	}
 	MixerService::GetInstance()->Unlock() ;
-	capSegs_.clear() ;
+	for (size_t i=0;i<capSegs_.size();)   // lo de esta pista ya se usó (o era viejo)
+		if (capSegs_[i].ch==track) capSegs_.erase(capSegs_.begin()+i) ;
+		else i++ ;
 	isDirty_=true ;
 	return "automatización capturada" ;
 }

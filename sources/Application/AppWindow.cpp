@@ -676,7 +676,9 @@ bool AppWindow::onEvent(GUIEvent &event) {
             if ((v & (1 << EPBT_R2)) && _r2Solo) {
                 _r2Solo = false;
                 if (!_overlayOn && _instrumentView && _currentView && !_currentView->HasModal()) {
-                    const char *m = _instrumentView->CaptureAutomation();
+                    // la pista donde estás: la del instrumento abierto o la del cursor
+                    int track = (_currentView == _instrumentView) ? -1 : _viewData->songX_;
+                    const char *m = _instrumentView->CaptureAutomation(track);
                     if (m) _currentView->SetNotification(m);
                     if (_currentView != _instrumentView) _currentView->SetDirty(true);
                     _isDirty = true;

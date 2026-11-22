@@ -183,7 +183,8 @@ private:
 public:
 	virtual bool Undo(bool redo) ;
 	// R2: escribe lo anotado; devuelve el aviso
-	const char *CaptureAutomation() ;
+	// track < 0: la pista del instrumento que se ve
+	const char *CaptureAutomation(int track) ;
 private:
 	std::vector<int> autoShown_ ;  // los valores en vivo que se dibujaron
 	int recShown_ ;   // cómo se dibujó el REC (0 no, 1/3 parpadeo, 2 grabando)
