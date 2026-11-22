@@ -2643,6 +2643,10 @@ void SongView::drawBlockGrid() {
         int h = ROWH - GAP;
         int row = j + offset;
         bool hereRow = rowMode_ && j == viewData_->songY_;
+        // en la columna de escenas: la fila que se va a lanzar, un pelo más
+        // clara de lado a lado (como la pista en vertical)
+        if (hereRow && trackCount > 0)
+            FillRect(2, y - 2, X0 + trackCount * COLW - GAP, h + 4, Mix(bg, fg, 5), 4);
         if (rowPlaying[j] || hereRow) FillRect(4, y, 32, h, rowPlaying[j] ? play : cur, 3);
         // la escena suena y el cursor está en ella: marco blanco para no perderse
         if (rowPlaying[j] && hereRow) FrameRect(4, y, 32, h, fg, 3, 3);
@@ -2661,9 +2665,10 @@ void SongView::drawBlockGrid() {
             bool muted = player->IsChannelMuted(i);
             GUIColor tc(trackColors[i][0], trackColors[i][1], trackColors[i][2]);
             if (muted) tc = Mix(tc, bg, 55);
-            if (i == curCol) tc = Mix(tc, fg, 12);
+            bool lit = (i == curCol) || hereRow;
+            if (lit) tc = Mix(tc, fg, 12);
             if (empty) {
-                FillRect(x, y, w, h, i == curCol ? Mix(bg, fg, 11) : cellBg, 3);
+                FillRect(x, y, w, h, lit ? Mix(bg, fg, 11) : cellBg, 3);
                 FillRect(x + w / 2 - 2, y + h / 2 - 2, 4, 4, Mix(bg, fg, 18));
             } else {
                 FillRect(x, y, w, h, tc, 3);
