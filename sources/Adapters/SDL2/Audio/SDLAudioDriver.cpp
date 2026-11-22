@@ -1,6 +1,7 @@
 #include "SDLAudioDriver.h"
 #ifdef __linux__
 #include <glob.h>
+#include <stdlib.h>
 #include <stdio.h>
 #endif
 #include "Services/Midi/MidiService.h"
@@ -102,7 +103,29 @@ bool SDLAudioDriver::InitDriver() {
     // SDL_AudioDeviceID deviceId =
     // SDL_OpenAudioDevice(NULL,0,&input,&returned,0); The above may return 0
     // meaning an error or success.
-    int ret = SDL_OpenAudio(&input, &returned);
+    int ret = -1;
+#ifdef __linux__
+    // trk2als: con latencia baja o media, la tarjeta directo: la salida por
+    // defecto del sistema (dmix) impone bloques de 1024 y con poca reserva
+    // hace clicks. Si no se puede (otro programa la usa), la de siempre
+    if (settings_.bufferSize_ < 1024 && !SDL_getenv("AUDIODEV")) {
+        glob_t g;
+        if (glob("/proc/asound/card*/pcm0p", 0, 0, &g) == 0) {
+            for (size_t i = 0; i < g.gl_pathc && ret != 0; i++) {
+                int card = -1;
+                if (sscanf(g.gl_pathv[i], "/proc/asound/card%d/", &card) != 1) continue;
+                char dev[32];
+                snprintf(dev, sizeof(dev), "plughw:%d,0", card);
+                SDL_setenv("AUDIODEV", dev, 1);
+                ret = SDL_OpenAudio(&input, &returned);
+                Trace::Log("AUDIO", "directo %s: %s", dev, ret == 0 ? "bien" : SDL_GetError());
+            }
+            globfree(&g);
+        }
+        if (ret != 0) unsetenv("AUDIODEV");
+    }
+#endif
+    if (ret != 0) ret = SDL_OpenAudio(&input, &returned);
 #ifdef __linux__
     // trk2als: un aparato USB que se anuncia como tarjeta de sonido (un
     // teclado MIDI como el MiniLab) puede volverse la salida por defecto sin
