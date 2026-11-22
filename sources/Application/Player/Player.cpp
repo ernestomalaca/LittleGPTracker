@@ -29,6 +29,9 @@ extern double g_renderedSamples;   // AudioOut.cpp
 Player::Player() {
 
     isRunning_ = false;
+    for (int ch = 0; ch < SONG_CHANNEL_COUNT; ch++)
+        for (int v = 0; v < VOICE_COUNT; v++) { liveNote_[ch][v] = -1; liveAge_[ch][v] = 0; }
+    liveClock_ = 0;
     project_ = 0;
     viewData_ = 0;
     linkWait_ = false;   // trk2als: Link
@@ -1210,6 +1213,44 @@ void Player::PreviewNote(int channel, I_Instrument *instr, int note) {
     mixer_->Lock();
     mixer_->StartInstrument(channel, instr, (unsigned char)note, true);
     mixer_->Unlock();
+}
+
+// trk2als: el teclado MIDI. Un kit: cada golpe suena completo (el kit
+// reparte sus voces). Lo demás: la voz que tenga esa nota, una libre o la
+// más vieja; al soltar, su release
+void Player::LiveNoteOn(int channel, I_Instrument *instr, int note, int vel) {
+    if (!instr || !project_ || channel < 0 || channel >= SONG_CHANNEL_COUNT) return;
+    note += project_->GetTranspose();
+    if (note < 0 || note > 127) return;
+    if (vel < 1) vel = 1;
+    if (vel > 127) vel = 127;
+    bool kit = instr->GetType() == IT_SAMPLE && ((SampleInstrument *)instr)->IsKit();
+    int v = 0;
+    if (!kit) {
+        v = -1;
+        for (int i = 0; i < VOICE_COUNT && v < 0; i++) if (liveNote_[channel][i] == note) v = i;
+        for (int i = 0; i < VOICE_COUNT && v < 0; i++) if (liveNote_[channel][i] < 0) v = i;
+        if (v < 0) {
+            v = 0;
+            for (int i = 1; i < VOICE_COUNT; i++)
+                if (liveAge_[channel][i] < liveAge_[channel][v]) v = i;
+        }
+        liveNote_[channel][v] = note;
+        liveAge_[channel][v] = ++liveClock_;
+    }
+    bool newInstrument = (v == 0) && (mixer_->GetLastInstrument(channel) != instr);
+    startClipNote(channel, v, instr, (unsigned char)note, vel, newInstrument);
+}
+
+void Player::LiveNoteOff(int channel, int note) {
+    if (!project_ || channel < 0 || channel >= SONG_CHANNEL_COUNT) return;
+    note += project_->GetTranspose();
+    for (int v = 0; v < VOICE_COUNT; v++) {
+        if (liveNote_[channel][v] != note) continue;
+        liveNote_[channel][v] = -1;
+        if (v == 0) mixer_->StopInstrument(channel);
+        else mixer_->StopVoice(channel, v);
+    }
 }
 
 int Player::GetStreamPosition() { return mixer_->GetStreamPosition(); }

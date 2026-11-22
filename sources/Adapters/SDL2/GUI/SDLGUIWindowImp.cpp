@@ -1,5 +1,7 @@
 #include "SDLGUIWindowImp.h"
 #include "Application/Commands/EventDispatcher.h"
+#include "Application/Player/MidiKeys.h"
+#include "Application/AppWindow.h"
 #include "Application/Model/Config.h"
 #include "Application/Utils/char.h"
 #include "System/Console/Trace.h"
@@ -731,6 +733,10 @@ void SDLGUIWindowImp::PushEvent(GUIEvent &event) {
 void SDLGUIWindowImp::ProcessUserEvent(SDL_Event &event) {
     if (event.user.code == EventDispatcher::REPEAT_EVENT_CODE) {   // trk2als
         EventDispatcher::GetInstance()->DispatchRepeat();
+        return;
+    }
+    if (event.user.code == MidiKeys::EVENT_CODE) {   // trk2als: teclado / pads por USB
+        AppWindow::DispatchMidi();
         return;
     }
     if (!event.user.data1) return;

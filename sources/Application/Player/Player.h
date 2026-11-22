@@ -113,6 +113,10 @@ public:
 
 	void StartStreaming(const Path &path) ;
 	void PreviewNote(int channel, I_Instrument *instr, int note) ;   // trk2als: tocar una nota con la canción parada
+	// trk2als: un teclado MIDI: hasta 4 voces por pista (acordes), con
+	// velocity; suena parado o con la canción andando
+	void LiveNoteOn(int channel, I_Instrument *instr, int note, int vel) ;
+	void LiveNoteOff(int channel, int note) ;
 	void StartStreaming(const Path &path, double speed, double delaySecs, double startFrac, bool loop) ;
 	void StopStreaming() ;
 	int GetStreamPosition() ; // trk2als: cuadro del archivo que suena (-1 = nada)
@@ -228,6 +232,8 @@ private:
 	void startClipNote(int channel, int voice, I_Instrument *instr, unsigned char note,
 	                   int vel, bool newInstrument) ;
 	unsigned long voiceEnd_[SONG_CHANNEL_COUNT][4] ;   // rebanada en que se libera cada voz
+	int liveNote_[SONG_CHANNEL_COUNT][VOICE_COUNT] ;    // trk2als: la nota del teclado en cada voz (-1 libre)
+	unsigned long liveAge_[SONG_CHANNEL_COUNT][VOICE_COUNT], liveClock_ ;
 	// trk2als: automatización (las lanes del clip)
 	bool autoRec_ ;   // grabando automatización (suena el metrónomo)
 	bool autoRecPending_ ;   // empieza en el siguiente uno

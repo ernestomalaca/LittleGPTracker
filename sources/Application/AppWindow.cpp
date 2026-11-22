@@ -27,8 +27,41 @@
 #include "Application/Model/Config.h"
 #include "Application/Utils/ProjectName.h"
 #include "Application/Utils/Latin1.h"
+#include "Application/Player/MidiKeys.h"
 
 AppWindow *instance = 0;
+
+// trk2als: el controlador MIDI toca la pista donde estás: en el instrumento,
+// la de ese instrumento; en las demás pantallas, la del cursor
+void AppWindow::DispatchMidi() {
+    MidiKeyEvent e;
+    AppWindow *w = instance;
+    if (!w || !w->_viewData || !w->_viewData->project_) {
+        while (MidiKeys::GetInstance()->Pop(e)) {}
+        return;
+    }
+    ViewData *d = w->_viewData;
+    Project *project = d->project_;
+    Player *player = Player::GetInstance();
+    MixerService *ms = MixerService::GetInstance();
+    ms->Lock();
+    while (MidiKeys::GetInstance()->Pop(e)) {
+        unsigned char hi = e.status & 0xF0;
+        if (hi != 0x90 && hi != 0x80) continue;   // perillas: después
+        int ch = d->songX_;
+        if (w->_currentView == (View *)w->_instrumentView) {
+            for (int k = 0; k < SONG_CHANNEL_COUNT; k++)
+                if (project->GetTrackInstrument(k) == d->currentInstrument_) { ch = k; break; }
+        }
+        if (ch < 0 || ch >= SONG_CHANNEL_COUNT || !project->TrackExists(ch)) continue;
+        if (hi == 0x80) { player->LiveNoteOff(ch, e.d1); continue; }
+        int owner = project->GetTrackInstrument(ch);
+        if (owner < 0) continue;   // pista de audio o sin instrumento
+        I_Instrument *instr = project->GetInstrumentBank()->GetInstrument(owner);
+        player->LiveNoteOn(ch, instr, e.d1, e.d2);
+    }
+    ms->Unlock();
+}
 
 // trk2als: tema Lavanda (se cambia en config.xml)
 GUIColor AppWindow::backgroundColor_(0x10, 0x10, 0x18);
@@ -103,6 +136,9 @@ AppWindow::AppWindow(I_GUIWindowImp &imp) : GUIWindow(imp) {
         _swallow = 0;
         _helpMask = 0;
         _r2Solo = false;
+#ifdef SDL2
+        MidiKeys::GetInstance()->Start();   // trk2als: teclado / pads por USB
+#endif
         const char *sp = Config::GetInstance()->GetValue("SPLASH");
         int ms = sp ? atoi(sp) : 2000;
         _splashUntil = ms > 0 ? System::GetInstance()->GetClock() + ms : 0;

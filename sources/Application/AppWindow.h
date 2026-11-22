@@ -28,6 +28,9 @@ class AppWindow : public GUIWindow, I_Observer, Status {
     virtual ~AppWindow();
 
   public:
+    // trk2als: lo que llegó del controlador MIDI (en el hilo de la interfaz)
+    static void DispatchMidi();
+
     static AppWindow *Create(GUICreateWindowParams &);
     void LoadProject(const Path &path);
     void SaveLastProject(const Path &p);

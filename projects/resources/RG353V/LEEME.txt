@@ -108,6 +108,16 @@ Audio en tiempo real
 Si algo falla
   chancho6/log.txt tiene lo que dijo el programa.
 
+Teclado MIDI por USB
+  Conecta un controlador MIDI (probado: Arturia MiniLab 3) al USB-C, con
+  adaptador OTG si hace falta; se reconoce solo, también si lo conectas
+  con Chancho abierto. Las teclas y los pads tocan la pista donde estás
+  (en el instrumento, la de ese instrumento; en las demás pantallas, la del
+  cursor), con velocity y hasta 4 notas a la vez. En un kit cada pad suena
+  completo. Con la canción andando suena encima, pero comparte las voces de
+  la pista: si el clip de esa pista toca, puede cortar lo que tocas.
+  Las perillas todavía no hacen nada.
+
 Automatización (vista del instrumento)
   Y + Start graba (con precuenta si no suena; si suena, desde el siguiente
   compás). Mientras graba, A + flechas sobre un parámetro escribe su curva
