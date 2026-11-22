@@ -1839,7 +1839,7 @@ void SongView::ApplyTrackType(int channel, int code, bool) {
 void SongView::clampTrackCursor() {
     int count = viewData_->project_->TrackCount();
     if (count == 0) headerMode_ = true;   // sin pistas solo queda el '+'
-    int maxX = headerMode_ ? (count < SONG_CHANNEL_COUNT ? count : count - 1) : count - 1;
+    int maxX = headerMode_ ? (count < Project::MaxTracks() ? count : count - 1) : count - 1;   // el '+' solo si cabe otra
     if (viewData_->songX_ > maxX) viewData_->songX_ = maxX;
     if (viewData_->songX_ < 0) viewData_->songX_ = 0;
 }
@@ -2630,7 +2630,7 @@ void SongView::drawBlockGrid() {
         FillRect(X0 + curCol * COLW - 2, HY - 2, COLW - GAP + 4, GBOT - HY + 2, Mix(bg, fg, 5), 4);
 
     // cabeceras
-    for (int i = 0; i < SONG_CHANNEL_COUNT && i <= trackCount; i++) {
+    for (int i = 0; i < SONG_CHANNEL_COUNT && i <= trackCount && (i < trackCount || i < Project::MaxTracks()); i++) {
         int x = X0 + i * COLW;
         bool here = headerMode_ && i == viewData_->songX_;
         if (i == trackCount) {   // agregar pista

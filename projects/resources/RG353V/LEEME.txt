@@ -108,6 +108,11 @@ Audio en tiempo real
 Si algo falla
   chancho6/log.txt tiene lo que dijo el programa.
 
+Pistas
+  Un proyecto nuevo trae 4; se pueden agregar hasta 6 (el "+" de la
+  cabecera desaparece al llegar). Se cambia en config.xml:
+  <MAXTRACKS value="6"/>. Los proyectos con más pistas se abren igual.
+
 Mute y solo (Session, como el live mode de LSDJ)
   B, luego Select: mute de la pista (otra vez lo quita). B, luego Start:
   solo (otra vez lo quita). En la cabecera: M roja = muteada, S azul = en

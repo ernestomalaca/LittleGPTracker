@@ -298,9 +298,20 @@ int Project::GetTrackInstrument(int channel) {
     return (i >= 0 && i < MAX_INSTRUMENT_COUNT) ? i : -1;
 }
 
+int Project::MaxTracks() {
+    static int m = -1;
+    if (m < 0) {
+        const char *v = Config::GetInstance()->GetValue("MAXTRACKS");
+        m = v ? atoi(v) : 6;   // 6 garantizadas (la plantilla trae 4)
+        if (m < 1) m = 1;
+        if (m > SONG_CHANNEL_COUNT) m = SONG_CHANNEL_COUNT;
+    }
+    return m;
+}
+
 int Project::AddTrack(TrackType type) {
     int ch = TrackCount();
-    if (ch >= SONG_CHANNEL_COUNT) return -1;
+    if (ch >= SONG_CHANNEL_COUNT || ch >= MaxTracks()) return -1;
     unsigned char *data = song_->data_;
     for (int r = 0; r < 256; r++) data[r * SONG_CHANNEL_COUNT + ch] = 0xFF;
     FindVariable(VAR_TRACKTYPE(ch))->SetInt(type == TT_AUDIO ? TT_AUDIO : TT_MIDI);

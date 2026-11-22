@@ -76,6 +76,8 @@ public:
   // trk2als: las pistas existen de la 0 a TrackCount()-1 (como en Live: se
   // agregan y se borran, no cambian de tipo)
   int TrackCount();
+  // trk2als: cuántas pistas se pueden agregar (MAXTRACKS en config.xml; 6)
+  static int MaxTracks();
   bool TrackExists(int channel);
   const char *GetTrackName(int channel);   // el del preset, o "MIDI 3" / "AUDIO 5"
   void SetTrackName(int channel, const char *name);
