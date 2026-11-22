@@ -108,6 +108,11 @@ Audio en tiempo real
 Si algo falla
   chancho6/log.txt tiene lo que dijo el programa.
 
+Mute y solo (Session, como el live mode de LSDJ)
+  B, luego Select: mute de la pista (otra vez lo quita). B, luego Start:
+  solo (otra vez lo quita). En la cabecera: M roja = muteada, S azul = en
+  solo. B tocado solo quita todos los mute y solo.
+
 Teclado MIDI por USB
   Conecta un controlador MIDI (probado: Arturia MiniLab 3) al USB-C, con
   adaptador OTG si hace falta; se reconoce solo, también si lo conectas

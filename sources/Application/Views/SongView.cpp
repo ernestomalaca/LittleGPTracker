@@ -754,10 +754,11 @@ void SongView::switchSoloMode() {
         from = r.Left();
         to = r.Right();
     };
-    bool soloing = (viewMode_ != VM_SOLOON);
+    // trk2als: una pista ya en solo: otra vez lo quita (conmuta, como LSDJ)
+    bool soloing = (viewMode_ != VM_SOLOON) && !soloed_[from];
     controller->SwitchSoloMode(from, to, soloing);
-    for (int i = 0; i < SONG_CHANNEL_COUNT; i++) soloed_[i] = soloing && i >= from && i <= to;   // trk2als: la "S"
-    viewMode_ = (viewMode_ != VM_SOLOON) ? VM_SOLOON : VM_NORMAL;
+    for (int i = 0; i < SONG_CHANNEL_COUNT; i++) soloed_[i] = soloing && i >= from && i <= to;   // la "S"
+    viewMode_ = soloing ? VM_SOLOON : VM_NORMAL;
     isDirty_ = true;
 };
 
@@ -1295,17 +1296,20 @@ void SongView::handleButtonMask(unsigned short mask, bool pressed) {
     }
 
     if (!pressed) {
+        // trk2als: B, Select / B, Start (LSDJ) conmutan: al soltar no se
+        // deshace. Solo con el R de verdad apretado es "mientras lo sostienes"
+        bool holdR = (View::physMask_ & EPBM_R) != 0 && !(View::physMask_ & EPBM_B);
         if (viewMode_ == VM_MUTEON) {
-            if (mask & EPBM_R) {
+            if ((mask & EPBM_R) && holdR) {
                 toggleMute();
-            } else if (!(mask & (EPBM_B | EPBM_A))) {
+            } else if (!(mask & (EPBM_B | EPBM_A)) || !holdR) {
                 viewMode_ = VM_NORMAL;   // trk2als: quedó fijo
             }
         };
         if (viewMode_ == VM_SOLOON) {
-            if (mask & EPBM_R) {
+            if ((mask & EPBM_R) && holdR) {
                 switchSoloMode();
-            } else if (!(mask & (EPBM_B | EPBM_A))) {
+            } else if (!(mask & (EPBM_B | EPBM_A)) || !holdR) {
                 viewMode_ = VM_NORMAL;   // trk2als: quedó fijo
             }
         };
