@@ -36,7 +36,11 @@ OUT="$DIR/midi.txt"
     [ -e "$dev" ] || continue
     found=1
     echo "$dev:"
-    timeout 10 od -An -tx1 -v -w12 < "$dev" | head -60
+    # a un archivo (si se corta con timeout, lo leído no se pierde)
+    timeout 10 cat "$dev" > /tmp/midi.raw 2>/dev/null
+    echo "$(stat -c %s /tmp/midi.raw 2>/dev/null) bytes"
+    od -An -tx1 -v -w12 /tmp/midi.raw | head -60
+    rm -f /tmp/midi.raw
   done
   [ $found = 0 ] && echo "ningún /dev/snd/midi*: la consola no ve el controlador como MIDI"
   echo "=== fin ==="
