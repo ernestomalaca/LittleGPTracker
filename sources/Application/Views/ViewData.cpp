@@ -22,6 +22,8 @@ ViewData::ViewData(Project *project) {
 	curveBig_=1 ;
 	curveDisp_=0 ;
 	curveLog_=false ;
+	curveList_=0 ;
+	curveListN_=0 ;
 	curveName_[0]=0 ;
 	curveFmt_[0]=0 ;
 	curveFocus_=0 ;

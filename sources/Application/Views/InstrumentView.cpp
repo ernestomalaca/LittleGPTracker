@@ -2891,6 +2891,17 @@ bool InstrumentView::openCurve() {
 		snprintf(vd->curveFmt_,sizeof(vd->curveFmt_),"%%d") ;
 	}
 	if (vd->curveLog_) snprintf(vd->curveFmt_,sizeof(vd->curveFmt_),"%%dHz") ;
+	// un parámetro de lista (el tipo de filtro): el formato lleva %s y se
+	// imprime con el nombre, nunca con el número
+	Variable &var=fld->GetVariable() ;
+	vd->curveList_=0 ;
+	vd->curveListN_=0 ;
+	if (var.GetType()==Variable::CHAR_LIST && var.GetListPointer()) {
+		vd->curveList_=var.GetListPointer() ;
+		vd->curveListN_=var.GetListSize() ;
+	} else if (strstr(vd->curveFmt_,"%s")) {
+		snprintf(vd->curveFmt_,sizeof(vd->curveFmt_),"%%d") ;
+	}
 	vd->currentChain_=clip ;
 	vd->songX_=ch ;
 	lastFocusID_=id ;

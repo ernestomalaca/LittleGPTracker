@@ -71,6 +71,8 @@ public:
 	bool curveLog_ ;
 	char curveName_[24] ;       // "freq"
 	char curveFmt_[24] ;        // "%+ddB" (lo de después de "nombre: ")
+	char **curveList_ ;         // parámetros de lista ("LP","BP","HP"): sus nombres
+	int curveListN_ ;
 	unsigned int curveFocus_ ;  // al volver al instrumento: el foco ahí
 	unsigned int curveLastID_ ; // la última curva (Select tocado en el clip vuelve a ella)
 
