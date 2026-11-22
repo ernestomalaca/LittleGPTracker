@@ -1893,6 +1893,10 @@ void SampleInstrument::renderComplex(int channel,renderParams *rp,int size) {
 				void *h2=(nowc-rp->warpReqAt_>=350)?WarpCache::Acquire(nk):0 ;
 				if (h2) {
 					double p=rp->complexPos_ ;
+					// lo que sonaría con la de antes en este bloque, para el
+					// fundido cruzado (sin escalón: era un click)
+					readCacheVar(rp,size,speed/WarpCache::Speed(old)) ;
+					std::vector<short> prev(warpOut_.begin(),warpOut_.begin()+(size+2)*ch) ;
 					int ls2=WarpCache::LoopStart(h2), st2=WarpCache::Start(h2) ;
 					double idx2=(ls2>=0 && p>=rp->rendLoopStart_)?ls2+(p-rp->rendLoopStart_)/speed:(p-st2)/speed ;
 					if (idx2<0) idx2=0 ;
@@ -1901,8 +1905,12 @@ void SampleInstrument::renderComplex(int channel,renderParams *rp,int size) {
 					rp->cacheIdx_=int(idx2) ;
 					rp->cacheFrac_=0 ;
 					readCache(rp,size,speed) ;
-					for (int i=0;i<size && i<88;i++)   // 2 ms, sin click al pasar
-						for (int c=0;c<ch;c++) warpOut_[i*ch+c]=short(warpOut_[i*ch+c]*(i/88.0f)) ;
+					int xf=size<256?size:256 ;   // ~6 ms (o lo que dure el bloque)
+					for (int i=0;i<size+2;i++) {
+						float g=i>=xf?1.0f:float(i)/xf ;
+						for (int c=0;c<ch;c++)
+							warpOut_[i*ch+c]=short(prev[i*ch+c]*(1.0f-g)+warpOut_[i*ch+c]*g) ;
+					}
 					if (getenv("TRK_LOADLOG")) fprintf(stderr,"[WARP] nuevo tempo: ya estirado, se pasa a él\n") ;
 					return ;
 				}
