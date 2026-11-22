@@ -15,6 +15,18 @@ for f in log warp; do
   mv -f "$f.txt" "$f-1.txt"
 done
 echo "=== $(date) (Probar Warp) ===" > log.txt
+# los límites de temperatura del sistema (a cuántos grados frena, a cuántos se apaga)
+{
+  echo "=== límites de temperatura"
+  for z in /sys/class/thermal/thermal_zone*; do
+    echo "$(basename $z) $(cat $z/type 2>/dev/null) política $(cat $z/policy 2>/dev/null)"
+    for t in $z/trip_point_*_temp; do
+      [ -f "$t" ] || continue
+      n=${t%_temp}
+      echo "  $(basename $n): $(( $(cat $t) / 1000 ))C $(cat ${n}_type 2>/dev/null)"
+    done
+  done
+} > warp.txt 2>&1
 ./chancho6-rg353v.elf >> log.txt 2>&1 &
 PID=$!
 while kill -0 $PID 2>/dev/null; do
