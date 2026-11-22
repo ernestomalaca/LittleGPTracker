@@ -64,6 +64,8 @@ struct renderParams {
     float svfG_, svfK_ ;     // coeficientes del bloque
     float svfHz_, svfSt_ ;   // corte base (con key tracking) y semitonos de la envolvente
     int svfType_ ;
+    int svfCur_, svfPrev_ ;  // lo que suena y lo de antes (0 LP, 1 BP, 2 HP, 3 sin filtro; -1 nota nueva)
+    int svfXf_ ;             // muestras que faltan del fundido entre los dos (sin click)
     int fenvStage_ ;         // trk2als: envolvente del filtro (0..4 como la de volumen)
     float fenvLevel_, fenvReleaseFrom_ ;
     int fenvClock_ ;           // 0 LP, 1 BP, 2 HP; -1 sin filtro            // trk2als: STOP: release corto

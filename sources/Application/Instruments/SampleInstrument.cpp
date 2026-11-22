@@ -699,6 +699,8 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 		rp->fenvClock_=0 ;
 		if (!wasSounding) {
 			rp->svfIc1_[0]=rp->svfIc1_[1]=rp->svfIc2_[0]=rp->svfIc2_[1]=0 ;
+			rp->svfCur_=-1 ;   // la nota nueva toma el tipo sin fundido
+			rp->svfXf_=0 ;
 		}
 		for (int k=0;k<5;k++) rp->sLive_[k]=-9999 ;
 		rp->startDelay_=0 ;
@@ -2313,9 +2315,21 @@ int SampleInstrument::snapZero(int frame,int lo,int hi,unsigned char note,SoundS
 // Filtro del Sampler: state variable de 12 dB/oct (forma TPT de Cytomic),
 // pasabajos, pasabanda o pasaaltos de verdad, en Hz
 void SampleInstrument::simplerFilter(renderParams *rp,fixed *buffer,int size) {
-	if (rp->svfType_<0) return ;
+	// cambiar de tipo (o prender / apagar el filtro) de golpe hace click: la
+	// salida pasa de uno a otro en ~6 ms. El SVF da LP, BP y HP a la vez
+	const int XF=256 ;
+	int want=(rp->svfType_<0)?3:rp->svfType_ ;
+	if (rp->svfCur_<0 || rp->svfCur_>3) { rp->svfCur_=want ; rp->svfXf_=0 ; }
+	else if (want!=rp->svfCur_) {
+		if (rp->svfCur_==3 && rp->svfXf_==0)   // venía sin filtro: estado limpio
+			rp->svfIc1_[0]=rp->svfIc1_[1]=rp->svfIc2_[0]=rp->svfIc2_[1]=0 ;
+		rp->svfPrev_=rp->svfCur_ ;
+		rp->svfCur_=want ;
+		rp->svfXf_=XF ;
+	}
+	if (rp->svfCur_==3 && rp->svfXf_==0) return ;
 	float k=rp->svfK_ ;
-	int type=rp->svfType_ ;
+	int type=rp->svfCur_, prev=rp->svfPrev_ ;
 	// por tramos de 32 muestras (< 1 ms): la envolvente mueve el corte sin
 	// escalones audibles
 	for (int at=0;at<size;at+=32) {
@@ -2329,6 +2343,7 @@ void SampleInstrument::simplerFilter(renderParams *rp,fixed *buffer,int size) {
 		float a1=1.0f/(1.0f+g*(g+k)), a2=g*a1, a3=g*a2 ;
 		for (int c=0;c<2;c++) {
 			float ic1=rp->svfIc1_[c], ic2=rp->svfIc2_[c] ;
+			int xf=rp->svfXf_ ;
 			fixed *p=buffer+2*at+c ;
 			for (int i=0;i<n;i++,p+=2) {
 				float v0=fp2fl(*p) ;
@@ -2338,7 +2353,13 @@ void SampleInstrument::simplerFilter(renderParams *rp,fixed *buffer,int size) {
 				ic1=2*v1-ic1 ;
 				ic2=2*v2-ic2 ;
 				// pasabanda normalizado: 0 dB en la frecuencia de corte
-				float out=(type==0)?v2:((type==1)?k*v1:v0-k*v1-v2) ;
+				float out=(type==0)?v2:((type==1)?k*v1:((type==2)?v0-k*v1-v2:v0)) ;
+				if (xf>0) {
+					float old=(prev==0)?v2:((prev==1)?k*v1:((prev==2)?v0-k*v1-v2:v0)) ;
+					float t=float(xf)/XF ;
+					out=out+(old-out)*t ;
+					xf-- ;
+				}
 				*p=fl2fp(out) ;
 			}
 			// sin ruido de números diminutos
@@ -2347,6 +2368,7 @@ void SampleInstrument::simplerFilter(renderParams *rp,fixed *buffer,int size) {
 			rp->svfIc1_[c]=ic1 ;
 			rp->svfIc2_[c]=ic2 ;
 		}
+		rp->svfXf_=(rp->svfXf_>n)?rp->svfXf_-n:0 ;
 	}
 }
 
