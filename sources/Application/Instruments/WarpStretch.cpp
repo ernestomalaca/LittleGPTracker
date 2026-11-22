@@ -42,6 +42,7 @@ void WarpStretch::Process(float **in,int inSamples,float **out,int outSamples) {
 #include <cstdio>
 #ifdef __linux__
 #include <sys/resource.h>
+#include <sched.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 #endif
@@ -203,10 +204,19 @@ void build(Entry *e) {
 	evictLocked(e) ;
 }
 
-void worker() {
+// trk2als: los hilos de estirado corren solo con lo que sobra del procesador
+// (SCHED_IDLE): nunca le quitan el turno al audio ni a la interfaz
+void idleThread() {
 #ifdef __linux__
-	setpriority(PRIO_PROCESS,(id_t)syscall(SYS_gettid),10) ;   // el audio primero
+	struct sched_param sp ;
+	sp.sched_priority=0 ;
+	if (sched_setscheduler(0,SCHED_IDLE,&sp)!=0)
+		setpriority(PRIO_PROCESS,(id_t)syscall(SYS_gettid),19) ;
 #endif
+}
+
+void worker() {
+	idleThread() ;
 	for (;;) {
 		Entry *e ;
 		{
@@ -300,9 +310,10 @@ void *WarpCache::Acquire(const WarpCacheKey &k) {
 	if (!workerStarted) {
 		// un hilo por núcleo libre (la RG353V tiene 4: el audio usa uno)
 		workerStarted=true ;
+		// la RG353V tiene 4 núcleos: uno para el audio, otro para la interfaz
 		unsigned n=std::thread::hardware_concurrency() ;
-		n=(n>1)?n-1:1 ;
-		if (n>3) n=3 ;
+		n=(n>2)?n-2:1 ;
+		if (n>2) n=2 ;
 		for (unsigned i=0;i<n;i++) std::thread(worker).detach() ;
 	}
 	cv.notify_one() ;
@@ -344,9 +355,7 @@ void pvPut16(std::ofstream &f,int v) { f.put(char(v&255)) ; f.put(char((v>>8)&25
 void pvPut32(std::ofstream &f,long v) { pvPut16(f,int(v&0xFFFF)) ; pvPut16(f,int((v>>16)&0xFFFF)) ; }
 
 void pvJob(int gen,std::string in,std::string out,double ratio,float transpose) {
-#ifdef __linux__
-	setpriority(PRIO_PROCESS,(id_t)syscall(SYS_gettid),10) ;   // el audio primero
-#endif
+	idleThread() ;
 	WavFile *w=WavFile::Open(in.c_str()) ;
 	long n=w?w->GetSize(-1):0 ;
 	int ch=w?w->GetChannelCount(-1):0 ;
