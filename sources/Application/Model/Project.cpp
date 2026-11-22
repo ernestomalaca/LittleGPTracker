@@ -80,6 +80,8 @@ tempoNudge_(0)
         this->Insert(new Variable(name, VAR_TRACKNAME(ch), ""));
         sprintf(name, "trackinstr%d", ch + 1);
         this->Insert(new Variable(name, VAR_TRACKINSTR(ch), ch < 4 ? ch : -1, 0));
+        sprintf(name, "trackcolor%d", ch + 1);   // -1: el de su columna (proyectos de antes)
+        this->Insert(new Variable(name, VAR_TRACKCOLOR(ch), -1, 0));
     }
     // proyectos de antes de los tipos guardaban cuántas pistas de audio había
     Variable *audioTracks = new Variable("audiotracks", VAR_AUDIOTRACKS, 0, 8);
@@ -319,7 +321,23 @@ int Project::AddTrack(TrackType type) {
         if (owner >= 0) GetInstrumentBank()->GetInstrument(owner)->Purge();   // limpio
     }
     FindVariable(VAR_TRACKINSTR(ch))->SetInt(owner);
+    // un color que no tenga otra pista (el de su columna si está libre)
+    {
+        bool usedC[8] = {false};
+        for (int c = 0; c < SONG_CHANNEL_COUNT; c++)
+            if (c != ch && TrackExists(c)) usedC[GetTrackColor(c)] = true;
+        int col = usedC[ch % 8] ? -1 : ch % 8;
+        for (int i = 0; i < 8 && col < 0; i++) if (!usedC[i]) col = i;
+        FindVariable(VAR_TRACKCOLOR(ch))->SetInt(col < 0 ? ch % 8 : col);
+    }
     return ch;
+}
+
+int Project::GetTrackColor(int channel) {
+    if (channel < 0 || channel >= SONG_CHANNEL_COUNT) return 0;
+    Variable *v = FindVariable(VAR_TRACKCOLOR(channel));
+    int c = v ? v->GetInt() : -1;
+    return c >= 0 ? c % 8 : channel % 8;
 }
 
 void Project::DeleteTrack(int channel) {
@@ -367,6 +385,7 @@ void Project::DeleteTrack(int channel) {
         std::string n = FindVariable(VAR_TRACKNAME(c + 1))->GetString();
         FindVariable(VAR_TRACKNAME(c))->SetString(n.c_str());
         FindVariable(VAR_TRACKINSTR(c))->SetInt(FindVariable(VAR_TRACKINSTR(c + 1))->GetInt());
+        FindVariable(VAR_TRACKCOLOR(c))->SetInt(GetTrackColor(c + 1));   // su color va con ella
     }
     // trk2als: y lo de su canal en el mezclador (volumen, bus, filtros)
     Mixer *mx = Mixer::GetInstance();
@@ -379,6 +398,7 @@ void Project::DeleteTrack(int channel) {
     FindVariable(VAR_TRACKTYPE(SONG_CHANNEL_COUNT - 1))->SetInt(TT_OFF);
     FindVariable(VAR_TRACKNAME(SONG_CHANNEL_COUNT - 1))->SetString("");
     FindVariable(VAR_TRACKINSTR(SONG_CHANNEL_COUNT - 1))->SetInt(-1);
+    FindVariable(VAR_TRACKCOLOR(SONG_CHANNEL_COUNT - 1))->SetInt(-1);
 }
 
 bool Project::IsAudioChannel(int channel) {

@@ -1129,6 +1129,10 @@ void SampleInstrument::InitAudioClip() {
 	int vol=volume_->GetInt() ;
 	int db=(vol<=0)?-36:int(roundf(20.0f*log10f(vol/128.0f))) ;
 	FindVariable(SIP_A_GAIN)->SetInt(db<-36?-36:(db>6?6:db)) ;
+	// trk2als: con qué warp entran los loops nuevos (config.xml:
+	// <LOOPWARP value="complex"/>; si no, re-pitch)
+	const char *lw=Config::GetInstance()->GetValue("LOOPWARP") ;
+	if (lw && !strcasecmp(lw,"complex") && WarpStretch::Available()) warp_->SetInt(1) ;
 }
 
 void SampleInstrument::startTail(int channel) {

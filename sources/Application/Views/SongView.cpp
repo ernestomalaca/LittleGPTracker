@@ -2623,7 +2623,8 @@ void SongView::drawBlockGrid() {
             DrawText(x + (COLW - GAP) / 2 - 8, HY + 4, "+", here ? bg : dim, 1);
             break;
         }
-        GUIColor tc(trackColors[i][0], trackColors[i][1], trackColors[i][2]);
+        int tci = project->GetTrackColor(i);
+        GUIColor tc(trackColors[tci][0], trackColors[tci][1], trackColors[tci][2]);
         FillRect(x, HY, COLW - GAP, HH, here ? cur : (i == curCol ? Mix(bg, fg, 16) : panel), 3);
         FillRect(x, HY, COLW - GAP, 3, tc);
         GUIColor ncol = here ? bg : (player->IsChannelMuted(i) ? dim : fg);
@@ -2663,7 +2664,8 @@ void SongView::drawBlockGrid() {
             bool audio = isAudioColumn(i);
             bool empty = (d == 0xFF) && cell != newSlotCell_;
             bool muted = player->IsChannelMuted(i);
-            GUIColor tc(trackColors[i][0], trackColors[i][1], trackColors[i][2]);
+            int tci = project->GetTrackColor(i);
+        GUIColor tc(trackColors[tci][0], trackColors[tci][1], trackColors[tci][2]);
             if (muted) tc = Mix(tc, bg, 55);
             bool lit = (i == curCol) || hereRow;
             if (lit) tc = Mix(tc, fg, 12);
@@ -2766,7 +2768,8 @@ void SongView::drawBlockGrid() {
         FillRect(x, VY, w, VH, panel, 3);
         int v = blockVu_[i];
         if (v > 0) {
-            GUIColor tc(trackColors[i][0], trackColors[i][1], trackColors[i][2]);
+            int tci = project->GetTrackColor(i);
+        GUIColor tc(trackColors[tci][0], trackColors[tci][1], trackColors[tci][2]);
             int hh = (VH - 6) * v / 10;
             FillRect(x + 3, VY + VH - 3 - hh, w - 6, hh, v >= 10 ? ColorOf(CD_MUTE) : tc, 2);
         }

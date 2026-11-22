@@ -126,6 +126,8 @@ Loops en complex
   tempo), Chancho lo estira por detrás y el clip entra en el siguiente 1
   ya listo: puede tardar un compás o dos, pero no se traba. La segunda vez
   entra al instante.
+  Los loops nuevos entran en re-pitch; para que entren en complex, en
+  chancho6/config.xml: <LOOPWARP value="complex"/>
 
 Automatización (vista del instrumento)
   Y + Start graba (con precuenta si no suena; si suena, desde el siguiente

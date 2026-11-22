@@ -597,5 +597,6 @@ GUIColor View::TrackColor(int track) {
 		}
 	}
 	int i = track < 0 ? 0 : track % 8 ;
+	if (track >= 0 && viewData_ && viewData_->project_) i = viewData_->project_->GetTrackColor(track) ;
 	return GUIColor(tc[i][0], tc[i][1], tc[i][2]) ;
 }
