@@ -12,6 +12,8 @@ public:
 	~Config() ;
 	const char *GetValue(const char *key) ;
 	void ProcessArguments(int argc,char **argv) ;
+	// trk2als: cambia (o agrega) un valor y lo guarda en config.xml
+	bool SetPersistent(const char *key,const char *value) ;
 } ;
 
 #endif

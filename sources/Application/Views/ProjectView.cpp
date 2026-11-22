@@ -182,10 +182,20 @@ ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
         {VAR_MIDIDEVICE, 1, 7, 0, 0, 1, 1},     {VAR_METRONOME, 10, 7, 0, 1, 1, 1},
         {VAR_TRANSPOSE, 19, 7, -48, 48, 1, 12}, {VAR_FOLD, 28, 7, 0, 1, 1, 1},
     };
+    // trk2als: la ficha 4 (era la salida MIDI de LGPT, que aquí no hay) es
+    // la latencia: baja 256/1, media 512/2, alta 512/4 (bloque / reserva)
+    {
+        static char *latNames[3] = {(char *)"baja", (char *)"media", (char *)"alta"};
+        Config *cfg = Config::GetInstance();
+        const char *bs = cfg->GetValue("AUDIOBUFFERSIZE"), *pb = cfg->GetValue("AUDIOPREBUFFERCOUNT");
+        int b = bs ? atoi(bs) : 512, p = pb ? atoi(pb) : 4;
+        latLast_ = (b <= 256 && p <= 1) ? 0 : (p <= 2 ? 1 : 2);
+        latVar_ = new Variable("latencia", 0, latNames, 3, latLast_);
+    }
     for (int k = 0; k < 8; k++) {
-        v = project_->FindVariable(chips[k].var);
+        v = (k == 4) ? latVar_ : project_->FindVariable(chips[k].var);
         NAssert(v);
-        int mx = chips[k].var == VAR_MIDIDEVICE ? MidiService::GetInstance()->Size() : chips[k].max;
+        int mx = k == 4 ? 2 : chips[k].max;
         position = GUIPoint(chips[k].x, chips[k].y);
         UIIntVarField *cf = new UIIntVarField(position, *v, "%s", chips[k].min, mx, chips[k].xo, chips[k].yo);
         chipField_[k] = cf;
@@ -218,6 +228,16 @@ void ProjectView::ProcessButtonMask(unsigned short mask,bool pressed) {
         return;
 
     FieldView::ProcessButtonMask(mask);
+
+    // trk2als: la latencia cambió: a config.xml (al reiniciar toma efecto)
+    if (latVar_ && latVar_->GetInt() != latLast_) {
+        latLast_ = latVar_->GetInt();
+        static const char *bsz[3] = {"256", "512", "512"}, *pre[3] = {"1", "2", "4"};
+        Config *cfg = Config::GetInstance();
+        bool ok = cfg->SetPersistent("AUDIOBUFFERSIZE", bsz[latLast_]) &&
+                  cfg->SetPersistent("AUDIOPREBUFFERCOUNT", pre[latLast_]);
+        notify(ok ? "Latencia guardada: reinicia Chancho" : "No se pudo guardar la latencia");
+    }
 
     if (mask & EPBM_R) {
         if (mask&EPBM_DOWN) {
@@ -513,7 +533,7 @@ void ProjectView::drawBoard() {
     if (fO) DrawText(lx + 12, TY + 76, "+ si va atrasado", dim, 0);
 
     // fichas
-    static const char *chipName[8] = {"VOLUMEN", "DRIVE", "TIPO", "NIVEL", "MIDI", "METRÓNOMO", "TRANSP", "FOLD"};
+    static const char *chipName[8] = {"VOLUMEN", "DRIVE", "TIPO", "NIVEL", "LATENCIA", "METRÓNOMO", "TRANSP", "FOLD"};
     for (int k = 0; k < 8; k++) {
         int x = 24 + (k % 4) * 150, y = 182 + (k / 4) * 76;
         int cw = 142;

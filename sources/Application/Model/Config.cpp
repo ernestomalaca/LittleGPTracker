@@ -64,6 +64,29 @@ Config::~Config()
 
 //------------------------------------------------------------------------------
 
+bool Config::SetPersistent(const char *key,const char *value)
+{
+	Variable *v=FindVariable(key) ;
+	if (v) v->SetString(value) ;
+	else Insert(new Variable(key,0,value)) ;
+	Path path("bin:config.xml") ;
+	TiXmlDocument doc(path.GetPath()) ;
+	if (!doc.LoadFile()) return false ;
+	TiXmlNode *root=doc.FirstChild("CONFIG") ;
+	if (!root) root=doc.FirstChild("GPCONFIG") ;
+	if (!root) return false ;
+	TiXmlElement *e=root->FirstChildElement(key) ;
+	if (!e) {
+		TiXmlElement add(key) ;
+		e=root->InsertEndChild(add)->ToElement() ;
+	}
+	if (!e) return false ;
+	e->SetAttribute("value",value) ;
+	bool ok=doc.SaveFile() ;
+	Trace::Log("CONFIG","%s=%s guardado: %s",key,value,ok?"si":"no") ;
+	return ok ;
+}
+
 const char *Config::GetValue(const char *key) 
 {
 	Variable *v=FindVariable(key) ;

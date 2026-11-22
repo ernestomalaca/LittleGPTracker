@@ -40,6 +40,9 @@ private:
   void drawBoard();
   UIField *rootField_, *scaleField_, *linkField_, *ofsField_;
   UIField *chipField_[8];
+  // trk2als: la latencia del audio (config.xml; toma efecto al reiniciar)
+  Variable *latVar_;
+  int latLast_;
   void drawBigNumber(int x, int y, const char *txt, int h, GUIColor c);
   UIField *btnField_[7];
   std::string msg_;
