@@ -71,6 +71,7 @@ ClipView::ClipView(GUIWindow &w, ViewData *viewData) : View(w, viewData) {
     accelV_ = 0;
     accelT_ = 0;
     curvePasting_ = curveBPending_ = curveAPending_ = false;
+    curveYPending_ = false;
 }
 
 ClipView::~ClipView() {}
@@ -1181,6 +1182,7 @@ void ClipView::handleButton(unsigned short mask, bool pressed) {
                 curveCopy(true);
             }
             if (curveBPending_ && !(mask & EPBM_B)) { curveBPending_ = false; curveCopy(false); }   // B sola: copia
+            if (curveYPending_ && !(mask & EPBM_Y)) { curveYPending_ = false; curveSimplify(); }   // Y sola: simplifica
             if (curveAPending_ && !(mask & EPBM_A)) {   // A sola con algo marcado: cancela la marca
                 curveAPending_ = false;
                 curveMarking_ = false;
@@ -1871,6 +1873,99 @@ void ClipView::curveCopy(bool cut) {
 
 // quita la curva de ese tramo: lo de antes se queda en su valor hasta el
 // final del tramo y lo de después sigue como estaba
+// Y sola con algo marcado: lo grabado o capturado (muchos escalones chicos)
+// se queda con los nodos justos para dibujar la misma forma, en rampas.
+// Douglas-Peucker sobre lo que suena, midiendo el error en la altura de la
+// pantalla (en Hz y en ms también, por su escala)
+struct SimpV { int pos, val; SimpV(int p, int v) : pos(p), val(v) {} };
+
+void ClipView::curveSimplify() {
+    Clip &c = clip();
+    AutoLane *l = c.FindLane(viewData_->curveID_, -1);
+    if (!l || l->points.size() < 3) { message("Nada que simplificar"); return; }
+    int s0, s1;
+    curveRange(s0, s1);
+    int a = s0 * CLIP_TICKS, b = (s1 + 1) * CLIP_TICKS - 1;
+    int total = c.Steps() * CLIP_TICKS;
+    std::vector<AutoPoint> &p = l->points;
+    int n = (int)p.size();
+    int i0 = -1, i1 = -1;
+    for (int k = 0; k < n; k++)
+        if (p[k].pos >= a && p[k].pos <= b) { if (i0 < 0) i0 = k; i1 = k; }
+    if (i0 < 0 || i1 - i0 < 2) { message("Nada que simplificar"); return; }
+    size_t before = p.size();
+    // de lista (tipo de filtro): sin rampas; solo se quitan los repetidos
+    if (viewData_->curveListN_ > 0) {
+        std::vector<AutoPoint> out;
+        for (int k = 0; k < n; k++) {
+            if (k > i0 && k <= i1 && !out.empty() && out.back().value == p[k].value && !p[k].inv && !out.back().inv) continue;
+            out.push_back(p[k]);
+        }
+        p = out;
+    } else {
+        // los vértices de lo que suena: cada escalón es (inicio, valor) y
+        // (justo antes del siguiente, valor)
+        std::vector<SimpV> vs;
+        for (int k = i0; k <= i1; k++) {
+            int val = (p[k].inv && k + 1 < n) ? p[k + 1].value : p[k].value;
+            vs.push_back(SimpV(p[k].pos, val));
+            if (!p[k].ramp) {
+                int next = k + 1 < n ? p[k + 1].pos : total;
+                int end = std::min(next - 1, b);
+                if (k == i1 && next > b + 1) end = std::min(next - 1, total - 1);
+                if (end > p[k].pos) vs.push_back(SimpV(end, val));
+            }
+        }
+        bool lastRamp = p[i1].ramp;   // si el último iba en rampa hacia afuera, sigue así
+        int m = (int)vs.size();
+        std::vector<bool> keep(m, false);
+        keep[0] = keep[m - 1] = true;
+        const double TOL = 0.012;
+        std::vector<std::pair<int, int> > st;
+        st.push_back(std::make_pair(0, m - 1));
+        while (!st.empty()) {
+            int x0 = st.back().first, x1 = st.back().second;
+            st.pop_back();
+            if (x1 - x0 < 2) continue;
+            double worst = -1;
+            int wi = -1;
+            for (int j = x0 + 1; j < x1; j++) {
+                double t = vs[x1].pos == vs[x0].pos ? 0 : double(vs[j].pos - vs[x0].pos) / (vs[x1].pos - vs[x0].pos);
+                double lv = vs[x0].val + (vs[x1].val - vs[x0].val) * t;   // la rampa va pareja en el valor
+                double e = fabs(curveNorm(vs[j].val) - curveNorm(int(lv + (lv < 0 ? -0.5 : 0.5))));
+                if (e > worst) { worst = e; wi = j; }
+            }
+            if (worst > TOL) {
+                keep[wi] = true;
+                st.push_back(std::make_pair(x0, wi));
+                st.push_back(std::make_pair(wi, x1));
+            }
+        }
+        std::vector<AutoPoint> out;
+        for (int k = 0; k < i0; k++) out.push_back(p[k]);
+        int lastKept = -1;
+        for (int j = 0; j < m; j++) {
+            if (!keep[j]) continue;
+            if (lastKept >= 0 && vs[j].pos == vs[lastKept].pos) { out.back().value = vs[j].val; continue; }
+            out.push_back(AutoPoint(vs[j].pos, vs[j].val, true));
+            lastKept = j;
+        }
+        // el último: escalón si era el final de un escalón (o de lo que
+        // seguía igual), rampa si la de antes seguía hacia afuera
+        if (!out.empty()) out.back().ramp = (vs[lastKept].pos == p[i1].pos) ? lastRamp : false;
+        for (int k = i1 + 1; k < n; k++) out.push_back(p[k]);
+        // rampas planas = escalones (lo mismo, más simple de editar)
+        for (size_t k = 0; k + 1 < out.size(); k++)
+            if (out[k].ramp && out[k].value == out[k + 1].value) out[k].ramp = false;
+        p = out;
+        l->Sort();
+    }
+    curveSel_ = -1;
+    char m[48];
+    snprintf(m, sizeof(m), "Simplificada: %d nodos -> %d", (int)before, (int)p.size());
+    message(m);
+}
+
 void ClipView::curveClear(int from, int to) {
     curveSel_ = -1;
     Clip &c = clip();
@@ -2084,6 +2179,7 @@ void ClipView::curveToggle() {
 
 bool ClipView::curveButton(unsigned short mask, unsigned short v) {
     ViewData *d = viewData_;
+    if (v != EPBM_Y) curveYPending_ = false;   // Y + otra cosa ya no es "Y sola"
     {   // sostener una flecha acelera (1, 2, 3... hasta 6)
         unsigned long now = System::GetInstance()->GetClock();
         if (v == accelV_ && now - accelT_ < 250) accelN_++;
@@ -2178,6 +2274,7 @@ bool ClipView::curveButton(unsigned short mask, unsigned short v) {
             if (dt) { curveTransform(CT_WIDTH, dt); return true; }    // X + ← →: más ancho / angosto
             if (dv) { curveTransform(CT_HEIGHT, dv); return true; }   // X + ↑ ↓: más alto / plano
         }
+        if (v == EPBM_Y && mask == EPBM_Y) { curveYPending_ = true; return true; }   // Y sola: simplificar (al soltar)
         if ((mask & EPBM_Y) && dv) {   // Y + ↑ ↓: inclinarlo (el final sube o baja)
             curveTransform(CT_TILT, dv);
             return true;

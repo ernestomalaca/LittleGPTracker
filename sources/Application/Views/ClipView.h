@@ -109,11 +109,13 @@ class ClipView : public View {
     void curveCopy(bool cut);
     void curvePaste();
     void curveClear(int from, int to);
+    void curveSimplify();
     void curveWrite(const std::vector<AutoPoint> &seg, int from, int len);
     bool curveTake(int from, int to, std::vector<AutoPoint> &seg);
     int curveDenorm(double n);
     void curveTransform(int mode, int d);
     bool curveAPending_;
+    bool curveYPending_;   // Y tocado sola con algo marcado: simplificar al soltar
     bool curveBAPending_;           // B + A: borra al soltar (si no vino ↑ ↓)
     void curveDuplicate();
     bool curveAPut_;                // A sola en un paso vacío: el nodo se pone al soltar
