@@ -117,7 +117,7 @@ Automatización (vista del instrumento)
   su loop, y ahí la curva vuelve a mandar (no se borra nada).
   Select + L deshace y Select + R rehace lo grabado (cada vez que soltaste
   A es un paso) y las curvas borradas.
-  B + A sobre un parámetro con curva la borra.
+  B + A sobre un parámetro con curva la borra (Select + L la regresa).
 
 Curvas en el clip
   En el instrumento, A + gatillo L sobre un parámetro automatizable abre su
@@ -139,7 +139,7 @@ Curvas en el clip
     X + ↑ ↓ más alto o más plano; Y + ↑ ↓ lo inclina (el final sube o baja);
     A sola cancela la marca
   - Start toca; Select + L / R deshace / rehace; B + L / R marca el loop
-  - Select tocado solo: de la curva a las notas y de vuelta
+  - Select tocado solo: de la curva a las notas y de vuelta (si el clip tiene esa curva)
   - A + L otra vez: de vuelta a la perilla (ida y vuelta con el mismo atajo)
 
 Recortar el clip

@@ -939,9 +939,6 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 	// A + gatillo L: la curva de este parámetro en el clip (si no se
 	// automatiza, o no hay clip, no pasa nada)
 	if (pressed && mask==(EPBM_A|EPBM_L)) { openCurve() ; return ; }
-	// un toque de Select (nada más) poco después de borrar: recupera la lane
-	if (pressed) selTap_=(mask==EPBM_SELECT) ;
-	else if (selTap_ && !(mask&EPBM_SELECT)) { selTap_=false ; if (undoLane()) return ; }
 	if (!pressed && touching_ && !(mask&EPBM_A)) endTouch() ;
 	if (kitMode_ && padAPending_) {   // A tocada sola en un pad vacío (sin flechas)
 		if (pressed && mask!=EPBM_A) padAPending_=false ;
@@ -3021,7 +3018,7 @@ bool InstrumentView::deleteLane() {
 	MixerService::GetInstance()->Lock() ;
 	c.RemoveLane(id,-1) ;
 	MixerService::GetInstance()->Unlock() ;
-	View::SetNotification("automatización borrada (Select la recupera)") ;
+	View::SetNotification("automatización borrada") ;   // Select + L la regresa, como todo
 	isDirty_=true ;
 	return true ;
 }

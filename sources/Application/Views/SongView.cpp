@@ -2608,6 +2608,12 @@ void SongView::drawBlockGrid() {
         selRect.Normalize();
     }
 
+    // la pista donde está el cursor, un pelo más clara (de arriba a abajo):
+    // para saber siempre dónde estás
+    int curCol = rowMode_ ? -1 : viewData_->songX_;
+    if (curCol >= 0 && curCol < trackCount)
+        FillRect(X0 + curCol * COLW - 2, HY - 2, COLW - GAP + 4, GBOT - HY + 2, Mix(bg, fg, 5), 4);
+
     // cabeceras
     for (int i = 0; i < SONG_CHANNEL_COUNT && i <= trackCount; i++) {
         int x = X0 + i * COLW;
@@ -2618,7 +2624,7 @@ void SongView::drawBlockGrid() {
             break;
         }
         GUIColor tc(trackColors[i][0], trackColors[i][1], trackColors[i][2]);
-        FillRect(x, HY, COLW - GAP, HH, here ? cur : panel, 3);
+        FillRect(x, HY, COLW - GAP, HH, here ? cur : (i == curCol ? Mix(bg, fg, 16) : panel), 3);
         FillRect(x, HY, COLW - GAP, 3, tc);
         GUIColor ncol = here ? bg : (player->IsChannelMuted(i) ? dim : fg);
         DrawText(x + 5, HY + 5, trackKind(project, i), ncol, 1);
@@ -2655,8 +2661,9 @@ void SongView::drawBlockGrid() {
             bool muted = player->IsChannelMuted(i);
             GUIColor tc(trackColors[i][0], trackColors[i][1], trackColors[i][2]);
             if (muted) tc = Mix(tc, bg, 55);
+            if (i == curCol) tc = Mix(tc, fg, 12);
             if (empty) {
-                FillRect(x, y, w, h, cellBg, 3);
+                FillRect(x, y, w, h, i == curCol ? Mix(bg, fg, 11) : cellBg, 3);
                 FillRect(x + w / 2 - 2, y + h / 2 - 2, 4, 4, Mix(bg, fg, 18));
             } else {
                 FillRect(x, y, w, h, tc, 3);

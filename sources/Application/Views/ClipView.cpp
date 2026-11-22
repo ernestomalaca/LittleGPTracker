@@ -2062,9 +2062,12 @@ void ClipView::curveToggle() {
         message("Notas");
         return;
     }
-    if (!d->curveLastID_ || d->curveInstr_ < 0) { message("Sin curva: A + L en el instrumento"); return; }
+    // solo si este clip tiene esa curva; si no, Select no hace nada (ni avisa)
+    if (!d->curveLastID_ || d->curveInstr_ < 0) return;
     int owner = d->project_->GetTrackInstrument(d->songX_);
-    if (owner != d->curveInstr_) { message("Sin curva en esta pista"); return; }
+    if (owner != d->curveInstr_) return;
+    AutoLane *l = clip().FindLane(d->curveLastID_, -1);
+    if (!l || l->points.empty()) return;
     d->curveID_ = d->curveLastID_;
     curveShownID_ = 0;
     View::SetNotification((std::string("Curva: ") + d->curveName_).c_str());

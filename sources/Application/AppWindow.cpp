@@ -407,9 +407,24 @@ void AppWindow::Flush() {
         GUIColor bg = GetColor(CD_BACKGROUND), fg = GetColor(CD_NORMAL);
         GUIRect band(0, 432, 640, 480);
         GUIWindow::FillRoundRect(band, 0, bg);
-        GUIPoint p(44, 450);
-        if (notice.size() <= 36) GUIWindow::BlendText(notice.c_str(), p, fg, 1);
-        else { p._y = 454; GUIWindow::BlendText(notice.substr(0, 74).c_str(), p, fg, 0); }
+        // siempre con la letra grande: si no cabe en una línea, en dos (se
+        // corta entre palabras); más de dos, se recorta
+        const size_t W = 36;
+        std::string l1 = notice, l2;
+        size_t nl = notice.find('\n');
+        if (nl != std::string::npos) { l1 = notice.substr(0, nl); l2 = notice.substr(nl + 1); }
+        else if (notice.size() > W) {
+            size_t cut = notice.rfind(' ', W);
+            if (cut == std::string::npos || cut < W / 2) cut = W;
+            l1 = notice.substr(0, cut);
+            l2 = notice.substr(cut);
+        }
+        while (!l2.empty() && l2[0] == ' ') l2.erase(0, 1);
+        if (l1.size() > W) l1 = l1.substr(0, W);
+        if (l2.size() > W) l2 = l2.substr(0, W - 2) + "..";
+        GUIPoint p(44, l2.empty() ? 450 : 436);
+        GUIWindow::BlendText(l1.c_str(), p, fg, 1);
+        if (!l2.empty()) { p._y = 456; GUIWindow::BlendText(l2.c_str(), p, fg, 1); }
     }
     // trk2als: la ayuda va encima de todo (rejilla y figuras)
     if (_overlayOn && (_overlayDirty || count > 0 || (anyOn && _shapesDirty))) {
@@ -1278,7 +1293,7 @@ void AppWindow::showHelp() {
     GUIColor panel((bg._r * 88 + fg._r * 12) / 100, (bg._g * 88 + fg._g * 12) / 100,
                    (bg._b * 88 + fg._b * 12) / 100);
     const int X = 32, W = 640 - 2 * X, LINE = 24;
-    int h = 20 + 16 + 16 + int(keys.size()) * LINE + 8 + 12 + 16;
+    int h = 20 + 16 + 16 + int(keys.size()) * LINE + 8 + 16 + 20;
     int Y = (480 - h) / 2;
     if (Y < 36) Y = 36;
     _overlay.clear();
@@ -1306,8 +1321,8 @@ void AppWindow::showHelp() {
         t.x = wx; t.text = w; t.color = fg;
         _overlay.push_back(t);
     }
-    t.scale = 0;
-    t.x = X + 24; t.y = Y + h - 24; t.text = "L2+R2 o cualquier botón la cierra"; t.color = dim;
+    t.scale = 1;   // con la letra de siempre (la chica no tiene tildes)
+    t.x = X + 24; t.y = Y + h - 28; t.text = ToLatin1("L2+R2 o cualquier botón la cierra"); t.color = dim;
     _overlay.push_back(t);
     _overlayOn = true;
     _overlayDirty = true;
