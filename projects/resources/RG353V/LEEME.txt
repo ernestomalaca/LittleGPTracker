@@ -150,6 +150,9 @@ Session (como la de Live)
   la escena de la fila que suena (con ■).
   En una escena vacía no hay repeticiones (Y + ↑ ↓ no hace nada); si le
   borras todos los clips, vuelve a ∞.
+  Clips de audio: cada celda es su propio clip (como en Live): copiar,
+  pegar o duplicar crea uno nuevo, con su región, warp y ganancia; el
+  archivo de audio se carga una sola vez. Hasta 191 por proyecto (A00-ABE).
   Lanzar un grupo: Select + B marca, ← → agranda en la misma fila y A
   lanza todos esos clips juntos en el 1 (las celdas vacías de la marca
   detienen su pista). Si la marca tiene varias filas, A la cancela.
@@ -311,6 +314,7 @@ De Live a Chancho (prueba)
   live2chancho.py (en la Mac, Documentos/Dev/handheld/live2chancho) pasa un
   set de Live con pistas de audio en la vista de sesión a un proyecto de
   Chancho: pistas, clips en sus escenas, loop, volumen y tempo (entero).
-  Los audios quedan ya estirados al tempo del proyecto: un loop que ya está
+  Cada clip de Live es un clip propio (los audios idénticos se guardan una
+  vez). Los audios quedan ya estirados al tempo del proyecto: un loop que ya está
   a ese tempo suena tal cual, sin warp ni caché (entra en el 1 a la primera).
   Uso: python3 live2chancho.py "mi set.als" carpeta_del_proyecto

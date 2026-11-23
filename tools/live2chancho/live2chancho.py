@@ -5,9 +5,9 @@
 #
 # Lo que pasa:
 #  - cada pista de audio (máx. 8) -> pista de audio de Chancho, con su nombre
-#  - cada clip de audio -> un loop en su celda (misma pista y escena); si el
-#    audio es idéntico a otro ya convertido (y con la misma ganancia), la
-#    celda usa ese mismo loop (no gasta otro de los 64)
+#  - cada clip de audio -> su propio clip en su celda (misma pista y escena),
+#    independiente como en Live; si el audio es idéntico a otro ya convertido,
+#    el WAV se escribe una sola vez y los dos clips lo usan
 #    * se recorta la región del loop (o del clip si no tiene loop) a un WAV
 #      de 44.1 kHz / 16 bits en samples/, así Chancho lo toca exacto
 #    * compases = largo en beats / 4; el audio se estira (conservando el
@@ -22,7 +22,7 @@
 import sys, os, gzip, math, re, subprocess, xml.etree.ElementTree as ET
 
 AUDIO_CLIP_BASE = 0x40
-MAX_CLIPS = 0x40          # A00..A3F
+MAX_CLIPS = 0xFF - 0x40   # A00..ABE (191 clips de audio)
 SR = 44100
 
 
@@ -85,7 +85,7 @@ def main():
     names = []
     report = []
     nclip = 0
-    seen = {}                 # (audio idéntico, ganancia, warp) -> el loop que ya existe
+    seen = {}                 # audio idéntico -> el WAV que ya está (se escribe una vez)
     import hashlib, tempfile, shutil
     tmpdir = tempfile.mkdtemp(prefix='live2chancho')
     for ti, t in enumerate(tracks):
@@ -136,22 +136,22 @@ def main():
             exact(out, frames)   # el largo exacto (el estirado deja unos cuadros de más o de menos)
             import wave
             w = wave.open(out)
-            key = (hashlib.md5(w.readframes(w.getnframes())).hexdigest(), gain, mode == 3)
+            key = hashlib.md5(w.readframes(w.getnframes())).hexdigest()
             w.close()
             warp = 're-pitch' if mode == 3 else 'complex'
-            if key in seen:   # el mismo audio ya es un loop: la celda usa ese (no gasta otro)
-                song[ti + 8 * row] = seen[key]
-                os.remove(out)
-                report.append('  %-18s escena %02X  %-26s = A%02X (el mismo audio)' %
-                              (tname[:18], row, cname[:26], seen[key] - AUDIO_CLIP_BASE))
-                continue
             if nclip >= MAX_CLIPS:
-                report.append('  %-18s escena %02X  sin lugar (máx. %d loops distintos)' % (tname[:18], row, MAX_CLIPS))
+                report.append('  %-18s escena %02X  sin lugar (máx. %d clips de audio)' % (tname[:18], row, MAX_CLIPS))
                 os.remove(out)
                 continue
+            same = ''
+            if key in seen:   # el mismo audio ya está escrito: este clip lo usa (cada clip es independiente)
+                os.remove(out)
+                fname = seen[key]
+                same = '  (audio = %s)' % fname
+            else:
+                seen[key] = fname
+                shutil.move(out, os.path.join(dest, 'samples', fname))
             iid = AUDIO_CLIP_BASE + nclip
-            seen[key] = iid
-            shutil.move(out, os.path.join(dest, 'samples', fname))
             song[ti + 8 * row] = iid
             instruments.append((iid, {
                 'sample': fname, 'start': 0, 'loopstart': 0, 'end': frames,
@@ -160,7 +160,7 @@ def main():
                 'a gain': gain, 'audio clip': 1, 'a init': 1,
             }))
             report.append('  %-18s escena %02X  %-26s A%02X  %2d compases  %.2f -> %d bpm  %s  %+d dB' %
-                          (tname[:18], row, cname[:26], iid - AUDIO_CLIP_BASE, bars, srcbpm, bpm, warp, gain))
+                          (tname[:18], row, cname[:26], iid - AUDIO_CLIP_BASE, bars, srcbpm, bpm, warp, gain) + same)
             nclip += 1
 
     # --- el proyecto, sobre la plantilla
@@ -190,6 +190,9 @@ def main():
     if model is None:
         sys.exit('la plantilla no trae ningún loop de audio para copiar')
     txt = re.sub(r'        <INSTRUMENT ID="[0-9A-F]+" TYPE="Sample">.*?</INSTRUMENT>\n', '', txt, flags=re.S)
+    # los MIDI out de la plantilla (en proyectos viejos iban en 80-8F, donde
+    # ahora caen clips de audio): fuera, Chancho los crea solo
+    txt = re.sub(r'        <INSTRUMENT ID="[0-9A-F]+" TYPE="Midi">.*?</INSTRUMENT>\n', '', txt, flags=re.S)
     blocks = ''
     for iid, prm in instruments:
         b = re.sub(r'ID="[0-9A-F]+"', 'ID="%02X"' % iid, model, count=1)
@@ -203,8 +206,8 @@ def main():
     if os.path.exists(ref):
         os.remove(ref)
     used = sum(1 for b in song if b != 0xFF)
-    print('tempo %.2f -> %d, %d pistas, %d celdas con %d loops distintos (de %d)' %
-          (tempo, target, len(tracks), used, nclip, MAX_CLIPS))
+    print('tempo %.2f -> %d, %d pistas, %d clips de audio (de %d), %d audios distintos' %
+          (tempo, target, len(tracks), nclip, MAX_CLIPS, len(seen)))
     shutil.rmtree(tmpdir, ignore_errors=True)
     print('\n'.join(report))
 

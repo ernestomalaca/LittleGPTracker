@@ -8,10 +8,13 @@
 #define SONG_CHANNEL_COUNT 8
 #define SONG_ROW_COUNT 256
 
-#define MAX_SAMPLEINSTRUMENT_COUNT 0x80
-// trk2als: los loops de las pistas de audio usan los instrumentos desde aquí
-// (A00 = 0x40); los de las pistas MIDI, los de abajo
+// trk2als: 0x00-0x3F, los sonidos de las pistas MIDI; 0x40-0xFE, los clips de
+// las pistas de audio (A00-ABE: la celda guarda ese número; 0xFF = vacía).
+// Antes eran 0x80 (64 clips de audio) y los MIDI out iban en 0x80-0x8F: los
+// proyectos viejos se leen igual (ver InstrumentBank::RestoreContent)
+#define MAX_SAMPLEINSTRUMENT_COUNT 0xFF
 #define AUDIO_CLIP_BASE 0x40
+#define OLD_MIDIINSTRUMENT_BASE 0x80
 #define MAX_MIDIINSTRUMENT_COUNT 0x10
 
 #define MAX_INSTRUMENT_COUNT (MAX_SAMPLEINSTRUMENT_COUNT+MAX_MIDIINSTRUMENT_COUNT)

@@ -1102,7 +1102,7 @@ void SongView::copyMark(std::vector<SesCell> &out) {
         }
 }
 
-// pega (los clips MIDI como clips nuevos e independientes); devuelve cuántos
+// pega (los clips MIDI y de audio como clips nuevos e independientes); devuelve cuántos
 int SongView::pasteCells(const std::vector<SesCell> &cells, int col, int row, int &skipped) {
     Song *song = viewData_->song_;
     Project *project = viewData_->project_;
@@ -1118,7 +1118,19 @@ int SongView::pasteCells(const std::vector<SesCell> &cells, int col, int row, in
         }
         unsigned char *dst = &song->data_[c + SONG_CHANNEL_COUNT * w];
         if (cell.audio) {
-            *dst = cell.value;
+            // trk2als: un clip de audio pegado es independiente (como en Live):
+            // si el original sigue en alguna celda, una copia en un lugar libre;
+            // si ya no está (se cortó), el mismo
+            unsigned char v = cell.value;
+            bool inUse = false;
+            for (int i = 0; i < SONG_ROW_COUNT * SONG_CHANNEL_COUNT && !inUse; i++)
+                inUse = song->data_[i] == v && isAudioColumn(i % SONG_CHANNEL_COUNT) && &song->data_[i] != dst;
+            if (inUse) {
+                unsigned char nv = freeClip();
+                if (nv == 0xFF || !project->GetInstrumentBank()->CopyInto(v, nv)) { skipped++; continue; }
+                v = nv;
+            }
+            *dst = v;
         } else {
             unsigned short id = newClipId();
             if (id == NO_MORE_CLIP) { skipped++; continue; }

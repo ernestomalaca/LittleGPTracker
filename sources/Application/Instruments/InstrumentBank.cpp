@@ -59,13 +59,13 @@ I_Instrument *InstrumentBank::GetInstrument(int i) {
 } ;
 
 void InstrumentBank::SaveContent(TiXmlNode *node) {
-	char hex[3] ;
+	char hex[8] ;
 	for (int i=0;i<MAX_INSTRUMENT_COUNT;i++) {
 
 		I_Instrument *instr=instrument_[i] ;
 		if (!instr->IsEmpty()) {
 			TiXmlElement data("INSTRUMENT") ;
-			hex2char(i,hex) ;
+			snprintf(hex,sizeof(hex),"%02X",i) ;   // trk2als: desde 0x100, tres cifras
 			data.SetAttribute("ID",hex) ;
 			data.SetAttribute("TYPE",InstrumentTypeData[instr->GetType()]) ;
 
@@ -105,9 +105,7 @@ void InstrumentBank::RestoreContent(TiXmlElement *element) {
 			// Get the instrument ID
 			
 			const char* hexid=current->Attribute("ID") ;
-			unsigned char b1=(c2h__(hexid[0]))<<4 ;
-			unsigned char b2=c2h__(hexid[1]) ;
-			unsigned char id=b1+b2 ;			
+			int id=hexid?int(strtol(hexid,0,16)):-1 ;   // trk2als: dos o tres cifras
 
 			InstrumentType it=IT_LAST ;
 			const char* instype=current->Attribute("TYPE") ;
@@ -121,7 +119,11 @@ void InstrumentBank::RestoreContent(TiXmlElement *element) {
 			} else {
 				it=(id<MAX_SAMPLEINSTRUMENT_COUNT)?IT_SAMPLE:IT_MIDI ;
 			} ;
-			if (id<MAX_INSTRUMENT_COUNT) {
+			// trk2als: proyecto viejo: los MIDI out estaban en 0x80-0x8F
+			if (it==IT_MIDI && id>=OLD_MIDIINSTRUMENT_BASE && id<OLD_MIDIINSTRUMENT_BASE+MAX_MIDIINSTRUMENT_COUNT)
+				id=MAX_SAMPLEINSTRUMENT_COUNT+(id-OLD_MIDIINSTRUMENT_BASE) ;
+			if (it==IT_SAMPLE && id>=MAX_SAMPLEINSTRUMENT_COUNT) id=-1 ;
+			if (id>=0 && id<MAX_INSTRUMENT_COUNT) {
         I_Instrument *instr=instrument_[id] ;
 				if (instr->GetType()!=it) {
 					delete instr ;
@@ -237,6 +239,22 @@ unsigned short InstrumentBank::Clone(unsigned short i) {
 	}
 	return next ;
 
+}
+
+bool InstrumentBank::CopyInto(int src, int dst) {
+	if (src<0 || dst<0 || src>=MAX_SAMPLEINSTRUMENT_COUNT || dst>=MAX_SAMPLEINSTRUMENT_COUNT || src==dst) return false ;
+	I_Instrument *s=instrument_[src] ;
+	if (s->GetType()!=IT_SAMPLE) return false ;
+	delete instrument_[dst] ;
+	I_Instrument *d=new SampleInstrument() ;
+	instrument_[dst]=d ;
+	IteratorPtr<Variable> it(s->GetIterator()) ;
+	for (it->Begin();!it->IsDone();it->Next()) {
+		Variable &sv=it->CurrentItem() ;
+		Variable *dv=d->FindVariable(sv.GetID()) ;
+		if (dv) dv->CopyFrom(sv) ;
+	}
+	return true ;
 }
 
 void InstrumentBank::OnStart() {

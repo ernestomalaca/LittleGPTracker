@@ -19,6 +19,8 @@ public:
 	void OnStart() ;
 	unsigned short GetNext() ;
 	unsigned short Clone(unsigned short i) ;
+	// trk2als: una copia independiente de 'src' en el lugar 'dst' (libre)
+	bool CopyInto(int src, int dst) ;
 private:
 	I_Instrument *instrument_[MAX_INSTRUMENT_COUNT] ;
 } ;
