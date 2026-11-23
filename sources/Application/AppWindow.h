@@ -90,6 +90,7 @@ class AppWindow : public GUIWindow, I_Observer, Status {
     bool _bGesture;      // B se sostuvo antes de Select/Start
     bool _selectFirst;   // Select se sostuvo antes que B
     void joyButton(unsigned short v, bool pressed, bool repeat);
+    void captureNow();   // trk2als: R2 o Y + Select
     unsigned short joyLegacy(unsigned short phys);
     void joyStep(unsigned short dir);
     ViewData *_viewData;

@@ -713,24 +713,7 @@ bool AppWindow::onEvent(GUIEvent &event) {
             _helpMask &= ~v;
             if ((v & (1 << EPBT_R2)) && _r2Solo) {
                 _r2Solo = false;
-                if (!_overlayOn && _instrumentView && _currentView && !_currentView->HasModal()) {
-                    // trk2als: lo último que hiciste: notas tocadas (se vuelven
-                    // clip) o un parámetro movido (su curva)
-                    const char *m = 0;
-                    if (MidiCapture::LastNoteMs() > _instrumentView->LastCaptureMove()) {
-                        int bc;
-                        Clip before;
-                        if (_songView) _songView->CaptureBegin();
-                        m = MidiCapture::Capture(_viewData, bc, before);
-                        if (m && _songView) _songView->CaptureCommit();   // Select + L en la Session lo quita
-                        if (bc >= 0 && _clipView) _clipView->PushUndo(bc, before);
-                    }
-                    // la pista donde se movió algo por última vez
-                    if (!m) m = _instrumentView->CaptureAutomation(-1);
-                    if (m) _currentView->SetNotification(m);
-                    if (_currentView != _instrumentView) _currentView->SetDirty(true);
-                    _isDirty = true;
-                }
+                if (!_overlayOn && _instrumentView && _currentView && !_currentView->HasModal()) captureNow();
             }
             break;
         }
@@ -922,9 +905,40 @@ unsigned short AppWindow::joyLegacy(unsigned short phys) {
     return m;
 }
 
+// trk2als: capturar (R2 o Y + Select): lo último que hiciste: notas tocadas
+// (se vuelven clip) o un parámetro movido (su curva)
+void AppWindow::captureNow() {
+    if (!_instrumentView || !_currentView) return;
+    const char *m = 0;
+    if (MidiCapture::LastNoteMs() > _instrumentView->LastCaptureMove()) {
+        int bc;
+        Clip before;
+        if (_songView) _songView->CaptureBegin();
+        m = MidiCapture::Capture(_viewData, bc, before);
+        if (m && _songView) _songView->CaptureCommit();   // Select + L en la Session lo quita
+        if (bc >= 0 && _clipView) _clipView->PushUndo(bc, before);
+    }
+    // la pista donde se movió algo por última vez
+    if (!m) m = _instrumentView->CaptureAutomation(-1);
+    if (m) _currentView->SetNotification(m);
+    if (_currentView != _instrumentView) _currentView->SetDirty(true);
+    _isDirty = true;
+}
+
 void AppWindow::joyButton(unsigned short v, bool pressed, bool repeat) {
     unsigned short phys = _mask;
     View::physMask_ = phys;
+    // trk2als: Y + Select captura (como R2, más a la mano)
+    if (pressed && !repeat && (phys & EPBM_Y) && (phys & EPBM_SELECT) && (v == EPBM_Y || v == EPBM_SELECT) &&
+        !_currentView->HasModal()) {
+        captureNow();
+        _selectFirst = false;
+        if (_currentView->WantsRawButtons()) {   // el piano roll: que no lo tome como Select tocado solo
+            View::pressedButton_ = v;
+            _currentView->ProcessButton(phys, pressed);
+        }
+        return;
+    }
     if (_currentView->HasModal()) {   // las ventanitas: A, B y flechas tal cual
         _currentView->ProcessButton(phys & ~EPBM_SELECT, pressed);
         return;

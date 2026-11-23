@@ -136,8 +136,9 @@ Teclado MIDI por USB
   completo. Con la canción andando suena encima, pero comparte las voces de
   la pista: si el clip de esa pista toca, puede cortar lo que tocas.
   Las perillas todavía no hacen nada.
-  R2 captura lo que tocaste (como Capture MIDI de Live), sin haber
-  grabado: Chancho escucha siempre (el último minuto).
+  R2 o Y + Select (más a la mano) capturan lo que tocaste (como Capture
+  MIDI de Live), sin haber grabado: Chancho escucha siempre (el último
+  minuto).
   - Sin nada sonando: un clip nuevo en la pista del cursor (la celda del
     cursor o la siguiente vacía hacia abajo); el primer golpe queda en el
     1.1.1, adivina el tempo y se lo pone al proyecto (si no está seguro,
