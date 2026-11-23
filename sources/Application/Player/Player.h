@@ -117,6 +117,9 @@ public:
 	// velocity; suena parado o con la canción andando
 	void LiveNoteOn(int channel, I_Instrument *instr, int note, int vel) ;
 	void LiveNoteOff(int channel, int note) ;
+	// trk2als: para capturar lo tocado (R2): dónde va la canción (en pasos,
+	// con fracción) y, si la pista toca un clip MIDI, cuál y en qué paso
+	bool CapturePos(int channel, double &songStep, int &clip, double &clipStep) ;
 	void StartStreaming(const Path &path, double speed, double delaySecs, double startFrac, bool loop) ;
 	void StopStreaming() ;
 	int GetStreamPosition() ; // trk2als: cuadro del archivo que suena (-1 = nada)
@@ -269,6 +272,7 @@ private:
 	unsigned long linkResyncAt_ ;   // (interfaz) cuándo pedirlo: dar tiempo a encontrar la sesión
 	int linkPeersSeen_ ;
 	int barSlice_ ;                 // rebanada dentro del compás (96 = 4 tiempos x 24)
+	unsigned long sliceAtMs_ ;      // trk2als: cuándo se hizo la última rebanada (para CapturePos)
 };
 
 #endif

@@ -136,6 +136,20 @@ Teclado MIDI por USB
   completo. Con la canción andando suena encima, pero comparte las voces de
   la pista: si el clip de esa pista toca, puede cortar lo que tocas.
   Las perillas todavía no hacen nada.
+  R2 captura lo que tocaste (como Capture MIDI de Live), sin haber
+  grabado: Chancho escucha siempre (el último minuto).
+  - Sin nada sonando: un clip nuevo en la pista del cursor (la celda del
+    cursor o la siguiente vacía hacia abajo); el primer golpe queda en el
+    1.1.1, adivina el tempo y se lo pone al proyecto (si no está seguro,
+    deja el que hay) y el largo (1, 2, 4, 8 o 16 compases). Si tocaste la
+    frase varias veces, el clip la guarda toda y el loop queda en la
+    última vuelta (mueve el loop para quedarte con otra).
+  - Sonando, con un clip MIDI en esa pista: lo tocado en la última vuelta
+    del loop se agrega encima del clip (Select + L en el clip lo quita).
+  - Sonando, sin clip en esa pista: un clip nuevo, en la rejilla de la
+    canción.
+  Las notas quedan como las tocaste (con su nudge, sin cuantizar). R2
+  captura lo último que hiciste: notas tocadas o un parámetro movido.
   Latencia (Proyecto > LATENCIA): baja, media o alta. Baja responde más
   rápido al tocar; si con proyectos pesados el audio se corta, sube a
   media. Se guarda en config.xml y toma efecto al reiniciar Chancho.

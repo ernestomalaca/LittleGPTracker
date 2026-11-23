@@ -47,6 +47,7 @@ Player::Player() {
     barSlice_ = 0;
     metroStep_ = 0;
     sliceCount_ = 0;
+    sliceAtMs_ = 0;
     autoRec_ = false;
     autoRecPending_ = false;
     countInRequest_ = false;
@@ -710,6 +711,7 @@ void Player::Update(Observable &o,I_ObservableData *d) {
             }
         }
         fireTimed();   // trk2als: los golpes con nudge o subdivisiones
+        sliceAtMs_ = System::GetInstance()->GetClock();
         updateAutomation();   // trk2als: las lanes de los clips
         sliceCount_++;
 
@@ -1347,6 +1349,25 @@ void Player::fireTimed() {
  subdividida, los demás repartidos en lo que dura; al final, su corte. Cada
  nota toma una de las 4 voces del canal (la libre o la que acaba antes).
  ********************************************************/
+
+bool Player::CapturePos(int channel, double &songStep, int &clip, double &clipStep) {
+    clip = -1;
+    if (!isRunning_ || channel < 0 || channel >= SONG_CHANNEL_COUNT) return false;
+    int tempo = project_->GetTempo();
+    if (tempo < 20) tempo = 120;
+    double sliceMs = 15000.0 / tempo / 6.0;
+    double extra = (double)(System::GetInstance()->GetClock() - sliceAtMs_) / sliceMs;
+    if (extra < 0) extra = 0;
+    if (extra > 1) extra = 1;
+    double frac = ((barSlice_ % 6) + extra) / 6.0;
+    songStep = metroStep_ + frac;
+    if (viewData_->currentPlayPhrase_[channel] == CLIP_PHRASE && mixer_->IsChannelPlaying(channel) &&
+        viewData_->currentPlayChain_[channel] != 0xFF) {
+        clip = viewData_->currentPlayChain_[channel];
+        clipStep = autoStep_[channel] + frac;
+    }
+    return true;
+}
 
 void Player::playClipStep(int channel) {
     int chain = viewData_->currentPlayChain_[channel];

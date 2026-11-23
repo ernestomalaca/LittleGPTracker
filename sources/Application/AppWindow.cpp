@@ -28,6 +28,7 @@
 #include "Application/Utils/ProjectName.h"
 #include "Application/Utils/Latin1.h"
 #include "Application/Player/MidiKeys.h"
+#include "Application/Views/MidiCapture.h"
 
 AppWindow *instance = 0;
 
@@ -54,6 +55,7 @@ void AppWindow::DispatchMidi() {
                 if (project->GetTrackInstrument(k) == d->currentInstrument_) { ch = k; break; }
         }
         if (ch < 0 || ch >= SONG_CHANNEL_COUNT || !project->TrackExists(ch)) continue;
+        MidiCapture::Note(ch, e.d1, hi == 0x80 ? 0 : e.d2);   // trk2als: para R2
         if (hi == 0x80) { player->LiveNoteOff(ch, e.d1); continue; }
         int owner = project->GetTrackInstrument(ch);
         if (owner < 0) continue;   // pista de audio o sin instrumento
@@ -712,8 +714,17 @@ bool AppWindow::onEvent(GUIEvent &event) {
             if ((v & (1 << EPBT_R2)) && _r2Solo) {
                 _r2Solo = false;
                 if (!_overlayOn && _instrumentView && _currentView && !_currentView->HasModal()) {
+                    // trk2als: lo último que hiciste: notas tocadas (se vuelven
+                    // clip) o un parámetro movido (su curva)
+                    const char *m = 0;
+                    if (MidiCapture::LastNoteMs() > _instrumentView->LastCaptureMove()) {
+                        int bc;
+                        Clip before;
+                        m = MidiCapture::Capture(_viewData, bc, before);
+                        if (bc >= 0 && _clipView) _clipView->PushUndo(bc, before);
+                    }
                     // la pista donde se movió algo por última vez
-                    const char *m = _instrumentView->CaptureAutomation(-1);
+                    if (!m) m = _instrumentView->CaptureAutomation(-1);
                     if (m) _currentView->SetNotification(m);
                     if (_currentView != _instrumentView) _currentView->SetDirty(true);
                     _isDirty = true;

@@ -190,6 +190,7 @@ public:
 	// R2: escribe lo anotado; devuelve el aviso
 	// la pista donde se movió algo por última vez (track no se usa)
 	const char *CaptureAutomation(int track) ;
+	unsigned long LastCaptureMove() ;   // trk2als: cuándo se movió algo por capturar (0 = nada)
 private:
 	std::vector<int> autoShown_ ;  // los valores en vivo que se dibujaron
 	int recShown_ ;   // cómo se dibujó el REC (0 no, 1/3 parpadeo, 2 grabando)

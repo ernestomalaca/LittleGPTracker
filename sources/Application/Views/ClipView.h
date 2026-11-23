@@ -55,6 +55,15 @@ class ClipView : public View {
         Clip clip;
     };
     void takeSnap(Snap &s);
+  public:
+    // trk2als: algo de fuera cambió un clip (la captura de R2): Select + L lo deshace
+    void PushUndo(int chain, const Clip &before) {
+        Snap s; s.chain = chain; s.clip = before;
+        undo_.push_back(s);
+        if (undo_.size() > 64) undo_.erase(undo_.begin());
+        redo_.clear();
+    }
+  private:
     void restoreSnap(const Snap &s);
     std::vector<Snap> undo_, redo_;
     bool pasting_;

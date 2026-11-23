@@ -3155,6 +3155,12 @@ void InstrumentView::capWrite(const CapSeg &s) {
 	p=out ;
 }
 
+unsigned long InstrumentView::LastCaptureMove() {
+	unsigned long newest=capping_?System::GetInstance()->GetClock():0 ;
+	for (size_t i=0;i<capSegs_.size();i++) if (capSegs_[i].tEnd>newest) newest=capSegs_[i].tEnd ;
+	return newest ;
+}
+
 const char *InstrumentView::CaptureAutomation(int track) {
 	if (capping_) capEnd() ;
 	// la pista donde moviste algo por última vez (no importa dónde estés
