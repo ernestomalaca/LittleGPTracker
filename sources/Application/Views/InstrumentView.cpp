@@ -1455,12 +1455,18 @@ void InstrumentView::drawGrid() {
 		DrawText(cx+10,cy+8,name.c_str(),moving?fg:dim,0) ;
 		// el aro: de 135 a 405 grados; lleno según el valor (las listas, sin aro lleno)
 		int ax=cx+34, ay=cy+66, r=22 ;
+		bool list=!f.IsStatic() && ((UIIntVarField &)f).GetVariable().GetType()!=Variable::INT ;
+		if (list) {   // palabras (complex, re-pitch, on): la palabra sola, al centro, sin aro
+			GUIColor wc=moving?tc:fg ;
+			if (16*int(value.size())<=CW-16) DrawText(cx+(CW-16*int(value.size()))/2,cy+58,value.c_str(),wc,1) ;
+			else DrawText(cx+(CW-8*int(value.size()))/2,cy+62,value.c_str(),wc,0) ;
+			k++ ;
+			continue ;
+		}
 		drawArc(ax,ay,r,135,405,ring,4) ;
-		bool list=false ;
 		if (!f.IsStatic()) {
 			UIIntVarField &vf=(UIIntVarField &)f ;
 			Variable &var=vf.GetVariable() ;
-			list=var.GetType()!=Variable::INT ;
 			if (!list && vf.Max()>vf.Min()) {
 				float fr=float(var.GetInt()-vf.Min())/float(vf.Max()-vf.Min()) ;
 				if (fr<0) fr=0 ;
