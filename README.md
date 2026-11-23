@@ -46,6 +46,12 @@ cd projects/resources/RG353V && bash empaquetar.sh        # RG353V
 cd projects/resources/RG35XXPLUS && bash empaquetar.sh    # RG35XX Plus
 ```
 
+## Créditos
+
+- **Ernesto Malaca** ([@ernestomalaca](https://github.com/ernestomalaca)): idea, diseño y pruebas en la consola.
+- **Claude** (Anthropic): programación, como coautor de los commits de Chancho.
+- Little Piggy Tracker: **djdiskmachine** y sus colaboradores. LittleGPTracker: **Marc Nostromo** (m-.-n).
+
 ## Licencia
 
 GPLv3, igual que Little Piggy Tracker ([LICENSE](LICENSE)). El código original es de
