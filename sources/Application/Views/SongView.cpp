@@ -361,8 +361,32 @@ void SongView::setChain(unsigned char value) {
     by [offset] rows
  ******************************************************/
 
+// trk2als: no hay que bajar a la fila mil: se llega hasta una abajo de la
+// última fila con algo (o la última que se ve); al poner algo ahí, una más
+void SongView::clampRows() {
+    const int rows = View::songRowCount_;
+    Song *song = viewData_->song_;
+    Project *project = viewData_->project_;
+    int last = -1;
+    for (int r = SONG_ROW_COUNT - 1; r >= 0 && last < 0; r--)
+        for (int i = 0; i < SONG_CHANNEL_COUNT; i++)
+            if (project->TrackExists(i) && song->data_[i + SONG_CHANNEL_COUNT * r] != 0xFF) { last = r; break; }
+    int maxRow = last + 1;
+    if (maxRow < rows - 1) maxRow = rows - 1;
+    if (maxRow > SONG_ROW_COUNT - 1) maxRow = SONG_ROW_COUNT - 1;
+    int abs = viewData_->songY_ + viewData_->songOffset_;
+    if (abs > maxRow) abs = maxRow;
+    int maxOff = maxRow - rows + 1;
+    if (maxOff < 0) maxOff = 0;
+    if (viewData_->songOffset_ > maxOff) viewData_->songOffset_ = maxOff;
+    if (abs < viewData_->songOffset_) viewData_->songOffset_ = abs;
+    if (abs > viewData_->songOffset_ + rows - 1) viewData_->songOffset_ = abs - rows + 1;
+    viewData_->songY_ = abs - viewData_->songOffset_;
+}
+
 void SongView::updateSongOffset(int offset) {
     viewData_->UpdateSongOffset(offset);
+    clampRows();
     isDirty_ = true;
     canDeepClone_ = false;
 }
@@ -376,6 +400,7 @@ void SongView::updateSongOffset(int offset) {
 void SongView::updateCursor(int dx, int dy) {
     viewData_->UpdateSongCursor(dx, dy);
     clampTrackCursor();   // trk2als
+    clampRows();
     isDirty_ = true;
     canDeepClone_ = false;
 }
@@ -1339,7 +1364,18 @@ bool SongView::InterceptButton(unsigned short phys, unsigned short v, bool press
         if (v == EPBM_R) { rTaps[0] = rTaps[1]; rTaps[1] = now; }
         else rTaps[0] = rTaps[1] = 0;
         if (!sesMarking_ && !sesPasting_ && !headerMode_) {
-            updateSongOffset(v == EPBM_L ? View::songRowCount_ : -View::songRowCount_);
+            // la página y el cursor juntos; con pocas filas, el cursor se posa en la última que hay
+            int page = v == EPBM_L ? View::songRowCount_ : -View::songRowCount_;
+            int abs = viewData_->songY_ + viewData_->songOffset_ + page;
+            if (abs < 0) abs = 0;
+            if (abs > SONG_ROW_COUNT - 1) abs = SONG_ROW_COUNT - 1;
+            int off = viewData_->songOffset_ + page;
+            if (off < 0) off = 0;
+            viewData_->songOffset_ = off;
+            viewData_->songY_ = abs - off;
+            if (viewData_->songY_ < 0) { viewData_->songOffset_ = abs; viewData_->songY_ = 0; }
+            clampRows();
+            isDirty_ = true;
             return true;
         }
     }

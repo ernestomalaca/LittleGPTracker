@@ -153,6 +153,8 @@ Session (como la de Live)
   Lanzar un grupo: Select + B marca, ← → agranda en la misma fila y A
   lanza todos esos clips juntos en el 1 (las celdas vacías de la marca
   detienen su pista). Si la marca tiene varias filas, A la cancela.
+  Hacia abajo se llega hasta una fila después de la última con clips (o
+  hasta la 07): al poner o pegar algo más abajo, hay más espacio.
   L / R (tocados solos), como la octava en el clip: L baja una página, R
   sube. R tres veces rápido: a la cabecera de la pista (cambiar o editar
   su sonido).
