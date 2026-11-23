@@ -1396,6 +1396,10 @@ void Player::StopTrack(int channel) {
     else QueueChannel(channel, QM_NONE, 0, 0);
 }
 
+void Player::StopAllClips() {
+    for (int i = 0; i < SONG_CHANNEL_COUNT; i++) StopTrack(i);
+}
+
 void Player::LaunchScene(int row) {
     SetSequencerMode(SM_LIVE);
     if (!isRunning_) {

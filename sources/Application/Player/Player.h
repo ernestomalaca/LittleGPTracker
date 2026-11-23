@@ -67,6 +67,7 @@ public:
 	// arranca (vuelven los clips que estaban lanzados) o detiene todo
 	void LaunchClip(int channel, int row) ;
 	void StopTrack(int channel) ;
+	void StopAllClips() ;   // como "Stop All Clips" de Live: al compás, el reloj sigue
 	void LaunchScene(int row) ;
 	void Transport() ;
 	// 0 apagado, 1 esperando (precuenta o el siguiente compás), 2 grabando

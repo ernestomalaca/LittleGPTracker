@@ -129,6 +129,9 @@ Session (como la de Live)
   el botoncito de stop de Live en los slots vacíos).
   En la columna de filas (← desde la primera pista), A lanza la escena:
   los clips de esa fila; las pistas sin clip ahí se detienen.
+  Select + Start = "Stop All Clips" de Live (en cualquier celda): todos los
+  clips se detienen al terminar el compás y el reloj sigue corriendo, para
+  lanzar otra cosa en el 1 sin perder el tempo.
   Select + → entra al clip para editarlo; en una celda MIDI vacía abre el
   "clip nuevo"; en una celda de audio vacía, el navegador de loops.
   Ya no hay modo song ni modo live de LGPT.

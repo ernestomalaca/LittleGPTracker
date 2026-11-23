@@ -1552,8 +1552,8 @@ void SongView::processNormalButtonMask(unsigned int mask) {
                     NotifyObservers(&ve);
                 }
 
-                if (mask & EPBM_START) {
-                    onStop();
+                if (mask & EPBM_START) {   // trk2als: Stop All Clips, como en Live
+                    Player::GetInstance()->StopAllClips();
                 }
 
             } else {
@@ -1897,11 +1897,11 @@ void SongView::clampTrackCursor() {
 }
 
 // trk2als: la columna de los números de fila, como en LSDJ: Start lanza la
-// fila entera (la escena), Select + Start detiene todo; → vuelve a las pistas
+// fila entera (la escena), Select + Start detiene los clips al compás; → vuelve a las pistas
 void SongView::processRowButtonMask(unsigned int mask) {
     Player *player = Player::GetInstance();
-    if ((mask & EPBM_R) && (mask & EPBM_START)) {   // Select + Start
-        if (player->IsRunning()) player->Stop();
+    if ((mask & EPBM_R) && (mask & EPBM_START)) {   // Select + Start: Stop All Clips
+        player->StopAllClips();
         isDirty_ = true;
         return;
     }
@@ -2062,8 +2062,8 @@ void SongView::processSelectionButtonMask(unsigned int mask) {
                     NotifyObservers(&ve);
                 }
 
-                if (mask & EPBM_START) {
-                    onStop();
+                if (mask & EPBM_START) {   // trk2als: Stop All Clips, como en Live
+                    Player::GetInstance()->StopAllClips();
                 }
 
             } else {
