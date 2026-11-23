@@ -2999,6 +2999,9 @@ void SongView::drawBlockGrid() {
                 QueueingMode q = player->GetQueueingMode(i);
                 if (player->IsRunning() && player->GetQueuePosition(i) == row &&
                     (q == QM_PHRASESTART || q == QM_TICKSTART || q == QM_CHAINSTART)) queued = true;
+                // la escena lanzada que detiene pistas (también la vacía): espera el 1
+                if (player->IsRunning() && (q == QM_PHRASESTOP || q == QM_CHAINSTOP) && player->StopCell(i) == row)
+                    queued = true;
                 if (player->IsRunning() && player->IsChannelPlaying(i) && viewData_->currentPlayChain_[i] != 0xFF &&
                     viewData_->songPlayPos_[i] == row && q != QM_PHRASESTOP && q != QM_CHAINSTOP) stopAll = false;
             }
