@@ -1,0 +1,27 @@
+<!--
+    Chancho 6 en la RG35XX Plus. ALPHA: los números de los botones son una
+    SUPOSICIÓN (los del LittleGPTracker de esta consola más los que faltaban)
+    hasta confirmarlos con "Detectar botones.sh".
+-->
+<MAPPINGS>
+	<MAP src="hat:0:0:0" dst="/event/up" />
+	<MAP src="hat:0:0:2" dst="/event/down" />
+	<MAP src="hat:0:0:3" dst="/event/left" />
+	<MAP src="hat:0:0:1" dst="/event/right" />
+
+	<MAP src="but:0:0" dst="/event/a" />
+	<MAP src="but:0:1" dst="/event/b" />
+	<MAP src="but:0:3" dst="/event/x" />
+	<MAP src="but:0:2" dst="/event/y" />
+
+	<MAP src="but:0:6" dst="/event/select" />
+	<MAP src="but:0:7" dst="/event/start" />
+
+	<MAP src="but:0:4" dst="/event/lshoulder" />
+	<MAP src="but:0:5" dst="/event/rshoulder" />
+
+	<!-- L2 + R2 juntos: la ayuda. R2 (o el botón de menú) captura -->
+	<MAP src="but:0:9" dst="/event/l2" />
+	<MAP src="but:0:10" dst="/event/r2" />
+	<MAP src="but:0:8" dst="/event/r2" />
+</MAPPINGS>

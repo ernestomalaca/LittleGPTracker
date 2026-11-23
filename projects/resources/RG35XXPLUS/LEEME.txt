@@ -1,0 +1,39 @@
+CHANCHO 6 EN LA ANBERNIC RG35XX PLUS  —  VERSIÓN ALPHA
+=====================================================
+
+ESTO ES UNA ALPHA. Chancho 6 se hace y se prueba en la RG353V; esta versión
+para la RG35XX Plus está compilada pero NUNCA se ha probado en una RG35XX
+Plus. Puede no arrancar, los botones pueden estar cruzados o el audio puede
+fallar. Guarda una copia de tus proyectos. Si algo falla, manda
+chancho6/log.txt y chancho6/botones.txt (ver abajo).
+
+Qué necesita
+  Un sistema con Ports: muOS o Knulli (recomendados). En el sistema de
+  fábrica de Anbernic se puede intentar desde APPS.
+
+Instalar
+  1. Copia a la carpeta de Ports de la tarjeta (muOS: ROMS/ports o
+     MUOS/application según la versión; Knulli: roms/ports):
+       Chancho 6.sh
+       Detectar botones.sh
+       la carpeta chancho6/
+  2. (Opcional) tu samplelib dentro de chancho6/ (chancho6/samplelib).
+  3. En la consola: Ports > Chancho 6.
+
+Proyecto demo
+  chancho6/lgpt_chancho_try es un set de prueba: 5 pistas de audio (93 bpm) con sus
+  escenas, pasado de Ableton Live con live2chancho. Ábrelo desde la pantalla
+  de proyectos, ve a la Session y dale A a una escena.
+
+Si los botones no responden bien (lo más probable en esta alpha)
+  Ports > Detectar botones. Presiona en orden: arriba, abajo, izquierda,
+  derecha, A, B, X, Y, L, R, Select, Start, y sal (Project > Exit).
+  Lo que presionaste queda en chancho6/botones.txt: mándalo y con eso se
+  arregla chancho6/mapping.xml.
+
+Lo que no trae esta versión
+  - Teclado MIDI por USB (en la RG353V sí).
+  - Actualizar por Wi-Fi (se actualiza copiando el .elf nuevo).
+
+Todo lo demás (Session, escenas, clips de audio, chancho.local, Ableton
+Link) es igual que en la RG353V: está en el manual (PDF).
