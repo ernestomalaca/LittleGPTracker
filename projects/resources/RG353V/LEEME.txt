@@ -127,8 +127,17 @@ Session (como la de Live)
   arranca ya). A otra vez lo vuelve a lanzar desde el inicio.
   A sobre una celda vacía detiene esa pista en el siguiente compás (como
   el botoncito de stop de Live en los slots vacíos).
-  En la columna de filas (← desde la primera pista), A lanza la escena:
-  los clips de esa fila; las pistas sin clip ahí se detienen.
+  Las escenas están a la derecha (→ desde la última pista; ← vuelve).
+  A lanza la escena: los clips de esa fila; las pistas sin clip ahí se
+  detienen. Mientras esperan el 1, esas celdas vacías se ven en blanco
+  (igual que A sobre una celda vacía).
+  Repeticiones (como las follow actions de escena de Live): X + ↑ / ↓ en
+  la escena: ∞ (se queda ahí), x1 … x16. Una vuelta dura lo que el clip más
+  largo de la escena; al terminar las vueltas entra la escena de abajo, en
+  el 1. Si la de abajo está vacía, todo se detiene (fin de la canción).
+  L / R (tocados solos), como la octava en el clip: L baja una página, R
+  sube. R tres veces rápido: a la cabecera de la pista (cambiar o editar
+  su sonido).
   Select + Start = "Stop All Clips" de Live (en cualquier celda): todos los
   clips se detienen al terminar el compás y el reloj sigue corriendo, para
   lanzar otra cosa en el 1 sin perder el tempo.

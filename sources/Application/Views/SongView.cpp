@@ -1159,6 +1159,32 @@ void SongView::duplicateMark() {
 }
 
 bool SongView::InterceptButton(unsigned short phys, unsigned short v, bool pressed, bool repeat) {
+    // trk2als: L / R tocados solos (sin otro botón en medio), como la octava en
+    // el clip: L baja una página (las filas que se ven), R sube; R tres veces
+    // rápido va a la cabecera de la pista (su sonido, su tipo). L + algo sigue
+    // siendo su atajo
+    static unsigned short pageTap = 0;
+    if (pressed && !repeat) pageTap = ((v == EPBM_L || v == EPBM_R) && phys == v) ? v : 0;
+    if (!pressed && v == pageTap && v) {
+        pageTap = 0;
+        static unsigned int rTaps[2] = {0, 0};
+        unsigned int now = SDL_GetTicks();
+        if (v == EPBM_R && !sesMarking_ && !sesPasting_ && !headerMode_ &&
+            rTaps[0] && now - rTaps[0] < 900) {
+            rTaps[0] = rTaps[1] = 0;
+            rowMode_ = false;
+            clampTrackCursor();
+            headerMode_ = true;
+            isDirty_ = true;
+            return true;
+        }
+        if (v == EPBM_R) { rTaps[0] = rTaps[1]; rTaps[1] = now; }
+        else rTaps[0] = rTaps[1] = 0;
+        if (!sesMarking_ && !sesPasting_ && !headerMode_) {
+            updateSongOffset(v == EPBM_L ? View::songRowCount_ : -View::songRowCount_);
+            return true;
+        }
+    }
     if (rowMode_ || headerMode_) return false;
     bool sel = (phys & EPBM_SELECT) != 0;
     const unsigned short arrows = EPBM_UP | EPBM_DOWN | EPBM_LEFT | EPBM_RIGHT;
@@ -1498,7 +1524,7 @@ void SongView::processNormalButtonMask(unsigned int mask) {
                     aOpenPending_ = true;      // trk2als: se lanza al soltar A
                 } else {
                     // trk2als: como el botoncito de stop de Live en los slots vacíos
-                    Player::GetInstance()->StopTrack(viewData_->songX_);
+                    Player::GetInstance()->StopTrack(viewData_->songX_, viewData_->songY_ + viewData_->songOffset_);
                     isDirty_ = true;
                 }
             }
@@ -1586,14 +1612,14 @@ void SongView::processNormalButtonMask(unsigned int mask) {
                             updateCursor(0, -1);
                         }
                     }
-                    if (mask & EPBM_LEFT) {
-                        // trk2als: desde la primera pista, ← va a la columna de filas (LSDJ)
-                        if (viewData_->songX_ == 0) rowMode_ = true;
-                        else updateCursor(-1, 0);
+                    if (mask & EPBM_LEFT)
+                        updateCursor(-1, 0);
+                    if (mask & EPBM_RIGHT) {
+                        // trk2als: desde la última pista, → va a las escenas (como en Live)
+                        if (viewData_->songX_ >= viewData_->project_->TrackCount() - 1) rowMode_ = true;
+                        else updateCursor(1, 0);
                         isDirty_ = true;
                     }
-                    if (mask & EPBM_RIGHT)
-                        updateCursor(1, 0);
 
                     if (mask & EPBM_START) {
                         onStart();
@@ -1896,8 +1922,9 @@ void SongView::clampTrackCursor() {
     if (viewData_->songX_ < 0) viewData_->songX_ = 0;
 }
 
-// trk2als: la columna de los números de fila, como en LSDJ: Start lanza la
-// fila entera (la escena), Select + Start detiene los clips al compás; → vuelve a las pistas
+// trk2als: la columna de escenas (a la derecha, como en Live): A lanza la
+// escena, X + ↑ ↓ sus repeticiones, Select + Start detiene los clips al compás;
+// ← vuelve a las pistas
 void SongView::processRowButtonMask(unsigned int mask) {
     Player *player = Player::GetInstance();
     if ((mask & EPBM_R) && (mask & EPBM_START)) {   // Select + Start: Stop All Clips
@@ -1918,12 +1945,29 @@ void SongView::processRowButtonMask(unsigned int mask) {
         isDirty_ = true;
         return;
     }
+    if (mask & EPBM_X) {   // trk2als: X + ↑ ↓: cuántas veces suena la escena (∞, x1 … x16)
+        int dir = (mask & EPBM_UP) ? 1 : (mask & EPBM_DOWN) ? -1 : 0;
+        if (dir) {
+            unsigned char &r = viewData_->song_->sceneRep_[viewData_->songY_ + viewData_->songOffset_];
+            int v = r + dir;
+            if (v < 0) v = 0;
+            if (v > 16) v = 16;
+            r = (unsigned char)v;
+            isDirty_ = true;
+        }
+        return;
+    }
     if (mask == EPBM_A) {   // trk2als: A lanza la escena (la fila), como en Live
         viewData_->chainRow_ = 0;
         player->LaunchScene(viewData_->songY_ + viewData_->songOffset_);
     }
     if (mask & EPBM_START) player->Transport();
-    if (mask & EPBM_RIGHT) rowMode_ = false;
+    if (mask & EPBM_LEFT) {   // ← vuelve a la última pista
+        rowMode_ = false;
+        int last = viewData_->project_->TrackCount() - 1;
+        if (last >= 0) viewData_->songX_ = last;
+        clampTrackCursor();
+    }
     if (mask & EPBM_DOWN) updateCursor(0, 1);
     if (mask & EPBM_UP) updateCursor(0, -1);
     isDirty_ = true;
@@ -2601,7 +2645,8 @@ std::string SongView::blockState() {
         }
         int tot;
         int fr = pos >= 0 ? playFraction(i, tot) : -1;
-        snprintf(b, sizeof(b), "%d,%d,%d,%d,%d;", pos, q, blink, player->IsChannelMuted(i) ? 1 : 0, fr);
+        snprintf(b, sizeof(b), "%d,%d,%d,%d,%d,%d,%d;", pos, q, blink, player->IsChannelMuted(i) ? 1 : 0, fr,
+                 int(player->GetQueueingMode(i)), player->StopCell(i));
         st += b;
     }
     char lt[24];
@@ -2652,12 +2697,17 @@ void SongView::drawBlockGrid() {
     GUIColor panel = Mix(bg, fg, 10);
 
     const int rows = View::songRowCount_;
-    const int X0 = 40, COLW = 75, GAP = 4;          // 8 x 75 = 600
+    // trk2als: las escenas a la derecha (como en Live), en una columna más ancha
+    // para sus repeticiones; las pistas, de lado a lado a la izquierda
+    const int X0 = 6, GAP = 4, SW = 98;
+    int trackCount = project->TrackCount();
+    const int NCOL = trackCount > Project::MaxTracks() ? trackCount : Project::MaxTracks();
+    const int COLW = (640 - 6 - X0 - SW + GAP) / NCOL;
+    const int SX = X0 + NCOL * COLW;                // la columna de escenas
     const int HY = 36, HH = 24;                     // cabeceras
     const int GY = 64, GBOT = 436;                  // rejilla
     const int ROWH = (GBOT - GY) / rows;
     const int VY = 442, VH = 32;                    // medidores
-    int trackCount = project->TrackCount();
     int offset = viewData_->songOffset_;
 
     // filas que suenan (para la columna de escenas)
@@ -2708,6 +2758,10 @@ void SongView::drawBlockGrid() {
         }
     }
 
+    // la cabecera de las escenas
+    FillRect(SX, HY, SW, HH, panel, 3);
+    DrawText(SX + 7, HY + 7, "ESCENAS", rowMode_ ? fg : dim, 0);
+
     // escenas y celdas
     for (int j = 0; j < rows; j++) {
         int y = GY + j * ROWH;
@@ -2717,13 +2771,46 @@ void SongView::drawBlockGrid() {
         // en la columna de escenas: la fila que se va a lanzar, un pelo más
         // clara de lado a lado (como la pista en vertical)
         if (hereRow && trackCount > 0)
-            FillRect(2, y - 2, X0 + trackCount * COLW - GAP, h + 4, Mix(bg, fg, 5), 4);
-        if (rowPlaying[j] || hereRow) FillRect(4, y, 32, h, rowPlaying[j] ? play : cur, 3);
-        // la escena suena y el cursor está en ella: marco blanco para no perderse
-        if (rowPlaying[j] && hereRow) FrameRect(4, y, 32, h, fg, 3, 3);
-        char rl[4];
-        snprintf(rl, sizeof(rl), "%02X", row);
-        DrawText(12, y + (h - 12) / 2, rl, (rowPlaying[j] || hereRow) ? bg : dim, 0);
+            FillRect(X0 - 4, y - 2, SX + SW + 4 - (X0 - 4), h + 4, Mix(bg, fg, 5), 4);
+        {   // la escena: ▶ número y sus repeticiones (x2…; ∞ = se queda ahí)
+            bool has = false, queued = false;
+            for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
+                if (!project->TrackExists(i)) continue;
+                if (viewData_->song_->data_[i + SONG_CHANNEL_COUNT * row] != 0xFF) has = true;
+                QueueingMode q = player->GetQueueingMode(i);
+                if (player->IsRunning() && player->GetQueuePosition(i) == row &&
+                    (q == QM_PHRASESTART || q == QM_TICKSTART || q == QM_CHAINSTART)) queued = true;
+            }
+            FillRect(SX, y, SW, h, has ? Mix(bg, fg, 9) : cellBg, 3);
+            if (hereRow) FrameRect(SX, y, SW, h, cur, 3, 3);
+            GUIColor green = LinkGreen();
+            int ts = 12, tx = SX + 8, ty = y + (h - ts) / 2 - (h >= 34 ? 4 : 0);
+            if (queued && !rowPlaying[j]) {   // en espera: el triángulo hueco
+                for (int k = 0; k < ts; k++) {
+                    int hh = ts - (k / 2) * 2;
+                    if (k < 2 || k >= ts - 2) FillRect(tx + k, ty + k / 2, 1, hh, green);
+                    else { FillRect(tx + k, ty + k / 2, 1, 2, green); FillRect(tx + k, ty + k / 2 + hh - 2, 1, 2, green); }
+                }
+            } else {
+                GUIColor tcol = rowPlaying[j] ? green : (has ? fg : Mix(bg, fg, 25));
+                for (int k = 0; k < ts; k++) FillRect(tx + k, ty + k / 2, 1, ts - (k / 2) * 2, tcol);
+            }
+            char rl[4];
+            snprintf(rl, sizeof(rl), "%02X", row);
+            DrawText(SX + 26, ty - 2, rl, has ? fg : dim, 1);
+            int rep = viewData_->song_->sceneRep_[row];
+            int cx = SX + SW - 40, cy = ty - 3, cw = 33, ch = 20;
+            if (rep > 0) {
+                char rb[6];
+                snprintf(rb, sizeof(rb), "x%d", rep);
+                FillRect(cx, cy, cw, ch, hereRow ? cur : Mix(bg, cur, 30), 4);
+                DrawText(cx + (cw - 8 * int(strlen(rb))) / 2, cy + 4, rb, hereRow ? bg : fg, 0);
+            } else if (has || hereRow) {   // ∞: se queda ahí
+                GUIColor ic = hereRow ? fg : dim;
+                FrameRect(cx + 7, cy + 6, 10, 9, ic, 4, 2);
+                FrameRect(cx + 16, cy + 6, 10, 9, ic, 4, 2);
+            }
+        }
 
         for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
             if (!project->TrackExists(i)) continue;
@@ -2748,7 +2835,12 @@ void SongView::drawBlockGrid() {
             }
             bool lit = (i == curCol) || hereRow;
             if (lit) tc = Mix(tc, fg, 12);
-            if (empty) {
+            bool stopHere = empty && player->IsRunning() && player->GetQueueingMode(i) == QM_PHRASESTOP &&
+                            player->StopCell(i) == row;
+            if (stopHere) {   // trk2als: esta celda vacía va a detener la pista en el 1
+                FillRect(x, y, w, h, Mix(bg, fg, 85), 3);
+                FillRect(x + w / 2 - 4, y + h / 2 - 4, 8, 8, bg, 1);   // el cuadrito de stop
+            } else if (empty) {
                 FillRect(x, y, w, h, lit ? Mix(bg, fg, 11) : cellBg, 3);
                 FillRect(x + w / 2 - 2, y + h / 2 - 2, 4, 4, Mix(bg, fg, 18));
             } else {
@@ -2825,7 +2917,8 @@ void SongView::drawBlockGrid() {
         std::string m = displayNotification_;
         size_t nl = m.find('\n');
         if (nl != std::string::npos) m = m.substr(0, nl) + " " + m.substr(nl + 1);
-        if (m.size() > 36) m = m.substr(0, 36);
+        size_t room = (SX - X0 - 8) / 16;
+        if (m.size() > room) m = m.substr(0, room);
         DrawText(X0 + 4, VY + 8, m.c_str(), fg, 1);
     }
 
@@ -2834,12 +2927,13 @@ void SongView::drawBlockGrid() {
     loadText(lt);
     char ld[8];   // la carga (lo que era "rg"), en %
     snprintf(ld, sizeof(ld), "%d%%", atoi(lt + 2));
-    DrawText(2, VY + 2, player->Clipped() ? "CLIP" : ld, player->Clipped() ? ColorOf(CD_MUTE) : dim, 0);
+    FillRect(SX, VY, SW, VH, panel, 3);
+    DrawText(SX + 7, VY + 3, player->Clipped() ? "CLIP" : ld, player->Clipped() ? ColorOf(CD_MUTE) : dim, 0);
     if (player->IsRunning()) {
         int t = int(player->GetPlayTime());
         char tb[12];
         snprintf(tb, sizeof(tb), "%d:%02d", t / 60, t % 60);
-        DrawText(4, VY + 18, tb, dim, 0);
+        DrawText(SX + 7, VY + 17, tb, dim, 0);
     }
     for (int i = 0; i < SONG_CHANNEL_COUNT && i < trackCount && !noticeOn(); i++) {
         int x = X0 + i * COLW;

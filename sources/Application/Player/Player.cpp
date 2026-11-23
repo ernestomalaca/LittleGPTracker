@@ -52,7 +52,8 @@ Player::Player() {
     autoRecPending_ = false;
     countInRequest_ = false;
     countInRec_ = true;
-    for (int i = 0; i < SONG_CHANNEL_COUNT; i++) launched_[i] = -1;
+    for (int i = 0; i < SONG_CHANNEL_COUNT; i++) { launched_[i] = -1; stopCell_[i] = -1; }
+    sceneRow_ = scenePending_ = -1; sceneStart_ = 0;
     countIn_ = false;
     countStep_ = 0;
     countFirst_ = false;
@@ -258,6 +259,7 @@ void Player::Stop() {
     MidiService::GetInstance()->OnPlayerStop();
     mixer_->OnPlayerStop();
     autoRec_ = false;   // trk2als: parar también deja de grabar
+    sceneRow_ = scenePending_ = -1;   // trk2als: se acaba la secuencia de escenas
     autoRecPending_ = false;
     countIn_ = false;
 
@@ -690,6 +692,7 @@ void Player::Update(Observable &o,I_ObservableData *d) {
             sync->NextSlice();
             barSlice_ = (barSlice_ + 1) % 96;   // trk2als: dónde vamos en el compás
             if (sync->MajorSlice()) metroStep_++;   // trk2als: otro paso (1/16)
+            if (sync->MajorSlice() && metroStep_ % 16 == 0 && mode_ == PM_LIVE) sceneTick();
             triggerLiveChains_ = false;
             if (retrigAllImmediate_) {
 				for (int i=0;i<SONG_CHANNEL_COUNT;i++) {
@@ -718,7 +721,7 @@ void Player::Update(Observable &o,I_ObservableData *d) {
         sliceCount_++;
 
         // trk2als: metrónomo, un click en cada tiempo (4 pasos)
-        if (firstPlayCycle_) { metroStep_ = 0; barSlice_ = 0; }
+        if (firstPlayCycle_) { metroStep_ = 0; barSlice_ = 0; if (mode_ == PM_LIVE) sceneTick(); }
         if ((firstPlayCycle_ || sync->MajorSlice()) && metroStep_ % 4 == 0 &&
             (project_->FindVariable(VAR_METRONOME)->GetInt() || autoRec_ || autoRecPending_)) {
             mixer_->MetronomeClick(metroStep_ % 16 == 0);
@@ -1390,13 +1393,15 @@ void Player::LaunchClip(int channel, int row) {
     QueueChannel(channel, QM_PHRASESTART, row, 0);   // en el siguiente compás
 }
 
-void Player::StopTrack(int channel) {
+void Player::StopTrack(int channel, int cell) {
+    stopCell_[channel] = cell;
     if (!isRunning_) { launched_[channel] = -1; return; }
     if (mixer_->IsChannelPlaying(channel)) QueueChannel(channel, QM_PHRASESTOP, viewData_->songPlayPos_[channel], 0);
     else QueueChannel(channel, QM_NONE, 0, 0);
 }
 
 void Player::StopAllClips() {
+    sceneRow_ = scenePending_ = -1;
     for (int i = 0; i < SONG_CHANNEL_COUNT; i++) StopTrack(i);
 }
 
@@ -1409,13 +1414,54 @@ void Player::LaunchScene(int row) {
             QueueChannel(i, c ? QM_TICKSTART : QM_NONE, row, 0);
             any |= c;
         }
+        scenePending_ = any ? row : -1;
         if (any) Start(PM_LIVE, false);
         return;
     }
+    bool any = false;
     for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
         if (!project_->TrackExists(i)) continue;
-        if (hasClip(viewData_, i, row)) QueueChannel(i, QM_PHRASESTART, row, 0);
-        else StopTrack(i);   // como en Live: la escena detiene las pistas sin clip
+        if (hasClip(viewData_, i, row)) { QueueChannel(i, QM_PHRASESTART, row, 0); any = true; }
+        else StopTrack(i, row);   // como en Live: la escena detiene las pistas sin clip
+    }
+    scenePending_ = any ? row : -1;
+    if (!any) sceneRow_ = -1;   // escena vacía: se acaba la secuencia
+}
+
+// trk2als: una vuelta de la escena = lo que dura su clip más largo
+int Player::sceneBars(int row) {
+    int bars = 0;
+    for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
+        if (!project_->TrackExists(i) || !hasClip(viewData_, i, row)) continue;
+        uchar c = viewData_->song_->data_[i + SONG_CHANNEL_COUNT * row];
+        int b;
+        if (isAudio(i)) b = audioBars(c);
+        else {
+            int ls, le;
+            if (viewData_->song_->GetClipLoop(c, ls, le)) b = le - ls + 1;
+            else b = viewData_->song_->clips_->Get(c).pages;
+        }
+        if (b > bars) bars = b;
+    }
+    return bars > 0 ? bars : 1;
+}
+
+// trk2als: en cada uno del compás: si la escena ya sonó sus repeticiones,
+// lanza la de abajo (entra en este mismo uno); y lo lanzado empieza a contar
+void Player::sceneTick() {
+    if (sceneRow_ >= 0) {
+        int rep = viewData_->song_->sceneRep_[sceneRow_];
+        if (rep > 0 && (metroStep_ - sceneStart_) / 16 >= rep * sceneBars(sceneRow_)) {
+            int next = sceneRow_ + 1;
+            liveLog("scene-next", 0, next);
+            sceneRow_ = -1;
+            if (next < SONG_ROW_COUNT) LaunchScene(next);
+        }
+    }
+    if (scenePending_ >= 0) {
+        sceneRow_ = scenePending_;
+        scenePending_ = -1;
+        sceneStart_ = metroStep_;
     }
 }
 

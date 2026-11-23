@@ -66,7 +66,9 @@ public:
 	// compás (sin nada sonando, arranca ya); Transport = la barra espaciadora:
 	// arranca (vuelven los clips que estaban lanzados) o detiene todo
 	void LaunchClip(int channel, int row) ;
-	void StopTrack(int channel) ;
+	void StopTrack(int channel, int cell = -1) ;   // cell: la fila de la celda vacía que la detiene
+	// la fila de la celda vacía que va a detener la pista (se ve en blanco), o -1
+	int StopCell(int channel) { return stopCell_[channel] ; }
 	void StopAllClips() ;   // como "Stop All Clips" de Live: al compás, el reloj sigue
 	void LaunchScene(int row) ;
 	void Transport() ;
@@ -250,6 +252,11 @@ private:
 	bool autoRecPending_ ;   // empieza en el siguiente uno
 	bool countInRequest_ ;   // el próximo arranque lleva precuenta
 	bool countInRec_ ;       // trk2als: ...y al terminar graba automatización (si no, solo arranca)
+	int stopCell_[SONG_CHANNEL_COUNT] ;   // trk2als: ver StopCell
+	// trk2als: la escena que suena y sus repeticiones (song->sceneRep_)
+	int sceneRow_, scenePending_, sceneStart_ ;
+	void sceneTick() ;
+	int sceneBars(int row) ;
 	int launched_[SONG_CHANNEL_COUNT] ;   // trk2als: la fila que estaba sonando al parar (-1 nada)
 	bool countIn_ ;          // en la precuenta (no suena nada más)
 	int countStep_ ;
