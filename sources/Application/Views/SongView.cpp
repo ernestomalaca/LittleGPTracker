@@ -2980,7 +2980,7 @@ void SongView::drawBlockGrid() {
                 snprintf(rb, sizeof(rb), "x%d", rep);
                 FillRect(cx, cy, cw, ch, hereRow ? cur : Mix(bg, cur, 30), 4);
                 DrawText(cx + (cw - 8 * int(strlen(rb))) / 2, cy + 4, rb, hereRow ? bg : fg, 0);
-            } else if (has || hereRow) {   // ∞: se queda ahí
+            } else if (hereRow) {   // ∞ (se queda ahí): solo al editarla; si no, más limpio
                 GUIColor ic = hereRow ? fg : dim;
                 FrameRect(cx + 7, cy + 6, 10, 9, ic, 4, 2);
                 FrameRect(cx + 16, cy + 6, 10, 9, ic, 4, 2);

@@ -132,7 +132,8 @@ Session (como la de Live)
   detienen. Mientras esperan el 1, esas celdas vacías se ven en blanco
   (igual que A sobre una celda vacía).
   Repeticiones (como las follow actions de escena de Live): Y + ↑ / ↓ en
-  la escena (como dividir en el clip): ∞ (se queda ahí), x1 … x16. Una vuelta dura lo que el clip más
+  la escena (como dividir en el clip): ∞ (se queda ahí; solo se ve con el cursor
+  en la escena), x1 … x16. Una vuelta dura lo que el clip más
   largo de la escena; al terminar las vueltas entra la escena de abajo, en
   el 1. Si la de abajo está vacía, todo se detiene (fin de la canción).
   Editar escenas (en la columna de escenas, filas enteras):
