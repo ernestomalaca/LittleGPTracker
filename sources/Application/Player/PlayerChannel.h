@@ -31,6 +31,7 @@ public:
 	int index_ ;
 	I_Instrument *instr_ ;
 	bool muted_ ;
+	float muteGain_ ;   // trk2als: mute / solo con fundido (sin click): 1 suena, 0 callado
     fixed volume_;
     int busIndex_ ;
 	MixBus *mixBus_ ;

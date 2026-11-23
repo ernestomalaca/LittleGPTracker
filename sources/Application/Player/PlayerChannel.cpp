@@ -10,6 +10,7 @@ PlayerChannel::PlayerChannel(int index) {
     index_=index ;
     instr_=0 ;
     muted_=false ;
+    muteGain_=1.0f ;
 	mixBus_=0 ;
 	busIndex_=-1 ;
     volume_ = i2fp(1);
@@ -70,9 +71,11 @@ void PlayerChannel::StopInstrument() {
 bool PlayerChannel::Render(fixed *buffer,int samplecount) {
    if (instr_) {
      bool tableSlice=SyncMaster::GetInstance()->TableSlice() ;
+     // trk2als: mute / solo con un fundido de ~8 ms (antes cortaba en seco: click)
+     bool silent = muted_ && muteGain_ <= 0.0f ;
      bool status = instr_->Render(index_, buffer, samplecount,
-                                  tableSlice | (muted_ << 1));
-     if (status && !muted_) {
+                                  tableSlice | (silent << 1));
+     if (status && !silent) {
          // Apply HPF if enabled
          if (hpfMode_ != 0) {
              for (int n = 0; n < samplecount; n++) {
@@ -118,8 +121,21 @@ bool PlayerChannel::Render(fixed *buffer,int samplecount) {
                  buffer[i] = fp_mul(buffer[i], volume_);
              }
          }
+         // trk2als: el fundido del mute / solo
+         float target = muted_ ? 0.0f : 1.0f ;
+         if (muteGain_ != 1.0f || target != 1.0f) {
+             const float step = 1.0f / 352.0f ;
+             for (int n = 0; n < samplecount; n++) {
+                 if (muteGain_ < target) { muteGain_ += step ; if (muteGain_ > target) muteGain_ = target ; }
+                 else if (muteGain_ > target) { muteGain_ -= step ; if (muteGain_ < target) muteGain_ = target ; }
+                 fixed g = fl2fp(muteGain_) ;
+                 buffer[2 * n] = fp_mul(buffer[2 * n], g) ;
+                 buffer[2 * n + 1] = fp_mul(buffer[2 * n + 1], g) ;
+             }
+         }
      }
-     return (status && !muted_);
+     if (silent) muteGain_ = 0.0f ;
+     return (status && !silent);
    } else {
        return false;
    }
@@ -131,6 +147,7 @@ I_Instrument *PlayerChannel::GetInstrument() {
 
 void PlayerChannel::SetMute(bool muted) {
      muted_=muted ;
+     if (!instr_) muteGain_=muted?0.0f:1.0f ;   // sin nada sonando: sin fundido
 }
 
 bool PlayerChannel::IsMuted() { return muted_; }
@@ -201,6 +218,7 @@ void PlayerChannel::Reset() {
     // seguía en su cola (release) no puede quedar apuntando a uno de ellos
     instr_=0 ;
     muted_=false ;
+    muteGain_=1.0f ;
   busIndex_=-1 ;
   hpfPrevInput_[0]=hpfPrevInput_[1]=i2fp(0);
   hpfPrevOutput_[0]=hpfPrevOutput_[1]=i2fp(0);
