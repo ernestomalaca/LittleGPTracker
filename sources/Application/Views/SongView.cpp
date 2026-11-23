@@ -1777,14 +1777,14 @@ void SongView::processNormalButtonMask(unsigned int mask) {
                             updateCursor(0, -1);
                         }
                     }
-                    if (mask & EPBM_LEFT)
-                        updateCursor(-1, 0);
-                    if (mask & EPBM_RIGHT) {
-                        // trk2als: desde la última pista, → va a las escenas (como en Live)
-                        if (viewData_->songX_ >= viewData_->project_->TrackCount() - 1) rowMode_ = true;
-                        else updateCursor(1, 0);
+                    if (mask & EPBM_LEFT) {
+                        // trk2als: desde la primera pista, ← va a las escenas (como en LSDJ)
+                        if (viewData_->songX_ == 0) rowMode_ = true;
+                        else updateCursor(-1, 0);
                         isDirty_ = true;
                     }
+                    if (mask & EPBM_RIGHT)
+                        updateCursor(1, 0);
 
                     if (mask & EPBM_START) {
                         onStart();
@@ -2087,9 +2087,9 @@ void SongView::clampTrackCursor() {
     if (viewData_->songX_ < 0) viewData_->songX_ = 0;
 }
 
-// trk2als: la columna de escenas (a la derecha, como en Live): A lanza la
+// trk2als: la columna de escenas (a la izquierda, como en LSDJ): A lanza la
 // escena, Y + ↑ ↓ sus repeticiones, Select + Start detiene los clips al compás;
-// ← vuelve a las pistas
+// → vuelve a las pistas
 void SongView::processRowButtonMask(unsigned int mask) {
     Player *player = Player::GetInstance();
     if ((mask & EPBM_R) && (mask & EPBM_START)) {   // Select + Start: Stop All Clips
@@ -2097,15 +2097,10 @@ void SongView::processRowButtonMask(unsigned int mask) {
         isDirty_ = true;
         return;
     }
-    if (mask & EPBM_R) {   // Select + flechas: como desde la última pista (↑ Project,
-        // ↓ Mixer, → su clip; ← de vuelta a las pistas)
-        if (mask & (EPBM_UP | EPBM_DOWN | EPBM_RIGHT | EPBM_LEFT)) {
+    if (mask & EPBM_R) {   // Select + ↑ ↓: Project / Mixer, como siempre (Select + ← → no hace nada aquí)
+        if (mask & (EPBM_UP | EPBM_DOWN)) {
             rowMode_ = false;
-            int last = viewData_->project_->TrackCount() - 1;
-            if (last >= 0) viewData_->songX_ = last;
-            clampTrackCursor();
-            if (!(mask & EPBM_LEFT)) processNormalButtonMask(mask);
-            isDirty_ = true;
+            processNormalButtonMask(mask);
         }
         return;
     }
@@ -2132,10 +2127,9 @@ void SongView::processRowButtonMask(unsigned int mask) {
         player->LaunchScene(viewData_->songY_ + viewData_->songOffset_);
     }
     if (mask & EPBM_START) player->Transport();
-    if (mask & EPBM_LEFT) {   // ← vuelve a la última pista
+    if (mask & EPBM_RIGHT) {   // → vuelve a la primera pista
         rowMode_ = false;
-        int last = viewData_->project_->TrackCount() - 1;
-        if (last >= 0) viewData_->songX_ = last;
+        viewData_->songX_ = 0;
         clampTrackCursor();
     }
     if (mask & EPBM_DOWN) updateCursor(0, 1);
@@ -2872,13 +2866,14 @@ void SongView::drawBlockGrid() {
     GUIColor panel = Mix(bg, fg, 10);
 
     const int rows = View::songRowCount_;
-    // trk2als: las escenas a la derecha (como en Live), en una columna más ancha
-    // para sus repeticiones; las pistas, de lado a lado a la izquierda
-    const int X0 = 6, GAP = 4, SW = 98;
+    // trk2als: las escenas a la izquierda (como en LSDJ), en una columna ancha
+    // para sus repeticiones; las pistas a la derecha
+    const int SX = 6, GAP = 4, SW = 98;             // la columna de escenas
+    const int X0 = SX + SW + GAP + 2;               // la primera pista
     int trackCount = project->TrackCount();
     const int NCOL = trackCount > Project::MaxTracks() ? trackCount : Project::MaxTracks();
-    const int COLW = (640 - 6 - X0 - SW + GAP) / NCOL;
-    const int SX = X0 + NCOL * COLW;                // la columna de escenas
+    const int COLW = (640 - 6 - X0 + GAP) / NCOL;
+    const int XEND = X0 + NCOL * COLW - GAP;        // donde acaban las pistas
     const int HY = 36, HH = 24;                     // cabeceras
     const int GY = 64, GBOT = 436;                  // rejilla
     const int ROWH = (GBOT - GY) / rows;
@@ -2933,9 +2928,7 @@ void SongView::drawBlockGrid() {
         }
     }
 
-    // la cabecera de las escenas
-    FillRect(SX, HY, SW, HH, panel, 3);
-    DrawText(SX + 7, HY + 7, "ESCENAS", rowMode_ ? fg : dim, 0);
+    // (las escenas no llevan cabecera: se entiende solo)
 
     // escenas y celdas
     for (int j = 0; j < rows; j++) {
@@ -2946,7 +2939,7 @@ void SongView::drawBlockGrid() {
         // en la columna de escenas: la fila que se va a lanzar, un pelo más
         // clara de lado a lado (como la pista en vertical)
         if (hereRow && trackCount > 0)
-            FillRect(X0 - 4, y - 2, SX + SW + 4 - (X0 - 4), h + 4, Mix(bg, fg, 5), 4);
+            FillRect(SX - 4, y - 2, XEND + 4 - (SX - 4), h + 4, Mix(bg, fg, 5), 4);
         {   // la escena: ▶ número y sus repeticiones (x2…; ∞ = se queda ahí)
             bool has = false, queued = false;
             for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
@@ -2960,7 +2953,7 @@ void SongView::drawBlockGrid() {
             if (scnMarking_ && rowMode_) {   // escenas marcadas: toda la fila
                 int top, bot;
                 scnRange(top, bot);
-                if (row >= top && row <= bot) FrameRect(X0 - 3, y - 3, SX + SW + 3 - (X0 - 3), h + 6, hi2, 4, 3);
+                if (row >= top && row <= bot) FrameRect(SX - 3, y - 3, XEND + 3 - (SX - 3), h + 6, hi2, 4, 3);
             }
             if (hereRow) FrameRect(SX - 3, y - 3, SW + 6, h + 6, cur, 5, 3);   // el cursor por fuera, como en los clips
             GUIColor green = LinkGreen();
@@ -3099,7 +3092,7 @@ void SongView::drawBlockGrid() {
         std::string m = displayNotification_;
         size_t nl = m.find('\n');
         if (nl != std::string::npos) m = m.substr(0, nl) + " " + m.substr(nl + 1);
-        size_t room = (SX - X0 - 8) / 16;
+        size_t room = (XEND - X0 - 8) / 16;
         if (m.size() > room) m = m.substr(0, room);
         DrawText(X0 + 4, VY + 8, m.c_str(), fg, 1);
     }

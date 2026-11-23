@@ -127,7 +127,7 @@ Session (como la de Live)
   arranca ya). A otra vez lo vuelve a lanzar desde el inicio.
   A sobre una celda vacía detiene esa pista en el siguiente compás (como
   el botoncito de stop de Live en los slots vacíos).
-  Las escenas están a la derecha (→ desde la última pista; ← vuelve).
+  Las escenas están a la izquierda (← desde la primera pista; → vuelve).
   A lanza la escena: los clips de esa fila; las pistas sin clip ahí se
   detienen. Mientras esperan el 1, esas celdas vacías se ven en blanco
   (igual que A sobre una celda vacía).
@@ -142,8 +142,7 @@ Session (como la de Live)
   borra la escena (o las marcadas). Pegar y duplicar recorren lo de abajo
   hacia abajo; borrar lo sube. En la rejilla de clips nada se recorre:
   pegar se pone encima y borrar deja el hueco. Select + L lo deshace.
-  Select + → desde las escenas abre la celda de la última pista; Select + ←
-  regresa a las pistas; Select + ↑ ↓ como siempre.
+  En las escenas, Select + ↑ ↓ como siempre (Select + ← → no hace nada ahí).
   Lo que espera el 1 (clips lanzados, celdas que detienen y la escena
   lanzada: su marco y su ▶) parpadea parejo.
   Lanzar un grupo: Select + B marca, ← → agranda en la misma fila y A
