@@ -1426,6 +1426,20 @@ bool SampleInstrument::renderVoiceNow(int channel, fixed *buffer, int size, int 
     bool complex=(loopMode==SILM_LOOPSYNC && rp->warpMode_==1 &&
                   WarpStretch::Available() && !rpReverse) ;
     if (rp->simpler_) complex=(rp->sWarp_==SW_COMPLEX && !rpReverse) ;
+    // trk2als: un loop que ya está al tempo del proyecto (y sin transponer) no
+    // tiene nada que estirar: suena tal cual, sin caché ni procesador (si
+    // luego cambia el tempo, el warp entra desde donde va)
+    if (complex && !rp->simpler_) {
+        float rate=source_?float(source_->GetSampleRate(rp->midiNote_)):44100.0f ;
+        double tf=rate/44100.0*pow(2.0,(transpose_->GetInt()+GetSimpler(SIP_A_DET)/100.0)/12.0) ;
+        double sp=fp2fl(rp->speed_) ;
+        if (fabs(sp-1.0)<0.0006 && fabs(tf-1.0)<0.0006) {
+            complex=false ;
+            if (rp->warpCache_) dropCache(rp) ;
+            rp->complexPrimed_=false ;
+            rp->warpFresh_=false ;
+        }
+    }
     if (complex) {
         renderComplex(channel,rp,size) ;
         wavbuf=(char *)&warpOut_[0] ;

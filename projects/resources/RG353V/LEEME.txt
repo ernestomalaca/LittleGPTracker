@@ -306,3 +306,11 @@ Recortar el clip
   clip empieza ahí, como "recortar" en Live). Sin loop, quita los compases
   vacíos del final. Pregunta antes y Select + L lo deshace.
   En el instrumento, Select es Select (como en LSDJ) y L es el gatillo.
+
+De Live a Chancho (prueba)
+  live2chancho.py (en la Mac, Documentos/Dev/handheld/live2chancho) pasa un
+  set de Live con pistas de audio en la vista de sesión a un proyecto de
+  Chancho: pistas, clips en sus escenas, loop, volumen y tempo (entero).
+  Los audios quedan ya estirados al tempo del proyecto: un loop que ya está
+  a ese tempo suena tal cual, sin warp ni caché (entra en el 1 a la primera).
+  Uso: python3 live2chancho.py "mi set.als" carpeta_del_proyecto
