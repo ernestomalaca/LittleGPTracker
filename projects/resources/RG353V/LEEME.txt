@@ -135,6 +135,15 @@ Session (como la de Live)
   la escena: ∞ (se queda ahí), x1 … x16. Una vuelta dura lo que el clip más
   largo de la escena; al terminar las vueltas entra la escena de abajo, en
   el 1. Si la de abajo está vacía, todo se detiene (fin de la canción).
+  Editar escenas (en la columna de escenas, filas enteras):
+  Select, B marca (↑ ↓ agranda); B copia; Select + A con escenas marcadas
+  las duplica justo abajo; Select + A sin marca pega lo copiado ahí; B + A
+  borra la escena (o las marcadas). Pegar y duplicar recorren lo de abajo
+  hacia abajo; borrar lo sube. En la rejilla de clips nada se recorre:
+  pegar se pone encima y borrar deja el hueco. Select + L lo deshace.
+  Select + → desde las escenas abre la celda de la última pista; Select + ←
+  regresa a las pistas; Select + ↑ ↓ como siempre.
+  Lo que espera el 1 (clips lanzados, celdas que detienen) se ve fijo.
   Lanzar un grupo: Select + B marca, ← → agranda en la misma fila y A
   lanza todos esos clips juntos en el 1 (las celdas vacías de la marca
   detienen su pista). Si la marca tiene varias filas, A la cancela.

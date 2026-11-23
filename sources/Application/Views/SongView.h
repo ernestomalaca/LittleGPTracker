@@ -173,6 +173,7 @@ class SongView : public View, public LaunchHost {
     // que estaban en ella (se toma una foto cada vez que la rejilla cambia)
     struct SesSnap {
         std::vector<unsigned char> grid;
+        std::vector<unsigned char> reps;   // trk2als: las repeticiones de cada escena
         std::map<int, Clip> clips;
         // trk2als: el sonido de una pista (cargar preset / kit vacío / ...)
         int instrTrack;
@@ -208,6 +209,20 @@ class SongView : public View, public LaunchHost {
     bool moveMark(int dx, int dy);
     void duplicateMark();
     int playFraction(int ch, int &total);   // cuánto lleva el loop (en 1/1000)
+    // trk2als: editar escenas (en la columna de escenas): Select,B marca; B
+    // copia; Select+A duplica lo marcado abajo o pega; B+A borra. Pegar y
+    // duplicar recorren lo de abajo hacia abajo; borrar lo sube
+    bool scnMarking_, scnBPending_;
+    int scnMarkRow_;
+    std::vector<SesCell> scnClip_;
+    std::vector<unsigned char> scnReps_;
+    int scnRows_;
+    bool sceneButton(unsigned short phys, unsigned short v, bool pressed, bool repeat);
+    void scnRange(int &top, int &bot);
+    void scnCopy(int top, int bot, std::vector<SesCell> &cells, std::vector<unsigned char> &reps);
+    bool scnInsert(int at, int n);
+    void scnDelete(int top, int bot);
+    bool scnPaste(int at, const std::vector<SesCell> &cells, const std::vector<unsigned char> &reps, int n);
     SesSnap sesNow_;
     bool sesNowValid_;
     std::vector<SesSnap> sesUndo_, sesRedo_;

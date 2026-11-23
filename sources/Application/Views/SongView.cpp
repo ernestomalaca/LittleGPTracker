@@ -81,6 +81,9 @@ SongView::SongView(GUIWindow &w, ViewData *viewData, const char *song)
     lastVuDraw_ = 0;
     sesNowValid_ = false;
     sesMarking_ = sesPasting_ = sesDupDone_ = false;
+    scnMarking_ = scnBPending_ = false;
+    scnMarkRow_ = 0;
+    scnRows_ = 0;
     sesBPending_ = sesAPending_ = sesAMoved_ = false;
     NOTIFICATION_TIMEOUT = 1800;   // el aviso de abajo se lee con calma
     vuBarHeightsL_[0] = 0;
@@ -911,6 +914,7 @@ void SongView::ProcessButtonMask(unsigned short mask, bool pressed) {
 void SongView::takeSesSnap(SesSnap &s) {
     Song *song = viewData_->song_;
     s.grid.assign(song->data_, song->data_ + SONG_CHANNEL_COUNT * SONG_ROW_COUNT);
+    s.reps.assign(song->sceneRep_, song->sceneRep_ + SONG_ROW_COUNT);
     s.clips.clear();
     for (int c = 0; c < SONG_CHANNEL_COUNT; c++) {
         if (isAudioColumn(c)) continue;
@@ -924,6 +928,7 @@ void SongView::takeSesSnap(SesSnap &s) {
 void SongView::restoreSesSnap(const SesSnap &s) {
     Song *song = viewData_->song_;
     memcpy(song->data_, &s.grid[0], s.grid.size());
+    if (s.reps.size() == SONG_ROW_COUNT) memcpy(song->sceneRep_, &s.reps[0], SONG_ROW_COUNT);
     for (std::map<int, Clip>::const_iterator it = s.clips.begin(); it != s.clips.end(); ++it)
         song->clips_->Get(it->first) = it->second;
     // trk2als: el sonido de la pista, como estaba
@@ -972,7 +977,9 @@ void SongView::endSoundChange(int track) {
 void SongView::checkHistory() {
     Song *song = viewData_->song_;
     if (!sesNowValid_ || sesNow_.grid.size() != SONG_CHANNEL_COUNT * SONG_ROW_COUNT) return;
-    if (memcmp(&sesNow_.grid[0], song->data_, sesNow_.grid.size()) == 0) return;
+    if (memcmp(&sesNow_.grid[0], song->data_, sesNow_.grid.size()) == 0 &&
+        (sesNow_.reps.size() != SONG_ROW_COUNT || memcmp(&sesNow_.reps[0], song->sceneRep_, SONG_ROW_COUNT) == 0))
+        return;
     sesUndo_.push_back(sesNow_);
     if (sesUndo_.size() > 48) sesUndo_.erase(sesUndo_.begin());
     sesRedo_.clear();
@@ -1158,6 +1165,157 @@ void SongView::duplicateMark() {
     View::SetNotification(b);
 }
 
+/************************************************************
+ trk2als: editar escenas (filas enteras, desde la columna de escenas)
+ ************************************************************/
+
+void SongView::scnRange(int &top, int &bot) {
+    int cur = viewData_->songY_ + viewData_->songOffset_;
+    top = bot = cur;
+    if (scnMarking_) {
+        top = scnMarkRow_ < cur ? scnMarkRow_ : cur;
+        bot = scnMarkRow_ < cur ? cur : scnMarkRow_;
+    }
+}
+
+void SongView::scnCopy(int top, int bot, std::vector<SesCell> &cells, std::vector<unsigned char> &reps) {
+    cells.clear();
+    reps.clear();
+    Song *song = viewData_->song_;
+    for (int w = top; w <= bot; w++) {
+        reps.push_back(song->sceneRep_[w]);
+        for (int c = 0; c < SONG_CHANNEL_COUNT; c++) {
+            unsigned char d = song->data_[c + SONG_CHANNEL_COUNT * w];
+            if (d == 0xFF) continue;
+            SesCell cell;
+            cell.dx = c;
+            cell.dy = w - top;
+            cell.audio = isAudioColumn(c);
+            cell.value = d;
+            if (!cell.audio) cell.clip = song->clips_->Get(d);
+            cells.push_back(cell);
+        }
+    }
+}
+
+// n filas vacías en 'at' (lo de abajo baja); no se puede si se perdería algo
+bool SongView::scnInsert(int at, int n) {
+    Song *song = viewData_->song_;
+    for (int w = SONG_ROW_COUNT - n; w < SONG_ROW_COUNT; w++)
+        for (int c = 0; c < SONG_CHANNEL_COUNT; c++)
+            if (song->data_[c + SONG_CHANNEL_COUNT * w] != 0xFF) return false;
+    memmove(song->data_ + SONG_CHANNEL_COUNT * (at + n), song->data_ + SONG_CHANNEL_COUNT * at,
+            SONG_CHANNEL_COUNT * (SONG_ROW_COUNT - at - n));
+    memset(song->data_ + SONG_CHANNEL_COUNT * at, 0xFF, SONG_CHANNEL_COUNT * n);
+    memmove(song->sceneRep_ + at + n, song->sceneRep_ + at, SONG_ROW_COUNT - at - n);
+    memset(song->sceneRep_ + at, 0, n);
+    for (int c = 0; c < SONG_CHANNEL_COUNT; c++)   // lo que suena se va con su fila
+        if (viewData_->songPlayPos_[c] >= at && viewData_->songPlayPos_[c] + n < SONG_ROW_COUNT)
+            viewData_->songPlayPos_[c] += n;
+    return true;
+}
+
+void SongView::scnDelete(int top, int bot) {
+    Song *song = viewData_->song_;
+    int n = bot - top + 1;
+    memmove(song->data_ + SONG_CHANNEL_COUNT * top, song->data_ + SONG_CHANNEL_COUNT * (bot + 1),
+            SONG_CHANNEL_COUNT * (SONG_ROW_COUNT - bot - 1));
+    memset(song->data_ + SONG_CHANNEL_COUNT * (SONG_ROW_COUNT - n), 0xFF, SONG_CHANNEL_COUNT * n);
+    memmove(song->sceneRep_ + top, song->sceneRep_ + bot + 1, SONG_ROW_COUNT - bot - 1);
+    memset(song->sceneRep_ + SONG_ROW_COUNT - n, 0, n);
+    for (int c = 0; c < SONG_CHANNEL_COUNT; c++)
+        if (viewData_->songPlayPos_[c] > bot) viewData_->songPlayPos_[c] -= n;
+}
+
+bool SongView::scnPaste(int at, const std::vector<SesCell> &cells, const std::vector<unsigned char> &reps, int n) {
+    if (n <= 0) return false;
+    if (!scnInsert(at, n)) { View::SetNotification("no hay lugar abajo"); return false; }
+    int skipped;
+    pasteCells(cells, 0, at, skipped);
+    for (int k = 0; k < n && k < (int)reps.size(); k++) viewData_->song_->sceneRep_[at + k] = reps[k];
+    return true;
+}
+
+bool SongView::sceneButton(unsigned short phys, unsigned short v, bool pressed, bool repeat) {
+    bool sel = (phys & EPBM_SELECT) != 0;
+    int cur = viewData_->songY_ + viewData_->songOffset_;
+    if (!pressed) {
+        if (v == EPBM_B && scnBPending_ && scnMarking_) {   // B sola: copia lo marcado
+            scnBPending_ = false;
+            int top, bot;
+            scnRange(top, bot);
+            scnCopy(top, bot, scnClip_, scnReps_);
+            scnRows_ = bot - top + 1;
+            char b[40];
+            snprintf(b, sizeof(b), scnRows_ == 1 ? "escena copiada" : "%d escenas copiadas", scnRows_);
+            View::SetNotification(b);
+            scnMarking_ = false;
+            isDirty_ = true;
+            return true;
+        }
+        return scnMarking_;
+    }
+    if (repeat && !(v & (EPBM_UP | EPBM_DOWN))) return scnMarking_;
+    if (v == EPBM_SELECT) return scnMarking_;   // Select solo no suelta la marca (Select + A la duplica)
+    if (v != EPBM_B) scnBPending_ = false;
+    bool changed = false;
+    if (!sesNowValid_) { takeSesSnap(sesNow_); sesNowValid_ = true; }
+    if (!scnMarking_ && sel && v == EPBM_B && !(phys & EPBM_A)) {   // Select, B: marcar escenas
+        scnMarking_ = true;
+        scnMarkRow_ = cur;
+        View::SetNotification("marcando escenas: ↑ ↓");
+        isDirty_ = true;
+        return true;
+    }
+    if (v == EPBM_A && (phys & EPBM_B)) {   // B + A: borra (lo de abajo sube)
+        int top, bot;
+        scnRange(top, bot);
+        MixerService::GetInstance()->Lock();
+        scnDelete(top, bot);
+        MixerService::GetInstance()->Unlock();
+        char b[40];
+        snprintf(b, sizeof(b), bot == top ? "escena borrada" : "%d escenas borradas", bot - top + 1);
+        View::SetNotification(b);
+        scnBPending_ = false;
+        if (scnMarking_) { scnMarking_ = false; updateCursor(0, top - cur); }
+        changed = true;
+    } else if (v == EPBM_A && sel) {
+        MixerService::GetInstance()->Lock();
+        if (scnMarking_) {   // Select + A con escenas marcadas: duplicarlas justo abajo
+            int top, bot;
+            scnRange(top, bot);
+            std::vector<SesCell> cells;
+            std::vector<unsigned char> reps;
+            scnCopy(top, bot, cells, reps);
+            if (scnPaste(bot + 1, cells, reps, bot - top + 1)) {
+                View::SetNotification(bot == top ? "escena duplicada abajo" : "escenas duplicadas abajo");
+                scnMarkRow_ = bot + 1;   // la marca se va a la copia
+                updateCursor(0, (bot + 1 + (cur - top)) - cur);
+            }
+        } else if (scnRows_ > 0) {   // Select + A: pegar aquí (lo de abajo baja)
+            if (scnPaste(cur, scnClip_, scnReps_, scnRows_))
+                View::SetNotification(scnRows_ == 1 ? "escena pegada" : "escenas pegadas");
+        } else {
+            View::SetNotification("nada que pegar (Select, B, B copia)");
+        }
+        MixerService::GetInstance()->Unlock();
+        changed = true;
+    } else if (scnMarking_) {
+        if (v == EPBM_B) scnBPending_ = true;
+        else if (v == EPBM_UP) updateCursor(0, -1);
+        else if (v == EPBM_DOWN) updateCursor(0, 1);
+        else if (v == EPBM_A) { scnMarking_ = false; View::SetNotification("marca cancelada"); }
+        else { scnMarking_ = false; isDirty_ = true; return false; }
+        isDirty_ = true;
+        return true;
+    } else {
+        return false;
+    }
+    checkHistory();
+    isDirty_ = true;
+    return true;
+}
+
 bool SongView::InterceptButton(unsigned short phys, unsigned short v, bool pressed, bool repeat) {
     // trk2als: L / R tocados solos (sin otro botón en medio), como la octava en
     // el clip: L baja una página (las filas que se ven), R sube; R tres veces
@@ -1185,6 +1343,7 @@ bool SongView::InterceptButton(unsigned short phys, unsigned short v, bool press
             return true;
         }
     }
+    if (rowMode_ && !headerMode_) return sceneButton(phys, v, pressed, repeat);
     if (rowMode_ || headerMode_) return false;
     bool sel = (phys & EPBM_SELECT) != 0;
     const unsigned short arrows = EPBM_UP | EPBM_DOWN | EPBM_LEFT | EPBM_RIGHT;
@@ -1938,10 +2097,15 @@ void SongView::processRowButtonMask(unsigned int mask) {
         isDirty_ = true;
         return;
     }
-    if (mask & EPBM_R) {   // Select + ↑ ↓: Project / Mixer, como siempre
-        if (mask & (EPBM_UP | EPBM_DOWN)) {
+    if (mask & EPBM_R) {   // Select + flechas: como desde la última pista (↑ Project,
+        // ↓ Mixer, → su clip; ← de vuelta a las pistas)
+        if (mask & (EPBM_UP | EPBM_DOWN | EPBM_RIGHT | EPBM_LEFT)) {
             rowMode_ = false;
-            processNormalButtonMask(mask);
+            int last = viewData_->project_->TrackCount() - 1;
+            if (last >= 0) viewData_->songX_ = last;
+            clampTrackCursor();
+            if (!(mask & EPBM_LEFT)) processNormalButtonMask(mask);
+            isDirty_ = true;
         }
         return;
     }
@@ -2647,7 +2811,7 @@ std::string SongView::blockState() {
         int q = -1, blink = 0;
         if (live && player->IsRunning() && player->GetQueueingMode(i) != QM_NONE) {
             q = player->GetQueuePosition(i);
-            blink = player->GetLiveIndicator(i)[0] != ' ';
+            blink = 0;   // trk2als: lo que espera el 1 se ve fijo (parpadear redibujaba todo y se veía a medias)
         }
         int tot;
         int fr = pos >= 0 ? playFraction(i, tot) : -1;
@@ -2788,6 +2952,11 @@ void SongView::drawBlockGrid() {
                     (q == QM_PHRASESTART || q == QM_TICKSTART || q == QM_CHAINSTART)) queued = true;
             }
             FillRect(SX, y, SW, h, has ? Mix(bg, fg, 9) : cellBg, 3);
+            if (scnMarking_ && rowMode_) {   // escenas marcadas: toda la fila
+                int top, bot;
+                scnRange(top, bot);
+                if (row >= top && row <= bot) FrameRect(X0 - 3, y - 3, SX + SW + 3 - (X0 - 3), h + 6, hi2, 4, 3);
+            }
             if (hereRow) FrameRect(SX, y, SW, h, cur, 3, 3);
             GUIColor green = LinkGreen();
             int ts = 12, tx = SX + 8, ty = y + (h - ts) / 2 - (h >= 34 ? 4 : 0);
@@ -2880,7 +3049,8 @@ void SongView::drawBlockGrid() {
             bool queuedHere = player->GetSequencerMode() == SM_LIVE && player->IsRunning() &&
                               player->GetQueueingMode(i) != QM_NONE &&
                               player->GetQueuePosition(i) == row &&
-                              player->GetLiveIndicator(i)[0] != ' ';
+                              player->GetQueueingMode(i) != QM_PHRASESTOP &&
+                              player->GetQueueingMode(i) != QM_CHAINSTOP;
             // marco claro pegado al borde (fino, no toca el texto del clip)
             if (playingHere) {
                 FrameRect(x, y, w, h, muted ? dim : fg, 3, 3);
