@@ -150,6 +150,8 @@ Teclado MIDI por USB
     canción.
   Las notas quedan como las tocaste (con su nudge, sin cuantizar). R2
   captura lo último que hiciste: notas tocadas o un parámetro movido.
+  Select + L en la Session deshace la captura (también el tempo que
+  adivinó); encima de un clip, también Select + L en ese clip.
 
 Cuantizar y swing
   En el clip, X + Y cuantiza lo marcado (sin marca, todo el clip): cada

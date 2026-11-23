@@ -21,6 +21,9 @@ class SongView : public View, public LaunchHost {
     // View implementation
     virtual void ProcessButtonMask(unsigned short mask, bool pressed);
     virtual bool Undo(bool redo);
+    // trk2als: la captura de R2 (AppWindow): antes y, si cambió algo, a la historia
+    void CaptureBegin();
+    void CaptureCommit();
     virtual bool InterceptButton(unsigned short phys, unsigned short v, bool pressed,
                                  bool repeat);
     virtual void DrawView();
@@ -171,8 +174,10 @@ class SongView : public View, public LaunchHost {
         int instrTrack;
         std::string trackName;
         InstrumentPresets::Snapshot instr;
-        SesSnap() : instrTrack(-1) {}
+        int tempo;   // trk2als: > 0: también el tempo (la captura con R2 lo cambia)
+        SesSnap() : instrTrack(-1), tempo(-1) {}
     };
+    SesSnap capBefore_;
     void snapInstr(SesSnap &s, int track);
     void beginSoundChange(int track);   // a la historia, y la pista en espera
     void endSoundChange(int track);

@@ -720,7 +720,9 @@ bool AppWindow::onEvent(GUIEvent &event) {
                     if (MidiCapture::LastNoteMs() > _instrumentView->LastCaptureMove()) {
                         int bc;
                         Clip before;
+                        if (_songView) _songView->CaptureBegin();
                         m = MidiCapture::Capture(_viewData, bc, before);
+                        if (m && _songView) _songView->CaptureCommit();   // Select + L en la Session lo quita
                         if (bc >= 0 && _clipView) _clipView->PushUndo(bc, before);
                     }
                     // la pista donde se movió algo por última vez

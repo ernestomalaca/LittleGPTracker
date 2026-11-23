@@ -897,6 +897,7 @@ void SongView::restoreSesSnap(const SesSnap &s) {
         song->clips_->Get(it->first) = it->second;
     // trk2als: el sonido de la pista, como estaba
     Project *project = viewData_->project_;
+    if (s.tempo > 0) project->FindVariable(VAR_TEMPO)->SetInt(s.tempo);
     if (s.instrTrack >= 0 && project->TrackExists(s.instrTrack)) {
         int owner = project->GetTrackInstrument(s.instrTrack);
         if (owner >= 0 && owner < MAX_SAMPLEINSTRUMENT_COUNT) {
@@ -947,6 +948,19 @@ void SongView::checkHistory() {
     takeSesSnap(sesNow_);
 }
 
+void SongView::CaptureBegin() {
+    takeSesSnap(capBefore_);
+    capBefore_.tempo = viewData_->project_->FindVariable(VAR_TEMPO)->GetInt();
+}
+
+void SongView::CaptureCommit() {
+    sesUndo_.push_back(capBefore_);
+    if (sesUndo_.size() > 48) sesUndo_.erase(sesUndo_.begin());
+    sesRedo_.clear();
+    takeSesSnap(sesNow_);
+    sesNowValid_ = true;
+}
+
 bool SongView::Undo(bool redo) {
     std::vector<SesSnap> &from = redo ? sesRedo_ : sesUndo_;
     std::vector<SesSnap> &to = redo ? sesUndo_ : sesRedo_;
@@ -960,6 +974,7 @@ bool SongView::Undo(bool redo) {
     SesSnap now;
     takeSesSnap(now);
     if (it >= 0) snapInstr(now, it);
+    if (from.back().tempo > 0) now.tempo = viewData_->project_->FindVariable(VAR_TEMPO)->GetInt();
     to.push_back(now);
     restoreSesSnap(from.back());
     from.pop_back();
