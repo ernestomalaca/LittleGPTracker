@@ -19,6 +19,9 @@ done
 rm -rf "$PYO"
 "$SDK/bin/aarch64-none-linux-gnu-strip" -o "$OUT/chancho6/chancho6-rg353v.elf" chancho6-rg353v.elf
 cp "$OUT/chancho6/chancho6-rg353v.elf" ./chancho6-rg353v-stripped.elf
+# DEMO=carpeta de un proyecto (va como lgpt_chancho_try); MANUAL=pdf (opcionales)
+if [ -n "$DEMO" ] && [ -d "$DEMO" ]; then cp -a "$DEMO" "$OUT/chancho6/lgpt_chancho_try"; fi
+if [ -n "$MANUAL" ] && [ -f "$MANUAL" ]; then cp "$MANUAL" "$OUT/"; fi
 (cd "$OUT" && zip -9qr - .) > chancho6-rg353v.zip
 rm -rf "$OUT"
 echo "listo: projects/chancho6-rg353v.zip y projects/chancho6-rg353v-stripped.elf"

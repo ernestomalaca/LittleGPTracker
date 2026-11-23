@@ -1,7 +1,7 @@
 #!/bin/bash
 # Baja la última versión de Chancho 6 por Wi-Fi y cambia solo el programa:
 # config.xml, mapping.xml, los proyectos y la samplelib no se tocan.
-URL="https://github.com/ernestomalaca/LittleGPTracker/releases/download/consola/chancho6-rg353v.elf"
+URL="https://github.com/ernestomalaca/chancho6/releases/download/consola/chancho6-rg353v.elf"
 DIR="$(cd "$(dirname "$0")" && pwd)/chancho6"
 LOG="$DIR/actualizar.txt"
 mkdir -p "$DIR"

@@ -6,7 +6,7 @@ from reportlab.lib import colors
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-import sys
+import sys, os
 
 D = '/usr/share/fonts/truetype/dejavu/'
 pdfmetrics.registerFont(TTFont('S', D + 'DejaVuSans.ttf'))
@@ -27,11 +27,58 @@ cell = ParagraphStyle('c', parent=body, fontSize=8, leading=10.8, spaceAfter=0)
 W, H = A5
 M = 14 * mm
 
+PLATS = {
+ 'rg35xxplus': dict(
+  nombre='RG35XX Plus', cabecera='ALPHA · RG35XX PLUS · SIN PROBAR EN ESTA CONSOLA',
+  portada=['Versión de prueba. Compilada para la RG35XX Plus pero nunca',
+           'probada en esa consola: puede no arrancar, los botones pueden',
+           'estar cruzados o el audio puede fallar.',
+           'Haz copia de tus proyectos y cuéntanos qué pasó.'],
+  aviso='<b>Esto es una alpha.</b> Chancho 6 se hace y se prueba en la RG353V. Esta versión para la '
+        'RG35XX Plus está compilada para su procesador, pero <b>nadie la ha probado todavía en una RG35XX '
+        'Plus</b>. Lo más probable es que haya que ajustar los botones. Si algo falla, manda '
+        '<font name="M">chancho6/log.txt</font> y <font name="M">chancho6/botones.txt</font>.',
+  necesita='Una RG35XX Plus con un sistema que tenga <b>Ports</b>: muOS o Knulli (recomendados). En el sistema '
+           'de fábrica de Anbernic se puede intentar desde APPS. Una tarjeta con ~100 MB libres.',
+  instalar=[('1', 'Descomprime el zip. Copia a la carpeta de Ports de la tarjeta (Knulli: <font name="M">roms/ports</font>; '
+                  'muOS: <font name="M">ROMS/ports</font> o la carpeta de aplicaciones según la versión): '
+                  '<font name="M">Chancho 6.sh</font>, <font name="M">Detectar botones.sh</font> y la carpeta '
+                  '<font name="M">chancho6/</font>.'),
+            ('2', '(Opcional) tu librería de samples en <font name="M">chancho6/samplelib</font>.'),
+            ('3', 'Reinicia la lista de juegos si hace falta y abre <b>Ports › Chancho 6</b>.')],
+  extra_t='Lo que no trae esta versión',
+  extra='• Teclado MIDI por USB (en la RG353V sí).<br/>• Actualizar por Wi-Fi: se actualiza copiando el '
+        '<font name="M">.elf</font> nuevo dentro de <font name="M">chancho6/</font>.',
+  sistema='muOS, Knulli, fábrica'),
+ 'rg353v': dict(
+  nombre='RG353V', cabecera='ALPHA · RG353V',
+  portada=['Versión en desarrollo. Se hace y se prueba en la RG353V',
+           '(dArkOS), pero todavía cambia seguido y puede tener errores.',
+           'Haz copia de tus proyectos y cuéntanos qué pasó.'],
+  aviso='<b>Esto es una alpha.</b> Chancho 6 se hace y se prueba en una RG353V con dArkOS, pero todavía '
+        'está en desarrollo: cambia seguido y puede tener errores. Haz copia de tus proyectos. Si algo '
+        'falla, manda <font name="M">chancho6/log.txt</font>.',
+  necesita='Una RG353V con un Linux que tenga <b>Ports</b> y SDL2: dArkOS (donde se prueba) o ROCKNIX. '
+           'El ArkOS original es demasiado viejo. Una tarjeta con ~100 MB libres.',
+  instalar=[('1', 'Descomprime el zip. Copia a la carpeta de Ports de la tarjeta (<font name="M">roms/ports</font>): '
+                  'los <font name="M">.sh</font> y la carpeta <font name="M">chancho6/</font>.'),
+            ('2', '(Opcional) tu librería de samples en <font name="M">chancho6/samplelib</font>.'),
+            ('3', 'En la consola: <b>Ports › Chancho 6</b>.')],
+  extra_t='Extras de la RG353V',
+  extra='• <b>Teclado MIDI por USB</b> (probado con un Arturia MiniLab 3): las teclas y pads tocan la pista '
+        'donde estás; R2 captura lo que tocaste.<br/>'
+        '• <b>Actualizar por Wi-Fi</b>: Ports › Actualizar Chancho 6 baja la última versión y cambia solo '
+        'el programa (tus proyectos se quedan).',
+  sistema='dArkOS, ROCKNIX'),
+}
+PL = PLATS[sys.argv[2] if len(sys.argv) > 2 else 'rg35xxplus']
+HERE = os.path.dirname(os.path.abspath(__file__))
+
 
 def deco(c, doc):
     c.saveState()
     c.setFillColor(WARN); c.setFont('SB', 7)
-    c.drawString(M, H - 9 * mm, 'ALPHA · RG35XX PLUS · SIN PROBAR EN ESTA CONSOLA')
+    c.drawString(M, H - 9 * mm, PL['cabecera'])
     c.setFillColor(DIM); c.setFont('S', 7)
     c.drawRightString(W - M, 8 * mm, 'Chancho 6 · manual alpha · %d' % doc.page)
     c.restoreState()
@@ -44,15 +91,12 @@ def cover(c, doc):
     c.drawString(M, H - 60 * mm, 'CHANCHO 6')
     c.setFillColor(colors.HexColor('#f0eefa')); c.setFont('S', 12)
     c.drawString(M, H - 70 * mm, 'tracker de bolsillo, con Session como Live')
-    c.drawString(M, H - 77 * mm, 'para la Anbernic RG35XX Plus')
+    c.drawString(M, H - 77 * mm, 'para la Anbernic ' + PL['nombre'])
     c.setFillColor(WARN); c.roundRect(M, H - 100 * mm, 34 * mm, 12 * mm, 3 * mm, fill=1, stroke=0)
     c.setFillColor(colors.white); c.setFont('SB', 16); c.drawCentredString(M + 17 * mm, H - 96 * mm, 'ALPHA')
     c.setFillColor(colors.HexColor('#9a98b0')); c.setFont('S', 8)
     t = c.beginText(M, H - 112 * mm); t.setLeading(11)
-    for l in ['Versión de prueba. Compilada para la RG35XX Plus pero nunca',
-              'probada en esa consola: puede no arrancar, los botones pueden',
-              'estar cruzados o el audio puede fallar.',
-              'Haz copia de tus proyectos y cuéntanos qué pasó.']:
+    for l in PL['portada']:
         t.textLine(l)
     c.drawText(t)
     c.setFont('S', 7); c.drawString(M, 12 * mm, 'Basado en LittleGPTracker (piggy). Manual de la versión alpha, noviembre 2026.')
@@ -86,33 +130,18 @@ def box(t, bg=colors.HexColor('#fdecea'), fg=WARN):
 S = []
 S.append(PageBreak())
 
-S += [P('Antes de empezar', h1),
-      box('<b>Esto es una alpha.</b> Chancho 6 se hace y se prueba en la RG353V. Esta versión para la '
-          'RG35XX Plus está compilada para su procesador, pero <b>nadie la ha probado todavía en una RG35XX '
-          'Plus</b>. Lo más probable es que haya que ajustar los botones. Si algo falla, manda '
-          '<font name="M">chancho6/log.txt</font> y <font name="M">chancho6/botones.txt</font>.'),
-      Spacer(1, 6),
+S += [P('Antes de empezar', h1), box(PL['aviso']), Spacer(1, 6),
       P('Chancho 6 es un tracker (como LittleGPTracker o LSDJ) con una <b>Session</b> parecida a la de '
         'Ableton Live: una rejilla de clips por pista y escenas que se lanzan en el siguiente compás. '
         'Toca clips de audio estirados a tempo, samples, kits e instrumentos multicapa.'),
-      P('Qué necesitas', h2),
-      P('Una RG35XX Plus con un sistema que tenga <b>Ports</b>: muOS o Knulli (recomendados). En el sistema '
-        'de fábrica de Anbernic se puede intentar desde APPS. Una tarjeta con ~100 MB libres.'),
-      P('Instalar', h2),
-      keys([('1', 'Descomprime el zip. Copia a la carpeta de Ports de la tarjeta (Knulli: <font name="M">roms/ports</font>; '
-                   'muOS: <font name="M">ROMS/ports</font> o la carpeta de aplicaciones según la versión): '
-                   '<font name="M">Chancho 6.sh</font>, <font name="M">Detectar botones.sh</font> y la carpeta '
-                   '<font name="M">chancho6/</font>.'),
-            ('2', '(Opcional) tu librería de samples en <font name="M">chancho6/samplelib</font>.'),
-            ('3', 'Reinicia la lista de juegos si hace falta y abre <b>Ports › Chancho 6</b>.')], (8 * mm, None)),
+      P('Qué necesitas', h2), P(PL['necesita']),
+      P('Instalar', h2), keys(PL['instalar'], (8 * mm, None)),
       P('Si los botones no responden bien', h2),
       P('Abre <b>Ports › Detectar botones</b> y presiona en este orden: arriba, abajo, izquierda, derecha, '
         'A, B, X, Y, L, R, Select, Start. Sal con Project › Exit. Lo que presionaste queda en '
         '<font name="M">chancho6/botones.txt</font>: mándalo y con eso se corrige '
         '<font name="M">chancho6/mapping.xml</font>.'),
-      P('Lo que no trae esta versión', h2),
-      P('• Teclado MIDI por USB (en la RG353V sí).<br/>• Actualizar por Wi-Fi: se actualiza copiando el '
-        '<font name="M">.elf</font> nuevo dentro de <font name="M">chancho6/</font>.'),
+      P(PL['extra_t'], h2), P(PL['extra']),
       PageBreak()]
 
 S += [P('El set demo', h1),
@@ -124,7 +153,7 @@ S += [P('El set demo', h1),
         '3. Ve a la columna de escenas (← desde la primera pista) y presiona A: la escena entra.<br/>'
         '4. Prueba lanzar clips sueltos con A, y Select + Start para detener todo en el compás.'),
       Spacer(1, 4),
-      Image('/tmp/claude-0/-home-claude/8b7e166f-05e8-513f-95ea-580c3fb2a69c/scratchpad/at/try2.png',
+      Image(os.path.join(HERE, 'session.png'),
             width=W - 2 * M, height=(W - 2 * M) * 0.75),
       P('La Session con el demo: escenas a la izquierda (03 suena, ▶ verde), clips de audio por pista, '
         'y la cabecera de cada pista arriba.', small),
@@ -201,12 +230,12 @@ S += [P('Más', h1),
       box('Manda estas cosas a quien te pasó Chancho:<br/>'
           '1. <font name="M">chancho6/log.txt</font> (y <font name="M">log-1.txt</font> si volviste a abrir)<br/>'
           '2. <font name="M">chancho6/botones.txt</font> después de correr Detectar botones<br/>'
-          '3. Qué sistema usas (muOS, Knulli, fábrica) y su versión<br/>'
+          '3. Qué sistema usas (' + PL['sistema'] + ') y su versión<br/>'
           '4. Qué hiciste justo antes del problema',
           bg=SOFT, fg=ACC)]
 
 doc = BaseDocTemplate(sys.argv[1], pagesize=A5, leftMargin=M, rightMargin=M, topMargin=14 * mm,
-                      bottomMargin=14 * mm, title='Chancho 6 — manual ALPHA (RG35XX Plus)',
+                      bottomMargin=14 * mm, title='Chancho 6 — manual ALPHA (' + PL['nombre'] + ')',
                       author='Chancho 6')
 fr = Frame(M, 14 * mm, W - 2 * M, H - 28 * mm, id='f')
 doc.addPageTemplates([PageTemplate('cover', [fr], onPage=cover), PageTemplate('p', [fr], onPage=deco)])

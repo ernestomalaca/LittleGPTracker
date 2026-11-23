@@ -1,63 +1,53 @@
-# Little Piggy Tracker
+# Chancho 6
 
-![Piggy](https://avatars.githubusercontent.com/u/180156201?s=400&u=ebb53bdea61a025edce0c3782ac75b532dd65dd7&v=4)
+**Un tracker de bolsillo con una Session como la de Ableton Live**, para consolas portátiles
+Anbernic. Es un fork de [Little Piggy Tracker](https://github.com/djdiskmachine/LittleGPTracker)
+(antes LittleGPTracker).
 
-**Little Piggy Tracker** (f.k.a _'LittleGPTracker'_) is a music tracker optimised to run on portable game consoles. It is currently running on Windows, MacOS (intel/arm) & Linux, PSP, Miyoo Mini, and a collection of other retro gaming handhelds.
+> **ALPHA.** Chancho 6 se hace y se prueba en una **RG353V** con dArkOS. La versión para la
+> **RG35XX Plus** está compilada pero **nadie la ha probado todavía en esa consola**.
+> Haz copia de tus proyectos.
 
-It implements the user interface of [littlesounddj](https://www.littlesounddj.com/lsd/index.php) and precedes [M8 tracker](https://www.dirtywave.com), two popular trackers greatly loved in the tracker community.
+![La Session de Chancho 6](projects/resources/manual/session.png)
 
-All versions are available for free under the [GPLv3 License](LICENSE). If you like the project and want to contribute, don't hesitate to make a pull request for this repo.
+## Descargar
 
-## About This Fork
+En [Releases](https://github.com/ernestomalaca/chancho6/releases) está el zip de cada consola.
+Trae el programa, un set demo (`chancho_try`) y un manual en PDF.
 
-This build is derivative of the work of the original author `m-.-n`
-aka [Marc Nostromo](https://github.com/Mdashdotdashn/LittleGPTracker).
-The original work and releasing the source code has laid the foundation for everything in this repo.
+| Consola | Sistema | Estado |
+|---|---|---|
+| Anbernic RG353V | dArkOS, ROCKNIX | alpha, probada en la consola |
+| Anbernic RG35XX Plus | muOS, Knulli | alpha, **sin probar** |
 
-All implemented features have been tested not to break old
-projects but make sure to backup your old cherished work
-just to be safe &#9829;
+Instalar: copia los `.sh` y la carpeta `chancho6/` a la carpeta de Ports de la tarjeta y abre
+**Ports › Chancho 6**.
 
-## Releases
+## Qué tiene
 
-### Current Builds
+- **Session como Live.** Clips por pista y escenas que entran en el siguiente compás, y Stop All Clips.
+  Las escenas pueden repetirse xN y seguir a la escena de abajo.
+- **Clips de audio** estirados a tempo (complex / re-pitch), hasta 191 por proyecto.
+- **Samples, kits y multicapa**, con un navegador de sonidos y pre-escucha.
+- **Teclado MIDI por USB** (RG353V) y Capture, como en Live.
+- **Ableton Link**, para seguir el tempo de Live.
+- **chancho.local**: sube samples, baja proyectos y exporta a Ableton Live desde el navegador.
+- **live2chancho** (`tools/live2chancho`): pasa un set de Live con pistas de audio a un proyecto de Chancho.
 
-Latest releases from this fork here:
+El detalle de los controles está en el manual y en
+[`projects/resources/RG353V/LEEME.txt`](projects/resources/RG353V/LEEME.txt).
 
-- [Releases](https://github.com/djdiskmachine/LittleGPTracker/releases)
+## Compilar
 
+Con el SDK de la RG35XX Plus en `/opt/rg35xx-plus-aarch64-SDL2-SDK-0.1.0`:
 
-## Documentation
+```
+cd projects/resources/RG353V && bash empaquetar.sh        # RG353V
+cd projects/resources/RG35XXPLUS && bash empaquetar.sh    # RG35XX Plus
+```
 
-All the relevant documentation can be found in [Docs](docs) directory.
+## Licencia
 
-Recommended reading to get you started:
-
-- [What is Little Piggy Tracker](docs/wiki/What-is-LittlePiggyTracker.md)
-- [Quick-Start Guide](docs/wiki/quick_start_guide.md)
-- [Little Piggy Tracker Configuration](docs/LittlePiggyTrackerConf.md)
-- [Tips and Tricks](docs/wiki/tips_and_tricks.md)
-
-## Features per platform
-
-| Platform    | MIDI_Possible | MIDI_enabled | Soundfonts | Note                                 |
-|-------------|---------------|--------------|------------|--------------------------------------|
-| PSP         | NO            | NO           | YES        | [See notes](projects/resources/PSP/INSTALL_HOW_TO.txt) |
-| DEB         | YES           | YES          | YES        |                                      |
-| X64         | YES           | YES          | MAYBE      |                                      |
-| X86         | YES           | YES          | YES        |                                      |
-| STEAM       | YES           | YES          | MAYBE      |                                      |
-| MIYOO       | NO            | NO           | YES        | Port by [Nine-H](https://ninethehacker.xyz) |
-| W32         | YES           | YES          | YES        | Built in VS2008 with love            |
-| RASPI       | YES           | YES          | YES        | Versatile platform                   |
-| CHIP        | YES           | YES          | YES        | [See notes](projects/resources/CHIP/INSTALL_HOW_TO.txt) |
-| BITTBOY     | MAYBE         | NO           | YES        |                                      |
-| PORTMASTER  | MAYBE         | NO           | NO         | Not currently maintained in this repo, reach out to the [maintainers](https://discord.gg/JxYBp9HTAY) with questions related to Portmaster |
-| GARLIC      | NO            | NO           | NO         | No longer maintained, use Portmaster|
-| GARLICPLUS  | MAYBE         | NO           | YES        | Port by [Simotek](http://simotek.net)|
-| RG35XXPLUS  | MAYBE         | NO           | YES        | Port by [Simotek](http://simotek.net)|
-| MACOS       | YES           | YES          | MAYBE      | Port by [clsource](https://genserver.social/clsource) |
-
-* **MIDI functionality __greatly__ depends on kernel support, please feature request your favourite OS maintainer =)**
-* **Install ffmpeg by following install instructions for your platform [here](https://www.ffmpeg.org/download.html)**
-* **PrintFX requires full ffmpeg. If marked as TBA, it requires a redesign using [libav](https://trac.ffmpeg.org/wiki/Using%20libav*)**
+GPLv3, igual que Little Piggy Tracker ([LICENSE](LICENSE)). El código original es de
+Marc Nostromo (m-.-n), y el fork que lo continúa es de djdiskmachine. El README de Little Piggy
+Tracker está en [docs/README-littlepiggy.md](docs/README-littlepiggy.md).
