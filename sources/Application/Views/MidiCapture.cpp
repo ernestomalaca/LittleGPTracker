@@ -148,8 +148,9 @@ unsigned long MidiCapture::LastNoteMs() {
 	return 0 ;
 }
 
-const char *MidiCapture::Capture(ViewData *d,int &beforeClip,Clip &before) {
+const char *MidiCapture::Capture(ViewData *d,int &beforeClip,Clip &before,int &playRow) {
 	beforeClip=-1 ;
+	playRow=-1 ;
 	Project *project=d->project_ ;
 	Song *song=d->song_ ;
 	int ch=d->songX_ ;
@@ -266,6 +267,7 @@ const char *MidiCapture::Capture(ViewData *d,int &beforeClip,Clip &before) {
 	int B=repeatBars(st,pi,pages) ;
 	if (B>0) { c.loopStart=pages-B ; c.loopEnd=pages-1 ; }   // el loop, en la última vuelta
 	song->data_[ch+SONG_CHANNEL_COUNT*row]=(unsigned char)id ;
+	if (!running) playRow=row ;
 	int loopBars=B>0?B:pages ;
 	if (newTempo>0)
 		snprintf(msg,sizeof(msg),"Capturado: %d compas%s a %d bpm",loopBars,loopBars==1?"":"es",int(newTempo)) ;

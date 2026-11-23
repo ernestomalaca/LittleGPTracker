@@ -22,7 +22,9 @@ public:
 	static unsigned long LastNoteMs() ;
 	// lo vuelve clip; devuelve el aviso (o 0 si no había nada). Si cambió un
 	// clip que ya existía, 'beforeClip' >= 0 y 'before' es como estaba (deshacer)
-	static const char *Capture(ViewData *d,int &beforeClip,Clip &before) ;
+	// 'playRow' >= 0: era sin nada sonando: la fila del clip nuevo (para que
+	// arranque a sonar en seguida, como en Live)
+	static const char *Capture(ViewData *d,int &beforeClip,Clip &before,int &playRow) ;
 } ;
 
 #endif
