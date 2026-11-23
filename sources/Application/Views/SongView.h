@@ -21,6 +21,9 @@ class SongView : public View, public LaunchHost {
     // View implementation
     virtual void ProcessButtonMask(unsigned short mask, bool pressed);
     virtual bool Undo(bool redo);
+  private:
+    bool lsdjGesture(bool solo);
+  public:
     // trk2als: la captura de R2 (AppWindow): antes y, si cambió algo, a la historia
     void CaptureBegin();
     void CaptureCommit();

@@ -729,6 +729,13 @@ void SongView::unMuteAll() {
     controller->UnMuteAll();
 };
 
+// trk2als: mute y solo solo con el gesto de LSDJ (B + Select / B + Start), no
+// con los atajos de LGPT (R + B / R + A / L ...)
+bool SongView::lsdjGesture(bool solo) {
+    unsigned short p = View::physMask_;
+    return (p & EPBM_B) && (p & (solo ? EPBM_START : EPBM_SELECT));
+}
+
 void SongView::toggleMute() {
 
     UIController *controller = UIController::GetInstance();
@@ -1444,7 +1451,7 @@ void SongView::processNormalButtonMask(unsigned int mask) {
 
             viewMode_ = VM_CLONE;
         };
-        if (mask & EPBM_R) {
+        if ((mask & EPBM_R) && lsdjGesture(false)) {   // trk2als: solo B + Select (como LSDJ)
             toggleMute();
         };
         if (mask & EPBM_START) {
@@ -1477,7 +1484,7 @@ void SongView::processNormalButtonMask(unsigned int mask) {
                     createClip();              // trk2als: como en Live: un clip nuevo
                 }
             }
-            if (mask & EPBM_R) {
+            if ((mask & EPBM_R) && lsdjGesture(true)) {   // trk2als: solo B + Start (como LSDJ)
                 switchSoloMode();
             };
         } else {
@@ -1486,9 +1493,7 @@ void SongView::processNormalButtonMask(unsigned int mask) {
 
             if (mask & EPBM_R) {
 
-                if (mask & EPBM_L) {
-                    unMuteAll();
-                }
+                // trk2als: (R + L quitaba los mutes como en LGPT; ahora es B, como LSDJ)
 
                 if (mask & EPBM_RIGHT) {
                     unsigned char *data = viewData_->GetCurrentSongPointer();
@@ -1966,7 +1971,7 @@ void SongView::processSelectionButtonMask(unsigned int mask) {
     // B Modifier
 
     if (mask & EPBM_B) {
-        if (mask & EPBM_R) {
+        if ((mask & EPBM_R) && lsdjGesture(false)) {   // trk2als: solo B + Select (como LSDJ)
             toggleMute();
         };
         if (mask & EPBM_L) {
@@ -1984,7 +1989,7 @@ void SongView::processSelectionButtonMask(unsigned int mask) {
             if (mask & EPBM_L) {
                 cutSelection();
             }
-            if (mask & EPBM_R) {
+            if ((mask & EPBM_R) && lsdjGesture(true)) {   // trk2als: solo B + Start (como LSDJ)
                 switchSoloMode();
             };
         } else {
@@ -1993,9 +1998,7 @@ void SongView::processSelectionButtonMask(unsigned int mask) {
 
             if (mask & EPBM_R) {
 
-                if (mask & EPBM_L) {
-                    unMuteAll();
-                }
+                // trk2als: (R + L quitaba los mutes como en LGPT; ahora es B, como LSDJ)
 
                 if (mask & EPBM_RIGHT) {
                     unsigned char *data = viewData_->GetCurrentSongPointer();
