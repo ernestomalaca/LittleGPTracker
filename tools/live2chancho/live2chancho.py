@@ -5,7 +5,9 @@
 #
 # Lo que pasa:
 #  - cada pista de audio (máx. 8) -> pista de audio de Chancho, con su nombre
-#  - cada clip de audio -> un loop en su celda (misma pista y escena)
+#  - cada clip de audio -> un loop en su celda (misma pista y escena); si el
+#    audio es idéntico a otro ya convertido (y con la misma ganancia), la
+#    celda usa ese mismo loop (no gasta otro de los 64)
 #    * se recorta la región del loop (o del clip si no tiene loop) a un WAV
 #      de 44.1 kHz / 16 bits en samples/, así Chancho lo toca exacto
 #    * compases = largo en beats / 4; el audio se estira (conservando el
@@ -83,6 +85,9 @@ def main():
     names = []
     report = []
     nclip = 0
+    seen = {}                 # (audio idéntico, ganancia, warp) -> el loop que ya existe
+    import hashlib, tempfile, shutil
+    tmpdir = tempfile.mkdtemp(prefix='live2chancho')
     for ti, t in enumerate(tracks):
         tname = val(t, 'Name/EffectiveName', 'AUDIO %d' % (ti + 1))
         names.append(tname)
@@ -93,9 +98,6 @@ def main():
             c = s.find('ClipSlot/Value/AudioClip')
             if c is None or row >= 256:
                 continue
-            if nclip >= MAX_CLIPS:
-                report.append('  (sin lugar: máx. %d clips de audio)' % MAX_CLIPS)
-                break
             cname = val(c, 'Name', '')
             fr = c.find('SampleRef/FileRef')
             rel = val(fr, 'RelativePath')
@@ -120,9 +122,8 @@ def main():
             secs = s1 - s0
             srcbpm = beats * 60.0 / secs if secs > 0 else tempo
             bpm = target
-            iid = AUDIO_CLIP_BASE + nclip
             fname = '%s_%02d.wav' % (safe(tname, 12), row)
-            out = os.path.join(dest, 'samples', fname)
+            out = os.path.join(tmpdir, fname)
             # el loop ya estirado (conservando el tono) a 'target' bpm exactos:
             # en Chancho suena tal cual, sin estirar en la consola
             frames = int(round(beats * 60.0 / target * SR))
@@ -133,16 +134,33 @@ def main():
             subprocess.run(['ffmpeg', '-v', 'error', '-y', '-ss', '%.6f' % s0, '-t', '%.6f' % secs,
                             '-i', path, '-af', af, '-c:a', 'pcm_s16le', out], check=True)
             exact(out, frames)   # el largo exacto (el estirado deja unos cuadros de más o de menos)
+            import wave
+            w = wave.open(out)
+            key = (hashlib.md5(w.readframes(w.getnframes())).hexdigest(), gain, mode == 3)
+            w.close()
+            warp = 're-pitch' if mode == 3 else 'complex'
+            if key in seen:   # el mismo audio ya es un loop: la celda usa ese (no gasta otro)
+                song[ti + 8 * row] = seen[key]
+                os.remove(out)
+                report.append('  %-18s escena %02X  %-26s = A%02X (el mismo audio)' %
+                              (tname[:18], row, cname[:26], seen[key] - AUDIO_CLIP_BASE))
+                continue
+            if nclip >= MAX_CLIPS:
+                report.append('  %-18s escena %02X  sin lugar (máx. %d loops distintos)' % (tname[:18], row, MAX_CLIPS))
+                os.remove(out)
+                continue
+            iid = AUDIO_CLIP_BASE + nclip
+            seen[key] = iid
+            shutil.move(out, os.path.join(dest, 'samples', fname))
             song[ti + 8 * row] = iid
             instruments.append((iid, {
                 'sample': fname, 'start': 0, 'loopstart': 0, 'end': frames,
                 'loopmode': 'none', 'loop bars': bars, 'loop bpm': bpm, 'from bar': 1,
-                'warp': 're-pitch' if mode == 3 else 'complex', 'length': bars,
+                'warp': warp, 'length': bars,
                 'a gain': gain, 'audio clip': 1, 'a init': 1,
             }))
-            report.append('  %-18s escena %02X  %-26s %2d compases  %.2f -> %d bpm  %s  %+d dB' %
-                          (tname[:18], row, cname[:26], bars, srcbpm, bpm,
-                           're-pitch' if mode == 3 else 'complex', gain))
+            report.append('  %-18s escena %02X  %-26s A%02X  %2d compases  %.2f -> %d bpm  %s  %+d dB' %
+                          (tname[:18], row, cname[:26], iid - AUDIO_CLIP_BASE, bars, srcbpm, bpm, warp, gain))
             nclip += 1
 
     # --- el proyecto, sobre la plantilla
@@ -184,7 +202,10 @@ def main():
     ref = os.path.join(dest, 'samples.ref')
     if os.path.exists(ref):
         os.remove(ref)
-    print('tempo %.2f -> %d, %d pistas, %d clips' % (tempo, target, len(tracks), nclip))
+    used = sum(1 for b in song if b != 0xFF)
+    print('tempo %.2f -> %d, %d pistas, %d celdas con %d loops distintos (de %d)' %
+          (tempo, target, len(tracks), used, nclip, MAX_CLIPS))
+    shutil.rmtree(tmpdir, ignore_errors=True)
     print('\n'.join(report))
 
 
