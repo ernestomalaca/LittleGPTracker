@@ -544,6 +544,7 @@ void ProjectView::drawBoard() {
         Variable *v = &((UIIntVarField *)chipField_[k])->GetVariable();
         std::string val;
         if (k == 6) { snprintf(b, sizeof(b), "%+d", v->GetInt()); val = b; }   // transponer
+        else if (k == 3 && v->GetInt() <= 50) val = "no";   // swing apagado (parejo)
         else if (k == 2 || k == 3) { snprintf(b, sizeof(b), "%d%%", v->GetInt()); val = b; }   // cuantizar, swing
         else if (k == 7) val = v->GetInt() ? "sí" : "no";                        // fold
         else if (v->GetType() == Variable::INT) { snprintf(b, sizeof(b), "%d", v->GetInt()); val = b; }

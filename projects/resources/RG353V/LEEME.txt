@@ -160,7 +160,7 @@ Cuantizar y swing
   nota se acerca a la línea de la rejilla más cercana lo que diga
   Proyecto > CUANTIZAR (70% de entrada: queda algo de lo tocado; otra vez
   X + Y la acerca más; 100% la pega). Select + L lo deshace.
-  Proyecto > SWING (como el Move): 50% parejo; más arriba, las
+  Proyecto > SWING (como el Move): "no" (50%) = parejo, sin swing; más arriba, las
   semicorcheas a contratiempo suenan más tarde (75% = el máximo). Vale
   para las notas de todos los clips MIDI; no cambia las notas guardadas.
   (TIPO y NIVEL del softclip dejaron su lugar: se van a ir al mixer; el
