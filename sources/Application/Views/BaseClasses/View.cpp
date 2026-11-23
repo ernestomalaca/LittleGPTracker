@@ -502,7 +502,7 @@ bool View::drawTopBar(int tab, const char *context) {
 	topTempo_=viewData_->project_->GetTempo() ;
 	int px=rx-20 ;
 	if (running) {   // triángulo de play
-		for (int k=0;k<12;k++) FillRect(px+k,9+k/2,1,13-k,ColorOf(CD_PLAY)) ;
+		for (int k=0;k<12;k++) FillRect(px+k,9+k/2,1,13-k,LinkGreen()) ;   // verde, como el play de Live
 	} else {         // cuadrado de stop
 		FillRect(px,10,11,11,dim) ;
 	}
