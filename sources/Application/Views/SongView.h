@@ -208,6 +208,7 @@ class SongView : public View, public LaunchHost {
     int pasteCells(const std::vector<SesCell> &cells, int col, int row, int &skipped);
     bool moveMark(int dx, int dy);
     void duplicateMark();
+    bool queueBlink();
     int playFraction(int ch, int &total);   // cuánto lleva el loop (en 1/1000)
     // trk2als: editar escenas (en la columna de escenas): Select,B marca; B
     // copia; Select+A duplica lo marcado abajo o pega; B+A borra. Pegar y

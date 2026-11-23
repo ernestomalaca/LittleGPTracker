@@ -144,7 +144,7 @@ Session (como la de Live)
   pegar se pone encima y borrar deja el hueco. Select + L lo deshace.
   Select + → desde las escenas abre la celda de la última pista; Select + ←
   regresa a las pistas; Select + ↑ ↓ como siempre.
-  Lo que espera el 1 (clips lanzados, celdas que detienen) se ve fijo.
+  Lo que espera el 1 (clips lanzados, celdas que detienen) parpadea parejo.
   Lanzar un grupo: Select + B marca, ← → agranda en la misma fila y A
   lanza todos esos clips juntos en el 1 (las celdas vacías de la marca
   detienen su pista). Si la marca tiene varias filas, A la cancela.

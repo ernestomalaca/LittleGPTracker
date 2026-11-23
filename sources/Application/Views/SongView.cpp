@@ -2768,6 +2768,11 @@ void SongView::nudgeTempo(int direction) {
  medidor por pista. La navegación y la edición no cambian.
  ******************************************************/
 
+// trk2als: el parpadeo de lo que espera el 1: encendido / apagado parejo, 250 ms cada uno
+bool SongView::queueBlink() {
+    return (System::GetInstance()->GetClock() / 250) % 2 == 0;
+}
+
 bool SongView::blockGrid() {
     return !View::miniLayout_ && SupportsShapes();
 }
@@ -2811,7 +2816,7 @@ std::string SongView::blockState() {
         int q = -1, blink = 0;
         if (live && player->IsRunning() && player->GetQueueingMode(i) != QM_NONE) {
             q = player->GetQueuePosition(i);
-            blink = 0;   // trk2als: lo que espera el 1 se ve fijo (parpadear redibujaba todo y se veía a medias)
+            blink = queueBlink();   // trk2als: lo que espera el 1 parpadea parejo (4 veces por segundo)
         }
         int tot;
         int fr = pos >= 0 ? playFraction(i, tot) : -1;
@@ -3012,8 +3017,8 @@ void SongView::drawBlockGrid() {
             if (lit) tc = Mix(tc, fg, 12);
             bool stopHere = empty && player->IsRunning() && player->GetQueueingMode(i) == QM_PHRASESTOP &&
                             player->StopCell(i) == row;
-            if (stopHere) {   // trk2als: esta celda vacía va a detener la pista en el 1
-                FillRect(x, y, w, h, Mix(bg, fg, 85), 3);
+            if (stopHere) {   // trk2als: esta celda vacía va a detener la pista en el 1 (parpadea)
+                FillRect(x, y, w, h, queueBlink() ? Mix(bg, fg, 88) : Mix(bg, fg, 30), 3);
                 FillRect(x + w / 2 - 4, y + h / 2 - 4, 8, 8, bg, 1);   // el cuadrito de stop
             } else if (empty) {
                 FillRect(x, y, w, h, lit ? Mix(bg, fg, 11) : cellBg, 3);
@@ -3059,7 +3064,7 @@ void SongView::drawBlockGrid() {
                 int tx = x + w - 15, ty = y + 6;
                 for (int k = 0; k < 9; k++) FillRect(tx + k, ty + k / 2, 1, 10 - (k / 2) * 2, pc);
             }
-            else if (queuedHere) FrameRect(x, y, w, h, hi1, 3, 3);
+            else if (queuedHere && queueBlink()) FrameRect(x, y, w, h, hi1, 3, 3);
             // la línea de abajo: cuánto lleva el loop (lo blanco es lo que falta)
             if (playingHere && !empty) {
                 int total;
