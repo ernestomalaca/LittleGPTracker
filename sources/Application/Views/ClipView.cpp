@@ -964,6 +964,18 @@ void ClipView::moveCursor(int dt, int dp) {
     keepVisible();
 }
 
+// trk2als: una tecla del teclado MIDI: se prende en el piano roll y, si no se
+// ve, la vista va hacia ella (como en Note; el cursor se va con ella)
+void ClipView::MidiActivity(int ch, int pitch, bool on) {
+    if (ch != viewData_->songX_) return;
+    MidiCapture::Held(ch, held_);
+    if (on && !kit() && !marking_ && !pasting_ && !curveOn() && rowOf(pitch) < 0 && pitch >= 0 && pitch <= MAX_PITCH) {
+        cursorPitch_ = pitch;
+        keepVisible();
+    }
+    isDirty_ = true;
+}
+
 void ClipView::keepVisible() {
     if (kit()) {
         int b = kitBase();
@@ -1533,6 +1545,11 @@ void ClipView::DrawView() {
         if (scale > 0 && !in) key = Mix(bg, fg, black ? 10 : 25);
         if (isRoot) key = Mix(bg, hi, 75);
         if (pitch == cursorPitch_) key = fg;   // la del cursor, en blanco
+        bool held = std::find(held_.begin(), held_.end(), pitch) != held_.end();
+        if (held) {   // trk2als: la que estás tocando en el teclado MIDI, prendida (como en Note)
+            key = hi2;
+            FillRect(GRID_X, y, gw, RH, Mix(Mix(bg, fg, shade), hi2, 22));
+        }
         FillRect(8, y + 1, 44, RH - 2, key, 2);
         if (kitInstr) {   // cada pad con su sample (los vacíos, apagados)
             std::string pn = kitInstr->PadName(pitch);

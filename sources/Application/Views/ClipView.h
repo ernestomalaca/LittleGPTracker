@@ -101,6 +101,10 @@ class ClipView : public View {
     bool targets(std::vector<Note> &notes, std::vector<int> &idx);
     void nudge(int d);
     void quantize();   // trk2als: X + Y: a la rejilla (lo que diga el Proyecto)
+    std::vector<int> held_;   // trk2als: teclas MIDI apretadas en esta pista
+  public:
+    void MidiActivity(int ch, int pitch, bool on);
+  private:
     bool bTapGhost_;   // trk2als: B sola: olvidar lo tocado (la silueta de la captura)
     int ghostCount_;
     int followPage_;   // trk2als: follow: la página que se va siguiendo (-1 = no)

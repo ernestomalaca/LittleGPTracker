@@ -10,6 +10,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 namespace {
 
@@ -165,6 +166,15 @@ void MidiCapture::Preview(ViewData *d,int clip,std::vector<ClipNote> &out) {
 	int tempo=d->project_->GetTempo() ;
 	if (tempo<20) tempo=120 ;
 	overdubNotes(d->song_->clips_->Get(clip),hits,clip,tempo,out) ;
+}
+
+void MidiCapture::Held(int ch,std::vector<int> &pitches) {
+	pitches.clear() ;
+	bool down[128] ;
+	memset(down,0,sizeof(down)) ;
+	for (size_t i=0;i<evs.size();i++)
+		if (evs[i].ch==ch && evs[i].pitch>=0 && evs[i].pitch<128) down[evs[i].pitch]=evs[i].vel>0 ;
+	for (int p=0;p<128;p++) if (down[p]) pitches.push_back(p) ;
 }
 
 bool MidiCapture::Forget(int ch) {

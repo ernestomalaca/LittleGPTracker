@@ -31,6 +31,8 @@ public:
 	static void Preview(ViewData *d,int clip,std::vector<ClipNote> &out) ;
 	// olvidar lo tocado (para intentar de nuevo); true si había algo
 	static bool Forget(int ch) ;
+	// las teclas que están apretadas ahora en esa pista
+	static void Held(int ch,std::vector<int> &pitches) ;
 } ;
 
 #endif

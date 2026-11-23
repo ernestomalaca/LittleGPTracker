@@ -45,6 +45,7 @@ void AppWindow::DispatchMidi() {
     Project *project = d->project_;
     Player *player = Player::GetInstance();
     MixerService *ms = MixerService::GetInstance();
+    bool redraw = false;
     ms->Lock();
     while (MidiKeys::GetInstance()->Pop(e)) {
         unsigned char hi = e.status & 0xF0;
@@ -56,6 +57,10 @@ void AppWindow::DispatchMidi() {
         }
         if (ch < 0 || ch >= SONG_CHANNEL_COUNT || !project->TrackExists(ch)) continue;
         MidiCapture::Note(ch, e.d1, hi == 0x80 ? 0 : e.d2);   // trk2als: para R2
+        if (w->_clipView && w->_currentView == (View *)w->_clipView) {   // el piano roll prende la tecla
+            w->_clipView->MidiActivity(ch, e.d1, hi == 0x90 && e.d2 > 0);
+            redraw = true;
+        }
         if (hi == 0x80) { player->LiveNoteOff(ch, e.d1); continue; }
         int owner = project->GetTrackInstrument(ch);
         if (owner < 0) continue;   // pista de audio o sin instrumento
@@ -63,6 +68,7 @@ void AppWindow::DispatchMidi() {
         player->LiveNoteOn(ch, instr, e.d1, e.d2);
     }
     ms->Unlock();
+    if (redraw && !w->_overlayOn) w->Redraw();   // (no pasa por onEvent)
 }
 
 // trk2als: tema Lavanda (se cambia en config.xml)
