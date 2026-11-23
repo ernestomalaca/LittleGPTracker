@@ -145,6 +145,11 @@ Session (como la de Live)
   En las escenas, Select + ↑ ↓ como siempre (Select + ← → no hace nada ahí).
   Lo que espera el 1 (clips lanzados, celdas que detienen y la escena
   lanzada: su marco y su ▶) parpadea parejo.
+  Lo que se va a detener (Select + Start, o una escena que no lo trae)
+  parpadea su marco y su ▶ se vuelve ■; si se detiene toda la fila, su
+  escena también parpadea con ■.
+  En una escena vacía no hay repeticiones (Y + ↑ ↓ no hace nada); si le
+  borras todos los clips, vuelve a ∞.
   Lanzar un grupo: Select + B marca, ← → agranda en la misma fila y A
   lanza todos esos clips juntos en el 1 (las celdas vacías de la marca
   detienen su pista). Si la marca tiene varias filas, A la cancela.

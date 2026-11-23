@@ -2112,8 +2112,13 @@ void SongView::processRowButtonMask(unsigned int mask) {
     }
     if (mask & EPBM_Y) {   // trk2als: Y + ↑ ↓ (como dividir en el clip): cuántas veces suena la escena (∞, x1 … x16)
         int dir = (mask & EPBM_UP) ? 1 : (mask & EPBM_DOWN) ? -1 : 0;
-        if (dir) {
-            unsigned char &r = viewData_->song_->sceneRep_[viewData_->songY_ + viewData_->songOffset_];
+        int srow = viewData_->songY_ + viewData_->songOffset_;
+        bool has = false;
+        for (int i = 0; i < SONG_CHANNEL_COUNT; i++)
+            if (viewData_->project_->TrackExists(i) && viewData_->song_->data_[i + SONG_CHANNEL_COUNT * srow] != 0xFF) has = true;
+        if (dir && !has) View::SetNotification("escena vacía: sin repeticiones");
+        if (dir && has) {
+            unsigned char &r = viewData_->song_->sceneRep_[srow];
             int v = r + dir;
             if (v < 0) v = 0;
             if (v > 16) v = 16;
@@ -2854,6 +2859,16 @@ void SongView::drawBlockGrid() {
     Player *player = Player::GetInstance();
     Project *project = viewData_->project_;
     lastBlockState_ = blockState();
+    {   // trk2als: una escena sin clips vuelve a ∞ (sus repeticiones no aplican)
+        Song *song = viewData_->song_;
+        for (int r = 0; r < SONG_ROW_COUNT; r++) {
+            if (!song->sceneRep_[r]) continue;
+            bool any = false;
+            for (int i = 0; i < SONG_CHANNEL_COUNT && !any; i++)
+                any = project->TrackExists(i) && song->data_[i + SONG_CHANNEL_COUNT * r] != 0xFF;
+            if (!any) song->sceneRep_[r] = 0;
+        }
+    }
 
     GUIColor bg = ColorOf(CD_BACKGROUND);
     GUIColor fg = ColorOf(CD_NORMAL);
@@ -2868,7 +2883,7 @@ void SongView::drawBlockGrid() {
     const int rows = View::songRowCount_;
     // trk2als: las escenas a la izquierda (como en LSDJ), en una columna ancha
     // para sus repeticiones; las pistas a la derecha
-    const int SX = 6, GAP = 4, SW = 98;             // la columna de escenas
+    const int SX = 6, GAP = 4, SW = 60;             // la columna de escenas
     const int X0 = SX + SW + GAP + 2;               // la primera pista
     int trackCount = project->TrackCount();
     const int NCOL = trackCount > Project::MaxTracks() ? trackCount : Project::MaxTracks();
@@ -2941,13 +2956,15 @@ void SongView::drawBlockGrid() {
         if (hereRow && trackCount > 0)
             FillRect(SX - 4, y - 2, XEND + 4 - (SX - 4), h + 4, Mix(bg, fg, 5), 4);
         {   // la escena: ▶ número y sus repeticiones (x2…; ∞ = se queda ahí)
-            bool has = false, queued = false;
+            bool has = false, queued = false, stopAll = rowPlaying[j];
             for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
                 if (!project->TrackExists(i)) continue;
                 if (viewData_->song_->data_[i + SONG_CHANNEL_COUNT * row] != 0xFF) has = true;
                 QueueingMode q = player->GetQueueingMode(i);
                 if (player->IsRunning() && player->GetQueuePosition(i) == row &&
                     (q == QM_PHRASESTART || q == QM_TICKSTART || q == QM_CHAINSTART)) queued = true;
+                if (player->IsRunning() && player->IsChannelPlaying(i) && viewData_->currentPlayChain_[i] != 0xFF &&
+                    viewData_->songPlayPos_[i] == row && q != QM_PHRASESTOP && q != QM_CHAINSTOP) stopAll = false;
             }
             FillRect(SX, y, SW, h, has ? Mix(bg, fg, 9) : cellBg, 3);
             if (scnMarking_ && rowMode_) {   // escenas marcadas: toda la fila
@@ -2957,8 +2974,11 @@ void SongView::drawBlockGrid() {
             }
             if (hereRow) FrameRect(SX - 3, y - 3, SW + 6, h + 6, cur, 5, 3);   // el cursor por fuera, como en los clips
             GUIColor green = LinkGreen();
-            int ts = 12, tx = SX + 8, ty = y + (h - ts) / 2 - (h >= 34 ? 4 : 0);
+            // compacta, como un clip: el número arriba a la izquierda (a la
+            // altura del de los clips), el ▶ en la esquina y las repeticiones abajo
             if (queued && queueBlink()) FrameRect(SX, y, SW, h, hi1, 3, 3);   // el marco, como el de los clips
+            if (stopAll && !queued && queueBlink()) FrameRect(SX, y, SW, h, fg, 3, 3);   // toda la fila se detiene
+            int ts = 10, tx = SX + SW - 14, ty = y + 6;
             if (queued && !queueBlink()) {   // en espera del 1: parpadea entre lleno y hueco
                 for (int k = 0; k < ts; k++) {
                     int hh = ts - (k / 2) * 2;
@@ -2967,22 +2987,23 @@ void SongView::drawBlockGrid() {
                 }
             } else {
                 GUIColor tcol = (rowPlaying[j] || queued) ? green : (has ? fg : Mix(bg, fg, 25));
-                for (int k = 0; k < ts; k++) FillRect(tx + k, ty + k / 2, 1, ts - (k / 2) * 2, tcol);
+                if (stopAll && !queued) FillRect(tx, ty, ts, ts, queueBlink() ? fg : Mix(bg, fg, 30), 1);   // ■ parpadeando
+                else for (int k = 0; k < ts; k++) FillRect(tx + k, ty + k / 2, 1, ts - (k / 2) * 2, tcol);
             }
             char rl[4];
             snprintf(rl, sizeof(rl), "%02X", row);
-            DrawText(SX + 26, ty - 2, rl, has ? fg : dim, 1);
+            DrawText(SX + 5, y + 4, rl, has ? fg : dim, 1);
             int rep = viewData_->song_->sceneRep_[row];
-            int cx = SX + SW - 40, cy = ty - 3, cw = 33, ch = 20;
+            int cy = y + h - 19, ch = 15;
             if (rep > 0) {
                 char rb[6];
                 snprintf(rb, sizeof(rb), "x%d", rep);
-                FillRect(cx, cy, cw, ch, hereRow ? cur : Mix(bg, cur, 30), 4);
-                DrawText(cx + (cw - 8 * int(strlen(rb))) / 2, cy + 4, rb, hereRow ? bg : fg, 0);
-            } else if (hereRow) {   // ∞ (se queda ahí): solo al editarla; si no, más limpio
-                GUIColor ic = hereRow ? fg : dim;
-                FrameRect(cx + 7, cy + 6, 10, 9, ic, 4, 2);
-                FrameRect(cx + 16, cy + 6, 10, 9, ic, 4, 2);
+                int cw = 8 * int(strlen(rb)) + 8;
+                FillRect(SX + 5, cy, cw, ch, hereRow ? cur : Mix(bg, cur, 30), 3);
+                DrawText(SX + 9, cy + 2, rb, hereRow ? bg : fg, 0);
+            } else if (hereRow && has) {   // ∞ (se queda ahí): solo al editarla
+                FrameRect(SX + 6, cy + 3, 10, 9, fg, 4, 2);
+                FrameRect(SX + 15, cy + 3, 10, 9, fg, 4, 2);
             }
         }
 
@@ -3051,12 +3072,15 @@ void SongView::drawBlockGrid() {
                               player->GetQueueingMode(i) != QM_PHRASESTOP &&
                               player->GetQueueingMode(i) != QM_CHAINSTOP;
             // marco claro pegado al borde (fino, no toca el texto del clip)
+            bool stopping = playingHere && (player->GetQueueingMode(i) == QM_PHRASESTOP ||
+                                            player->GetQueueingMode(i) == QM_CHAINSTOP);
             if (playingHere) {
-                FrameRect(x, y, w, h, muted ? dim : fg, 3, 3);
-                // y el botoncito de play en la esquina
+                // se va a detener en el 1 (Stop All Clips, la escena, la celda vacía): parpadea
+                if (!stopping || queueBlink()) FrameRect(x, y, w, h, muted ? dim : fg, 3, 3);
                 GUIColor pc = empty ? fg : bg;
                 int tx = x + w - 15, ty = y + 6;
-                for (int k = 0; k < 9; k++) FillRect(tx + k, ty + k / 2, 1, 10 - (k / 2) * 2, pc);
+                if (stopping) FillRect(tx, ty + 1, 9, 9, pc, 1);   // el cuadrito de stop
+                else for (int k = 0; k < 9; k++) FillRect(tx + k, ty + k / 2, 1, 10 - (k / 2) * 2, pc);   // el play
             }
             else if (queuedHere && queueBlink()) FrameRect(x, y, w, h, hi1, 3, 3);
             // la línea de abajo: cuánto lleva el loop (lo blanco es lo que falta)
