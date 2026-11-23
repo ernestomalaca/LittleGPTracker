@@ -3114,12 +3114,13 @@ void SongView::drawBlockGrid() {
             bool stopping = playingHere && (player->GetQueueingMode(i) == QM_PHRASESTOP ||
                                             player->GetQueueingMode(i) == QM_CHAINSTOP);
             if (playingHere) {
-                // se va a detener en el 1 (Stop All Clips, la escena, la celda vacía): parpadea
-                if (!stopping || queueBlink()) FrameRect(x, y, w, h, muted ? dim : fg, 3, 3);
+                // sigue sonando hasta el 1 aunque se vaya a detener: se ve fijo (lo
+                // que parpadea es lo que lo detiene: la celda vacía o la escena)
+                (void)stopping;
+                FrameRect(x, y, w, h, muted ? dim : fg, 3, 3);
                 GUIColor pc = empty ? fg : bg;
                 int tx = x + w - 15, ty = y + 6;
-                if (stopping) FillRect(tx, ty + 1, 9, 9, pc, 1);   // el cuadrito de stop
-                else for (int k = 0; k < 9; k++) FillRect(tx + k, ty + k / 2, 1, 10 - (k / 2) * 2, pc);   // el play
+                for (int k = 0; k < 9; k++) FillRect(tx + k, ty + k / 2, 1, 10 - (k / 2) * 2, pc);   // el play
             }
             else if (queuedHere && queueBlink()) FrameRect(x, y, w, h, hi1, 3, 3);
             // la línea de abajo: cuánto lleva el loop (lo blanco es lo que falta)
