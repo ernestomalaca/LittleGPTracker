@@ -1450,7 +1450,11 @@ void ClipView::DrawView() {
             if (rx + 16 * int(strlen(rest)) <= limit) DrawText(rx, 36, rest, fg, 1);
             else DrawText(rx, 40, rest, fg, 0);   // no cabe grande: chico
             int used = 10 + 16 * int(strlen(info));
-            if (scale > 0) {   // la escala, como en Live (si cabe)
+            if (marking_ && markLevel_ >= 3) {   // trk2als: todo el clip, aunque no se vea
+                const char *t = "TODO EL CLIP";
+                int sx = 634 - 16 * 17 - 10 - 8 * int(strlen(t));
+                if (sx > used + 8) DrawText(sx, 38, t, TrackColor(viewData_->songX_), 0);
+            } else if (scale > 0) {   // la escala, como en Live (si cabe)
                 std::string sc = std::string(viewData_->project_->GetFold() ? "FOLD " : "") + scaleNotes[root] + " " + scaleNames[scale];
                 if (sc.size() > 18) sc = sc.substr(0, 18);
                 int sx = 634 - 16 * 17 - 10 - 8 * int(sc.size());
@@ -1659,6 +1663,15 @@ void ClipView::drawPages(int page, int npages) {
     // con marco; la llave del loop debajo
     const int CW = 17;
     int bx = 634 - 16 * CW;
+    // trk2als: los compases que entran en lo marcado, con un marco del color
+    // de la marca: se ve que entra lo que no está en pantalla
+    int ma = 1, mb = 0;
+    if (marking_ && npages > 0) {
+        int s0, s1, q0, q1;
+        selRect(s0, s1, q0, q1);
+        ma = std::max(0, s0 / 16);
+        mb = std::min(npages - 1, s1 / 16);
+    }
     for (int i = 0; i < 16; i++) {
         int x = bx + i * CW;
         if (i < npages) {
@@ -1667,6 +1680,7 @@ void ClipView::drawPages(int page, int npages) {
             GUIColor c = (i == page) ? hi2 : Mix(bg, fg, inLoop ? 45 : 12);
             if (hasLoop && inLoop) FillRect(x - 2, 49, CW, 3, hi);   // la llave del loop
             FillRect(x, 35, 14, 11, c, 2);
+            if (i >= ma && i <= mb && !playing) FrameRect(x - 2, 33, 18, 15, hi2, 3, 2);
             if (playing) FrameRect(x - 2, 33, 18, 15, play, 3, 2);
         } else {
             FillRect(x + 5, 39, 3, 3, Mix(bg, fg, 20));
