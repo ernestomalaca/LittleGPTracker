@@ -5,6 +5,7 @@
 #include "UIFramework/Interfaces/I_GUIGraphics.h"
 #include "System/Console/Trace.h"
 #include <string.h>
+#include <stdio.h>
 #include "Application/AppWindow.h"
 
 #define abs(x) (x<0?-x:x)
@@ -65,6 +66,24 @@ void UIIntVarField::Draw(GUIWindow &w,int offset) {
 	drawnLen_=int(strlen(buffer)) ;
 	w.DrawString(buffer,position,props) ;
 } ;
+
+void UIIntVarField::Text(char *buffer, int size) {
+	char tmp[128] ;
+	switch (src_.GetType()) {
+		case Variable::INT: {
+			int ivalue=src_.GetInt()+displayOffset_ ;
+			snprintf(tmp,sizeof(tmp),format_,ivalue,ivalue) ;
+			break ;
+		}
+		case Variable::CHAR_LIST:
+		case Variable::BOOL:
+			snprintf(tmp,sizeof(tmp),format_,src_.GetString()) ;
+			break ;
+		default:
+			tmp[0]=0 ;
+	}
+	snprintf(buffer,size,"%s",tmp) ;
+}
 
 void UIIntVarField::ProcessArrow(unsigned short mask) {
 	int value=src_.GetInt() ;

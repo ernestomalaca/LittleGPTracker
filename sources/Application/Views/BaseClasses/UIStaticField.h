@@ -14,6 +14,7 @@ public:
 	virtual void OnClick() {} ;
 
 	virtual bool IsStatic() ;
+	const char *Text() { return string_ ; }   // trk2als
 
 protected:
 
