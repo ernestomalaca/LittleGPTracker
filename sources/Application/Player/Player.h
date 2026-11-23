@@ -71,6 +71,8 @@ public:
 	int StopCell(int channel) { return stopCell_[channel] ; }
 	void StopAllClips() ;   // como "Stop All Clips" de Live: al compás, el reloj sigue
 	void LaunchScene(int row) ;
+	// varios clips de una fila juntos (pistas from..to); las celdas vacías detienen su pista
+	void LaunchGroup(int row, int from, int to) ;
 	void Transport() ;
 	// 0 apagado, 1 esperando (precuenta o el siguiente compás), 2 grabando
 	int AutoRecState() { return autoRec_ ? 2 : ((autoRecPending_ || countIn_) ? 1 : 0) ; }

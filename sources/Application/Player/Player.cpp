@@ -1428,6 +1428,25 @@ void Player::LaunchScene(int row) {
     if (!any) sceneRow_ = -1;   // escena vacía: se acaba la secuencia
 }
 
+void Player::LaunchGroup(int row, int from, int to) {
+    SetSequencerMode(SM_LIVE);
+    if (!isRunning_) {
+        bool any = false;
+        for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
+            bool c = i >= from && i <= to && project_->TrackExists(i) && hasClip(viewData_, i, row);
+            QueueChannel(i, c ? QM_TICKSTART : QM_NONE, row, 0);
+            any |= c;
+        }
+        if (any) Start(PM_LIVE, false);
+        return;
+    }
+    for (int i = from; i <= to && i < SONG_CHANNEL_COUNT; i++) {
+        if (!project_->TrackExists(i)) continue;
+        if (hasClip(viewData_, i, row)) QueueChannel(i, QM_PHRASESTART, row, 0);
+        else StopTrack(i, row);
+    }
+}
+
 // trk2als: una vuelta de la escena = lo que dura su clip más largo
 int Player::sceneBars(int row) {
     int bars = 0;

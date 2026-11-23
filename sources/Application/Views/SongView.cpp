@@ -1294,10 +1294,16 @@ bool SongView::InterceptButton(unsigned short phys, unsigned short v, bool press
                 View::SetNotification(b);
                 endMark();
             }
-            if (v == EPBM_A && sesAPending_) {           // A sola: cancela
+            if (v == EPBM_A && sesAPending_) {           // A sola: lanza (una fila) o cancela
                 sesAPending_ = false;
                 if (!sesAMoved_) {
-                    View::SetNotification("marca cancelada");
+                    GUIRect r = markRect();
+                    if (r.Top() == r.Bottom()) {   // trk2als: los clips marcados de una fila, juntos en el 1
+                        Player::GetInstance()->LaunchGroup(r.Top(), r.Left(), r.Right());
+                        View::SetNotification(r.Left() == r.Right() ? "clip lanzado" : "grupo lanzado");
+                    } else {
+                        View::SetNotification("marca cancelada");
+                    }
                     endMark();
                 }
             }

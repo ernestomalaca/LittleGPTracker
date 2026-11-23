@@ -135,6 +135,9 @@ Session (como la de Live)
   la escena: ∞ (se queda ahí), x1 … x16. Una vuelta dura lo que el clip más
   largo de la escena; al terminar las vueltas entra la escena de abajo, en
   el 1. Si la de abajo está vacía, todo se detiene (fin de la canción).
+  Lanzar un grupo: Select + B marca, ← → agranda en la misma fila y A
+  lanza todos esos clips juntos en el 1 (las celdas vacías de la marca
+  detienen su pista). Si la marca tiene varias filas, A la cancela.
   L / R (tocados solos), como la octava en el clip: L baja una página, R
   sube. R tres veces rápido: a la cabecera de la pista (cambiar o editar
   su sonido).
