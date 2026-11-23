@@ -26,7 +26,9 @@ public:
 	// clip que ya existía, 'beforeClip' >= 0 y 'before' es como estaba (deshacer)
 	// 'playRow' >= 0: se hizo un clip nuevo: su fila (para que arranque a
 	// sonar en seguida, como en Live)
-	static const char *Capture(ViewData *d,int &beforeClip,Clip &before,int &playRow) ;
+	// 'closed': sin nada sonando, capturaste justo al terminar la vuelta (sigue en
+	// loop en seguida); si no, el clip entra en el 1 tras un compás de metrónomo
+	static const char *Capture(ViewData *d,int &beforeClip,Clip &before,int &playRow,bool &closed) ;
 	// la silueta: lo que caería encima de ese clip si capturas ahora
 	// (en el clip vacío que se está viendo: lo que se crearía; 'pages' = sus compases)
 	static void Preview(ViewData *d,int clip,std::vector<ClipNote> &out,int *pages=0) ;

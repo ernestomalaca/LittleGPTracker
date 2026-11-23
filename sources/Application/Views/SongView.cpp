@@ -577,6 +577,7 @@ void SongView::extendSelection() {
 
 void SongView::OnFocus() {
     clipboard_.active_ = false;
+    Player::GetInstance()->SetSequencerMode(SM_LIVE);   // trk2als: siempre como la Session de Live
     // trk2als: lo que cambió en otras pantallas (notas, nombres) entra a la foto
     sesNowValid_ = false;
     checkScaleChange();   // trk2als
@@ -809,7 +810,8 @@ void SongView::onStart() {
         viewData_->isRendering_ = false;
         View::SetNotification("Rendering done!");
     }
-    player->OnSongStartButton(from, to, false, false);
+    (void)from; (void)to;
+    player->Transport();   // trk2als: Start = el transporte (como la barra espaciadora de Live)
 };
 
 void SongView::startCurrentRow() {
@@ -1335,7 +1337,12 @@ void SongView::handleButtonMask(unsigned short mask, bool pressed) {
         }
         if (aOpenPending_ && !(mask & EPBM_A)) {
             aOpenPending_ = false;
-            if (!headerMode_) openCell();
+            // trk2als: como en Live: A lanza el clip (entra en el siguiente
+            // compás); para editarlo, Select + →
+            if (!headerMode_) {
+                Player::GetInstance()->LaunchClip(viewData_->songX_, viewData_->songY_ + viewData_->songOffset_);
+                isDirty_ = true;
+            }
             return;
         }
         if (bTap_ && !(mask & EPBM_B)) {
@@ -1455,18 +1462,7 @@ void SongView::processNormalButtonMask(unsigned int mask) {
             updateSongOffset(SongView::jumpLength_);
         if (mask & EPBM_UP)
             updateSongOffset(-SongView::jumpLength_);
-        if (mask & (EPBM_RIGHT | EPBM_LEFT)) {
-            Player *player = Player::GetInstance();
-            switch (player->GetSequencerMode()) {
-            case SM_SONG:
-                player->SetSequencerMode(SM_LIVE);
-                break;
-            case SM_LIVE:
-                player->SetSequencerMode(SM_SONG);
-                break;
-            }
-            isDirty_ = true;
-        }
+        // trk2als: (B + ← → cambiaba entre song y live; ahora siempre es como Live)
         if ((mask & EPBM_A) && (!(mask & EPBM_R)))
             cutPosition();
         if (mask & EPBM_L) {
@@ -1499,11 +1495,11 @@ void SongView::processNormalButtonMask(unsigned int mask) {
             if (mask == EPBM_A) {
                 unsigned char *cell = viewData_->GetCurrentSongPointer();
                 if (*cell != 0xFF) {
-                    aOpenPending_ = true;      // trk2als: se abre al soltar A
-                } else if (isAudioColumn(viewData_->songX_)) {
-                    placeAudio();              // trk2als: el último loop, o cargar uno
+                    aOpenPending_ = true;      // trk2als: se lanza al soltar A
                 } else {
-                    createClip();              // trk2als: como en Live: un clip nuevo
+                    // trk2als: como el botoncito de stop de Live en los slots vacíos
+                    Player::GetInstance()->StopTrack(viewData_->songX_);
+                    isDirty_ = true;
                 }
             }
             if ((mask & EPBM_R) && lsdjGesture(true)) {   // trk2als: solo B + Start (como LSDJ)
@@ -1536,6 +1532,9 @@ void SongView::processNormalButtonMask(unsigned int mask) {
                         NotifyObservers(&ve);
                     } else if (!isAudioColumn(viewData_->songX_) && viewData_->project_->TrackExists(viewData_->songX_)) {
                         openVirtualClip();   // trk2als: celda vacía: un clip vacío para tocar y capturar
+                    } else if (viewData_->project_->TrackExists(viewData_->songX_)) {
+                        // trk2als: celda vacía de audio: escoger un loop
+                        pickAudio(int(data - viewData_->song_->data_));
                     }
                 }
 
@@ -1919,11 +1918,11 @@ void SongView::processRowButtonMask(unsigned int mask) {
         isDirty_ = true;
         return;
     }
-    if (mask & EPBM_START) {
+    if (mask == EPBM_A) {   // trk2als: A lanza la escena (la fila), como en Live
         viewData_->chainRow_ = 0;
-        // en Live lanza la escena; en Song toca la canción desde esta fila
-        player->OnSongStartButton(0, SONG_CHANNEL_COUNT - 1, false, false);
+        player->LaunchScene(viewData_->songY_ + viewData_->songOffset_);
     }
+    if (mask & EPBM_START) player->Transport();
     if (mask & EPBM_RIGHT) rowMode_ = false;
     if (mask & EPBM_DOWN) updateCursor(0, 1);
     if (mask & EPBM_UP) updateCursor(0, -1);
@@ -2043,6 +2042,9 @@ void SongView::processSelectionButtonMask(unsigned int mask) {
                         NotifyObservers(&ve);
                     } else if (!isAudioColumn(viewData_->songX_) && viewData_->project_->TrackExists(viewData_->songX_)) {
                         openVirtualClip();   // trk2als: celda vacía: un clip vacío para tocar y capturar
+                    } else if (viewData_->project_->TrackExists(viewData_->songX_)) {
+                        // trk2als: celda vacía de audio: escoger un loop
+                        pickAudio(int(data - viewData_->song_->data_));
                     }
                 }
 
@@ -2201,7 +2203,7 @@ void SongView::DrawView() {
 
     std::ostringstream os;
 
-    os << ((player->GetSequencerMode() == SM_SONG) ? "Song" : "Live");
+    os << "Session";
     os << ": ";
 
     if (IsProjectFolder(songname_)) {
@@ -2221,8 +2223,7 @@ void SongView::DrawView() {
             snprintf(fb, sizeof(fb), "FILA %02X", viewData_->songY_ + viewData_->songOffset_);
             tname = fb;
         }
-        std::string ctx = (player->GetSequencerMode() == SM_SONG)
-                              ? tname : "LIVE  " + tname;
+        std::string ctx = tname;   // trk2als: siempre como la Session de Live
         if (!drawTopBar(TAB_SES, ctx.c_str())) {
             DrawString(pos._x, pos._y, buffer.c_str(), props);
             if (tname.size() > 17) tname = tname.substr(0, 17);

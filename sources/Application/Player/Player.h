@@ -61,7 +61,14 @@ public:
 	// armar sonando: empieza a grabar en el siguiente uno del compás
 	void ArmAutoRec() { autoRecPending_ = true ; }
 	// la siguiente vez que arranque: 4 tiempos de precuenta y graba
-	void RequestCountIn() { countInRequest_ = true ; }
+	void RequestCountIn(bool rec=true) { countInRequest_ = true ; countInRec_ = rec ; }
+	// trk2als: la Session como en Live. Lanzar / detener entra en el siguiente
+	// compás (sin nada sonando, arranca ya); Transport = la barra espaciadora:
+	// arranca (vuelven los clips que estaban lanzados) o detiene todo
+	void LaunchClip(int channel, int row) ;
+	void StopTrack(int channel) ;
+	void LaunchScene(int row) ;
+	void Transport() ;
 	// 0 apagado, 1 esperando (precuenta o el siguiente compás), 2 grabando
 	int AutoRecState() { return autoRec_ ? 2 : ((autoRecPending_ || countIn_) ? 1 : 0) ; }
 
@@ -241,6 +248,8 @@ private:
 	bool autoRec_ ;   // grabando automatización (suena el metrónomo)
 	bool autoRecPending_ ;   // empieza en el siguiente uno
 	bool countInRequest_ ;   // el próximo arranque lleva precuenta
+	bool countInRec_ ;       // trk2als: ...y al terminar graba automatización (si no, solo arranca)
+	int launched_[SONG_CHANNEL_COUNT] ;   // trk2als: la fila que estaba sonando al parar (-1 nada)
 	bool countIn_ ;          // en la precuenta (no suena nada más)
 	int countStep_ ;
 	bool countFirst_ ;

@@ -923,9 +923,10 @@ void AppWindow::captureNow() {
     const char *m = 0;
     if (MidiCapture::LastNoteMs() > _instrumentView->LastCaptureMove()) {
         int bc, playRow;
+        bool closed;
         Clip before;
         if (_songView) _songView->CaptureBegin();
-        m = MidiCapture::Capture(_viewData, bc, before, playRow);
+        m = MidiCapture::Capture(_viewData, bc, before, playRow, closed);
         if (m && _songView) _songView->CaptureCommit();   // Select + L en la Session lo quita
         if (bc >= 0 && _clipView) _clipView->PushUndo(bc, before);
         if (playRow >= 0) {   // el clip nuevo suena en seguida (como en Live)
@@ -933,14 +934,13 @@ void AppWindow::captureNow() {
             if (playRow < d->songOffset_ || playRow >= d->songOffset_ + 8) d->songOffset_ = playRow;
             d->songY_ = playRow - d->songOffset_;
             Player *player = Player::GetInstance();
-            // sin nada sonando: arranca ya (en live); sonando en live: entra en
-            // el siguiente compás. Sonando en modo song, lo toca la canción
-            if (!player->IsRunning()) {
-                player->SetSequencerMode(SM_LIVE);
-                player->OnSongStartButton(d->songX_, d->songX_, false, false);
-            } else if (player->GetSequencerMode() == SM_LIVE) {
-                player->OnSongStartButton(d->songX_, d->songX_, false, false);
-            }
+            // sin nada sonando: si cerró la vuelta, sigue en loop en seguida
+            // (live looping); si no, un compás de metrónomo y entra en el 1.
+            // Sonando: entra en el siguiente compás
+            if (!player->IsRunning() && !closed) player->RequestCountIn(false);
+            if (getenv("TRK_LOADLOG"))
+                fprintf(stderr, "[CAPTURA] %s\n", player->IsRunning() ? "entra en el siguiente compás" : closed ? "cerró: sigue en loop ya" : "precuenta y entra en el 1");
+            player->LaunchClip(d->songX_, playRow);
         }
     }
     // la pista donde se movió algo por última vez
@@ -953,17 +953,7 @@ void AppWindow::captureNow() {
 void AppWindow::joyButton(unsigned short v, bool pressed, bool repeat) {
     unsigned short phys = _mask;
     View::physMask_ = phys;
-    // trk2als: Y + Select captura (como R2, más a la mano)
-    if (pressed && !repeat && (phys & EPBM_Y) && (phys & EPBM_SELECT) && (v == EPBM_Y || v == EPBM_SELECT) &&
-        !_currentView->HasModal()) {
-        captureNow();
-        _selectFirst = false;
-        if (_currentView->WantsRawButtons()) {   // el piano roll: que no lo tome como Select tocado solo
-            View::pressedButton_ = v;
-            _currentView->ProcessButton(phys, pressed);
-        }
-        return;
-    }
+
     if (_currentView->HasModal()) {   // las ventanitas: A, B y flechas tal cual
         _currentView->ProcessButton(phys & ~EPBM_SELECT, pressed);
         return;

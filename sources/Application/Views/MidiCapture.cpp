@@ -211,8 +211,9 @@ unsigned long MidiCapture::LastNoteMs() {
 // sonando, el primer golpe en el 1.1.1 y el tempo adivinado ('tempo' entra con
 // el del proyecto y sale con el que quedó; 'guessed' = lo adivinó); sonando,
 // en la rejilla de la canción. Si se repite, el loop en la última vuelta
-static bool buildNew(const std::vector<Hit> &hits,int &tempo,bool &guessed,Clip &c,int &loopBars) {
+static bool buildNew(const std::vector<Hit> &hits,int &tempo,bool &guessed,Clip &c,int &loopBars,bool *closed=0) {
 	guessed=false ;
+	if (closed) *closed=false ;
 	if (hits.empty()) return false ;
 	const Hit &last=hits.back() ;
 	size_t first=hits.size()-1 ;
@@ -276,6 +277,14 @@ static bool buildNew(const std::vector<Hit> &hits,int &tempo,bool &guessed,Clip 
 	int B=repeatBars(st,pi,pages) ;
 	if (B>0) { c.loopStart=pages-B ; c.loopEnd=pages-1 ; }   // el loop, en la última vuelta
 	loopBars=B>0?B:pages ;
+	// trk2als: ¿cerró? (sin nada sonando: capturaste justo al terminar la
+	// vuelta, a un tiempo de distancia): entonces sigue en loop en seguida
+	if (closed && !running) {
+		double el=(System::GetInstance()->GetClock()-hits[first].ms)/(15000.0/tempo) ;
+		double L=loopBars*CLIP_STEPS_PER_PAGE ;
+		double r=fmod(el,L) ;
+		*closed=el>=L*0.75 && (r<=4.0 || r>=L-4.0) ;
+	}
 	return true ;
 }
 
@@ -299,9 +308,10 @@ void MidiCapture::Preview(ViewData *d,int clip,std::vector<ClipNote> &out,int *p
 	overdubNotes(d->song_->clips_->Get(clip),hits,clip,tempo,out) ;
 }
 
-const char *MidiCapture::Capture(ViewData *d,int &beforeClip,Clip &before,int &playRow) {
+const char *MidiCapture::Capture(ViewData *d,int &beforeClip,Clip &before,int &playRow,bool &closed) {
 	beforeClip=-1 ;
 	playRow=-1 ;
+	closed=false ;
 	Project *project=d->project_ ;
 	Song *song=d->song_ ;
 	int ch=d->songX_ ;
@@ -349,7 +359,7 @@ const char *MidiCapture::Capture(ViewData *d,int &beforeClip,Clip &before,int &p
 	Clip c ;
 	bool guessed ;
 	int loopBars ;
-	if (!buildNew(hits,tempo,guessed,c,loopBars)) return 0 ;
+	if (!buildNew(hits,tempo,guessed,c,loopBars,&closed)) return 0 ;
 	capturedUpTo=last.ms ;
 	if (guessed) project->FindVariable(VAR_TEMPO)->SetInt(tempo) ;
 	if (getenv("TRK_LOADLOG")) fprintf(stderr,"[CAPTURA] %d notas, tempo %d, %d compases\n",int(c.notes.size()),tempo,c.pages) ;

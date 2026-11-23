@@ -120,12 +120,18 @@ Mute y solo (Session, como el live mode de LSDJ)
   demás se quedan calladas; soltando Start primero, vuelven todas.
   En la cabecera: M roja = muteada, S azul = en solo.
 
-Modo live (Session, como el live mode de LSDJ; B + izquierda / derecha)
-  Start: el clip entra cuando termina el que suena en esa pista.
-  Start, Start: entra en el siguiente compás. Select + Start: la pista se
-  detiene al terminar su clip; Select + Start, Start: en el siguiente
-  compás. Una pista callada entra en el siguiente compás. Con Link todo
-  cae en compás, igual que en Live. En modo song nada cambia.
+Session (como la de Live)
+  Start = el transporte (la barra espaciadora de Live): arranca o detiene
+  todo. Al arrancar vuelven a sonar los clips que estaban lanzados.
+  A sobre un clip lo lanza: entra en el siguiente compás (con todo parado,
+  arranca ya). A otra vez lo vuelve a lanzar desde el inicio.
+  A sobre una celda vacía detiene esa pista en el siguiente compás (como
+  el botoncito de stop de Live en los slots vacíos).
+  En la columna de filas (← desde la primera pista), A lanza la escena:
+  los clips de esa fila; las pistas sin clip ahí se detienen.
+  Select + → entra al clip para editarlo; en una celda MIDI vacía abre el
+  "clip nuevo"; en una celda de audio vacía, el navegador de loops.
+  Ya no hay modo song ni modo live de LGPT.
 
 Teclado MIDI por USB
   Conecta un controlador MIDI (probado: Arturia MiniLab 3) al USB-C, con
@@ -145,7 +151,7 @@ Teclado MIDI por USB
   silueta de lo que se crearía (va cambiando mientras tocas) y al
   capturar se crea en esa celda y arranca. Si le pones notas a mano,
   también se crea. Si te sales sin nada, no queda.
-  R2, el botón del frente o Y + Select (más a la mano) capturan lo que tocaste (como Capture
+  La estrella (el botón del frente; también R2) captura lo que tocaste (como Capture
   MIDI de Live), sin haber grabado: Chancho escucha siempre (el último
   minuto).
   - Sin nada sonando: un clip nuevo en la pista del cursor (la celda del
@@ -153,12 +159,14 @@ Teclado MIDI por USB
     1.1.1, adivina el tempo y se lo pone al proyecto (si no está seguro,
     deja el que hay) y el largo (1, 2, 4, 8 o 16 compases). Si tocaste la
     frase varias veces, el clip la guarda toda y el loop queda en la
-    última vuelta (mueve el loop para quedarte con otra). El clip
-    arranca a sonar en seguida (en modo live), con el cursor encima.
+    última vuelta (mueve el loop para quedarte con otra). Si capturaste
+    justo al terminar la vuelta, sigue en loop en seguida (como un live
+    looper); si no, suena un compás de metrónomo y entra en el 1. El
+    cursor queda encima del clip.
   - Sonando, con un clip MIDI en esa pista: lo tocado en la última vuelta
     del loop se agrega encima del clip (Select + L en el clip lo quita).
   - Sonando, sin clip en esa pista: un clip nuevo, en la rejilla de la
-    canción; en modo live entra a sonar en el siguiente compás.
+    canción; entra a sonar en el siguiente compás.
   Las notas quedan como las tocaste (con su nudge, sin cuantizar). R2
   captura lo último que hiciste: notas tocadas o un parámetro movido.
   Select + L en la Session deshace la captura (también el tempo que

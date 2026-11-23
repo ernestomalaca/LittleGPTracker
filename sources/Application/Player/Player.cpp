@@ -51,6 +51,8 @@ Player::Player() {
     autoRec_ = false;
     autoRecPending_ = false;
     countInRequest_ = false;
+    countInRec_ = true;
+    for (int i = 0; i < SONG_CHANNEL_COUNT; i++) launched_[i] = -1;
     countIn_ = false;
     countStep_ = 0;
     countFirst_ = false;
@@ -679,8 +681,8 @@ void Player::Update(Observable &o,I_ObservableData *d) {
                 NotifyObservers(&pe);
                 return;
             }
-            countIn_ = false;   // este es el uno: arranca grabando
-            autoRec_ = true;
+            countIn_ = false;   // este es el uno: arranca (grabando, si era para eso)
+            if (countInRec_) autoRec_ = true;
         }
 
         if (!firstPlayCycle_) {
@@ -875,6 +877,8 @@ bool Player::ProcessChannelCommand(int channel, FourCC cmd, ushort param) {
 void Player::triggerLiveChains() {
 
     if (mode_ == PM_LIVE) {
+        // trk2als: como en Live: lo que entra, en el uno del compás
+        if (metroStep_ % 16 != 0) return;
         for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
             if (!(mixer_->IsChannelPlaying(i)) &&
                 ((liveQueueingMode_[i] == QM_CHAINSTART) ||
@@ -1367,6 +1371,69 @@ bool Player::CapturePos(int channel, double &songStep, int &clip, double &clipSt
         clipStep = autoStep_[channel] + frac;
     }
     return true;
+}
+
+// trk2als: la Session como en Live
+static bool hasClip(ViewData *d, int ch, int row) {
+    return row >= 0 && row < 256 && d->song_->data_[ch + SONG_CHANNEL_COUNT * row] != 0xFF;
+}
+
+void Player::LaunchClip(int channel, int row) {
+    if (!hasClip(viewData_, channel, row)) return;
+    SetSequencerMode(SM_LIVE);
+    if (!isRunning_) {
+        for (int i = 0; i < SONG_CHANNEL_COUNT; i++) if (i != channel) QueueChannel(i, QM_NONE, 0, 0);
+        QueueChannel(channel, QM_TICKSTART, row, 0);
+        Start(PM_LIVE, false);
+        return;
+    }
+    QueueChannel(channel, QM_PHRASESTART, row, 0);   // en el siguiente compás
+}
+
+void Player::StopTrack(int channel) {
+    if (!isRunning_) { launched_[channel] = -1; return; }
+    if (mixer_->IsChannelPlaying(channel)) QueueChannel(channel, QM_PHRASESTOP, viewData_->songPlayPos_[channel], 0);
+    else QueueChannel(channel, QM_NONE, 0, 0);
+}
+
+void Player::LaunchScene(int row) {
+    SetSequencerMode(SM_LIVE);
+    if (!isRunning_) {
+        bool any = false;
+        for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
+            bool c = project_->TrackExists(i) && hasClip(viewData_, i, row);
+            QueueChannel(i, c ? QM_TICKSTART : QM_NONE, row, 0);
+            any |= c;
+        }
+        if (any) Start(PM_LIVE, false);
+        return;
+    }
+    for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
+        if (!project_->TrackExists(i)) continue;
+        if (hasClip(viewData_, i, row)) QueueChannel(i, QM_PHRASESTART, row, 0);
+        else StopTrack(i);   // como en Live: la escena detiene las pistas sin clip
+    }
+}
+
+void Player::Transport() {
+    SetSequencerMode(SM_LIVE);
+    if (isRunning_) {   // se acuerda de qué sonaba, para volver con Start
+        for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
+            launched_[i] = -1;
+            if (mixer_->IsChannelPlaying(i)) launched_[i] = viewData_->songPlayPos_[i];
+            QueueingMode q = liveQueueingMode_[i];
+            if (q == QM_PHRASESTART || q == QM_CHAINSTART || q == QM_TICKSTART) launched_[i] = liveQueuePosition_[i];
+            if (q == QM_PHRASESTOP || q == QM_CHAINSTOP) launched_[i] = -1;
+            QueueChannel(i, QM_NONE, 0, 0);
+        }
+        Stop();
+        return;
+    }
+    for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
+        bool c = launched_[i] >= 0 && project_->TrackExists(i) && hasClip(viewData_, i, launched_[i]);
+        QueueChannel(i, c ? QM_TICKSTART : QM_NONE, c ? launched_[i] : 0, 0);
+    }
+    Start(PM_LIVE, false);   // (sin nada lanzado, corre el reloj: el metrónomo, Link)
 }
 
 void Player::playClipStep(int channel) {
