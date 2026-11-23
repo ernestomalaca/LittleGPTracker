@@ -3003,7 +3003,9 @@ void SongView::drawBlockGrid() {
                 if (player->IsRunning() && (q == QM_PHRASESTOP || q == QM_CHAINSTOP) && player->StopCell(i) == row)
                     queued = true;
                 if (player->IsRunning() && player->IsChannelPlaying(i) && viewData_->currentPlayChain_[i] != 0xFF &&
-                    viewData_->songPlayPos_[i] == row && q != QM_PHRASESTOP && q != QM_CHAINSTOP) stopAll = false;
+                    viewData_->songPlayPos_[i] == row &&
+                    ((q != QM_PHRASESTOP && q != QM_CHAINSTOP) || player->StopCell(i) >= 0))
+                    stopAll = false;   // solo con Select + Start (sin celda que lo detenga) parpadea la fila que suena
             }
             FillRect(SX, y, SW, h, has ? Mix(bg, fg, 9) : cellBg, 3);
             if (scnMarking_ && rowMode_) {   // escenas marcadas: toda la fila
