@@ -127,6 +127,51 @@ void splitPos(double pos,int &step,int &tick) {
 	if (tick>=CLIP_TICKS) { step++ ; tick=0 ; }
 }
 
+// lo que caería encima del clip 'id' (sonando): la última vuelta de su loop,
+// contada desde el último golpe en ese clip
+void overdubNotes(Clip &c,const std::vector<Hit> &hits,int id,int tempo,std::vector<ClipNote> &out) {
+	out.clear() ;
+	if (c.IsEmpty()) return ;
+	int lastI=-1 ;
+	for (size_t i=0;i<hits.size();i++) if (hits[i].running && hits[i].clip==id) lastI=int(i) ;
+	if (lastI<0) return ;
+	double lastSong=hits[lastI].song ;
+	int ls=0, le=c.pages-1 ;
+	if (c.loopStart>=0 && c.loopEnd>=c.loopStart && c.loopEnd<c.pages) { ls=c.loopStart ; le=c.loopEnd ; }
+	int L=(le-ls+1)*CLIP_STEPS_PER_PAGE, L0=ls*CLIP_STEPS_PER_PAGE ;
+	for (size_t i=0;i<hits.size();i++) {
+		const Hit &h=hits[i] ;
+		if (!h.running || h.clip!=id || h.song<lastSong-L+0.001) continue ;
+		int step, tick ;
+		splitPos(h.clipStep,step,tick) ;
+		if (step>=L0+L) step=L0+(step-L0)%L ;
+		double offSong=h.offSong>=0?h.offSong:h.song+(h.offMs-h.ms)*tempo/15000.0 ;
+		int len=int(floor(offSong-h.song+0.5)) ;
+		if (len<1) len=1 ;
+		if (len>L) len=L ;
+		ClipNote n ;
+		n.start=step ; n.tick=tick ; n.len=len ; n.pitch=h.pitch ; n.vel=h.vel ;
+		out.push_back(n) ;
+	}
+}
+
+}
+
+void MidiCapture::Preview(ViewData *d,int clip,std::vector<ClipNote> &out) {
+	out.clear() ;
+	std::vector<Hit> hits ;
+	hitsOf(d->songX_,hits) ;
+	if (hits.empty() || clip<0) return ;
+	int tempo=d->project_->GetTempo() ;
+	if (tempo<20) tempo=120 ;
+	overdubNotes(d->song_->clips_->Get(clip),hits,clip,tempo,out) ;
+}
+
+bool MidiCapture::Forget(int ch) {
+	bool any=false ;
+	for (size_t i=0;i<evs.size();i++) if (evs[i].ch==ch && evs[i].vel>0 && evs[i].ms>capturedUpTo) any=true ;
+	if (!evs.empty()) capturedUpTo=evs.back().ms ;
+	return any ;
 }
 
 void MidiCapture::Note(int ch,int pitch,int vel) {
@@ -170,23 +215,10 @@ const char *MidiCapture::Capture(ViewData *d,int &beforeClip,Clip &before,int &p
 		if (c.IsEmpty()) return 0 ;
 		beforeClip=id ;
 		before=c ;
-		int ls=0, le=c.pages-1 ;
-		if (c.loopStart>=0 && c.loopEnd>=c.loopStart && c.loopEnd<c.pages) { ls=c.loopStart ; le=c.loopEnd ; }
-		int L=(le-ls+1)*CLIP_STEPS_PER_PAGE, L0=ls*CLIP_STEPS_PER_PAGE ;
-		int n=0 ;
-		for (size_t i=0;i<hits.size();i++) {
-			const Hit &h=hits[i] ;
-			if (!h.running || h.clip!=id || h.song<last.song-L+0.001) continue ;
-			int step, tick ;
-			splitPos(h.clipStep,step,tick) ;
-			if (step>=L0+L) step=L0+(step-L0)%L ;
-			double offSong=h.offSong>=0?h.offSong:h.song+(h.offMs-h.ms)*tempo/15000.0 ;
-			int len=int(floor(offSong-h.song+0.5)) ;
-			if (len>L) len=L ;
-			if (getenv("TRK_LOADLOG")) fprintf(stderr,"[CAPTURA]  encima: paso %.2f (canción %.2f-%.2f) p%d\n",h.clipStep,h.song,offSong,h.pitch) ;
-			addNote(c,step,tick,len,h.pitch,h.vel) ;
-			n++ ;
-		}
+		std::vector<ClipNote> add ;
+		overdubNotes(c,hits,id,tempo,add) ;   // (lo mismo que se ve de silueta)
+		int n=int(add.size()) ;
+		for (size_t i=0;i<add.size();i++) addNote(c,add[i].start,add[i].tick,add[i].len,add[i].pitch,add[i].vel) ;
 		if (!n) { beforeClip=-1 ; return 0 ; }
 		snprintf(msg,sizeof(msg),n==1?"Capturada 1 nota en el clip":"Capturadas %d notas en el clip",n) ;
 		return msg ;

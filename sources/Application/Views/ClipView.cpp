@@ -1,4 +1,5 @@
 #include "ClipView.h"
+#include "MidiCapture.h"
 #include "Application/Mixer/MixerService.h"
 #include "Application/Player/Player.h"
 #include "Application/Model/Project.h"
@@ -49,6 +50,9 @@ ClipView::ClipView(GUIWindow &w, ViewData *viewData) : View(w, viewData) {
     markLevel_ = 1;
     anchorStep_ = anchorPitch_ = 0;
     aPending_ = bPending_ = false;
+    bTapGhost_ = false;
+    ghostCount_ = 0;
+    followPage_ = -1;
     msgTime_ = 0;
     chainShown_ = -1;
     pasting_ = false;
@@ -1249,6 +1253,10 @@ void ClipView::handleButton(unsigned short mask, bool pressed) {
         if (!(mask & EPBM_B)) {
             if (bPending_ && marking_ && !(mask & EPBM_SELECT)) copySelection(false);   // B sola: copia
             bPending_ = false;
+            if (bTapGhost_) {   // B sola (sin marca): olvidar lo tocado, para intentar de nuevo
+                bTapGhost_ = false;
+                if (MidiCapture::Forget(viewData_->songX_)) message("Captura borrada");
+            }
         }
         isDirty_ = true;
         return;
@@ -1258,6 +1266,7 @@ void ClipView::handleButton(unsigned short mask, bool pressed) {
     Player *player = Player::GetInstance();
     if (v != EPBM_A) aPending_ = false;
     if (v != EPBM_B) bPending_ = false;
+    bTapGhost_ = (v == EPBM_B && mask == EPBM_B && !marking_ && !pasting_);
     if (!marking_) dupDone_ = false;
 
     if (pasting_) {
@@ -1610,6 +1619,29 @@ void ClipView::DrawView() {
         if ((int)i == cur) FrameRect(x - 1, y - 1, w + 2, RH, fg, 3, 2);
     }
 
+    // trk2als: la silueta de lo que se capturaría ahora (como en Note): solo
+    // el contorno, donde va a quedar. B la borra para intentar de nuevo
+    {
+        std::vector<ClipNote> ghost;
+        MidiCapture::Preview(viewData_, viewData_->currentChain_, ghost);
+        ghostCount_ = int(ghost.size());
+        for (size_t i = 0; i < ghost.size(); i++) {
+            const ClipNote &n = ghost[i];
+            int s0 = n.start - p0, s1 = n.start + n.len - p0;
+            if (s1 <= 0 || s0 >= 16) continue;
+            if (s0 < 0) s0 = 0;
+            if (s1 > 16) s1 = 16;
+            int r = rowOf(n.pitch);
+            if (r < 0) continue;
+            int x = GRID_X + s0 * STEP_W + 1 + (n.start >= p0 ? n.tick * STEP_W / 24 : 0);
+            int y = GRID_Y + r * RH + 1;
+            int w = (s1 - s0) * STEP_W - 2;
+            if (x + w > GRID_X + 16 * STEP_W) w = GRID_X + 16 * STEP_W - x;
+            if (w < 4) w = 4;
+            FrameRect(x, y, w, RH - 2, Mix(bg, fg, 75), 3, 2);
+        }
+    }
+
     // lo que se va a pegar (Select + A sostenido)
     if (pasting_) {
         std::vector<Note> add;
@@ -1680,6 +1712,18 @@ void ClipView::OnPlayerUpdate(PlayerEventType, unsigned int) {
     }
     if (step != playStep_) {
         playStep_ = step;
+        // trk2als: follow (como en Live): la página sigue a lo que suena; si
+        // te vas a otra página, se pausa hasta que vuelves a la que suena
+        Variable *fv = viewData_->project_->FindVariable(VAR_FOLLOW);
+        if (step >= 0 && fv && fv->GetBool() && !marking_ && !pasting_ && !curveOn()) {
+            int pp = step / 16, cp = cursorStep_ / 16;
+            if (cp == pp) followPage_ = pp;
+            else if (cp == followPage_) {
+                cursorStep_ += (pp - cp) * 16;
+                if (cursorStep_ >= total()) cursorStep_ = total() - 1;
+                followPage_ = pp;
+            }
+        }
         DrawView();
     } else {
         refreshTopBar();

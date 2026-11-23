@@ -176,11 +176,12 @@ ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
 
     // las fichas
     struct Chip { FourCC var; int x, y, min, max, xo, yo; };
-    const Chip chips[8] = {
+    const Chip chips[9] = {
         {VAR_MASTERVOL, 1, 6, 10, 100, 1, 10},  {VAR_PREGAIN, 10, 6, 10, 200, 1, 10},
         {VAR_QUANTIZE, 19, 6, 0, 100, 5, 25},   {VAR_SWING, 28, 6, 50, 75, 1, 5},   // trk2als (el softclip va al mixer)
         {VAR_MIDIDEVICE, 1, 7, 0, 0, 1, 1},     {VAR_METRONOME, 10, 7, 0, 1, 1, 1},
         {VAR_TRANSPOSE, 19, 7, -48, 48, 1, 12}, {VAR_FOLD, 28, 7, 0, 1, 1, 1},
+        {VAR_FOLLOW, 1, 8, 0, 1, 1, 1},   // trk2als: la tercera fila (aquí van entrando los ajustes nuevos)
     };
     // trk2als: la ficha 4 (era la salida MIDI de LGPT, que aquí no hay) es
     // la latencia: baja 256/2, media 512/2, alta 512/4 (bloque / reserva)
@@ -192,7 +193,7 @@ ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
         latLast_ = b <= 256 ? 0 : (p <= 2 ? 1 : 2);
         latVar_ = new Variable("latencia", 0, latNames, 3, latLast_);
     }
-    for (int k = 0; k < 8; k++) {
+    for (int k = 0; k < CHIPS; k++) {
         v = (k == 4) ? latVar_ : project_->FindVariable(chips[k].var);
         NAssert(v);
         int mx = k == 4 ? 2 : chips[k].max;
@@ -533,27 +534,28 @@ void ProjectView::drawBoard() {
     if (fO) DrawText(lx + 12, TY + 76, "+ si va atrasado", dim, 0);
 
     // fichas
-    static const char *chipName[8] = {"VOLUMEN", "DRIVE", "CUANTIZAR", "SWING", "LATENCIA", "METRÓNOMO", "TRANSP", "FOLD"};
-    for (int k = 0; k < 8; k++) {
-        int x = 24 + (k % 4) * 150, y = 182 + (k / 4) * 76;
-        int cw = 142;
+    static const char *chipName[CHIPS] = {"VOLUMEN", "DRIVE", "CUANTIZAR", "SWING", "LATENCIA", "METRÓNOMO", "TRANSP", "FOLD", "FOLLOW"};
+    for (int k = 0; k < CHIPS; k++) {
+        // trk2als: tres filas (más bajitas) para que quepan los ajustes nuevos
+        int x = 24 + (k % 4) * 150, y = 176 + (k / 4) * 58;
+        int cw = 142, ch = 52;
         bool f = focus == chipField_[k];
-        FillRect(x, y, cw, 66, card, 6);
-        if (f) FrameRect(x, y, cw, 66, acc, 6, 3);
-        DrawText(x + 12, y + 9, chipName[k], acc, 0);
+        FillRect(x, y, cw, ch, card, 6);
+        if (f) FrameRect(x, y, cw, ch, acc, 6, 3);
+        DrawText(x + 12, y + 6, chipName[k], acc, 0);
         Variable *v = &((UIIntVarField *)chipField_[k])->GetVariable();
         std::string val;
         if (k == 6) { snprintf(b, sizeof(b), "%+d", v->GetInt()); val = b; }   // transponer
         else if (k == 3 && v->GetInt() <= 50) val = "no";   // swing apagado (parejo)
         else if (k == 2 || k == 3) { snprintf(b, sizeof(b), "%d%%", v->GetInt()); val = b; }   // cuantizar, swing
-        else if (k == 7) val = v->GetInt() ? "sí" : "no";                        // fold
+        else if (k == 7 || k == 8) val = v->GetInt() ? "sí" : "no";              // fold, follow
         else if (v->GetType() == Variable::INT) { snprintf(b, sizeof(b), "%d", v->GetInt()); val = b; }
         else val = v->GetString() ? v->GetString() : "--";
         if (val == "off") val = "no";
         if (val == "on") val = "sí";
         if (val.empty() || val == "(null)") val = "--";
         if (val.size() > 7u) val = val.substr(0, 7);
-        DrawText(x + 12, y + 33, val.c_str(), fg, 1);
+        DrawText(x + 12, y + 24, val.c_str(), fg, 1);
     }
 
     // botones

@@ -69,6 +69,7 @@ tempoNudge_(0)
     // swing (como el Move: retrasa las semicorcheas a contratiempo)
     this->Insert(new Variable("quantize", VAR_QUANTIZE, 70));
     this->Insert(new Variable("swing", VAR_SWING, 50));
+    this->Insert(new Variable("follow", VAR_FOLLOW, true));   // trk2als: como Follow en Live
     appliedScale_ = 1;
     appliedRoot_ = 0;
     // trk2als: tipo de cada pista (MIDI o audio, como en Live); se cambia en

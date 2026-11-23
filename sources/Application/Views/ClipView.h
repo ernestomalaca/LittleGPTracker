@@ -101,6 +101,9 @@ class ClipView : public View {
     bool targets(std::vector<Note> &notes, std::vector<int> &idx);
     void nudge(int d);
     void quantize();   // trk2als: X + Y: a la rejilla (lo que diga el Proyecto)
+    bool bTapGhost_;   // trk2als: B sola: olvidar lo tocado (la silueta de la captura)
+    int ghostCount_;
+    int followPage_;   // trk2als: follow: la página que se va siguiendo (-1 = no)
     void ratchet(int d);
     void rampVel(int d);
     void moveCursor(int dt, int dp);

@@ -39,7 +39,8 @@ private:
   // trk2als: el tablero
   void drawBoard();
   UIField *rootField_, *scaleField_, *linkField_, *ofsField_;
-  UIField *chipField_[8];
+  enum { CHIPS = 9 };
+  UIField *chipField_[CHIPS];
   // trk2als: la latencia del audio (config.xml; toma efecto al reiniciar)
   Variable *latVar_;
   int latLast_;

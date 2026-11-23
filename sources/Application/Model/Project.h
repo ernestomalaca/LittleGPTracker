@@ -21,6 +21,7 @@
 #define VAR_FOLD 			MAKE_FOURCC('F', 'O', 'L', 'D')   // trk2als: piano roll solo con la escala
 #define VAR_QUANTIZE		MAKE_FOURCC('Q', 'N', 'T', 'Z')   // trk2als: cuánto acerca X a la rejilla (%)
 #define VAR_SWING			MAKE_FOURCC('S', 'W', 'N', 'G')   // trk2als: swing de las semicorcheas (50 = parejo)
+#define VAR_FOLLOW			MAKE_FOURCC('F', 'O', 'L', 'W')   // trk2als: el clip sigue a lo que suena
 #define VAR_RENDER MAKE_FOURCC('R', 'N', 'D', 'R')
 #define VAR_METRONOME MAKE_FOURCC('M', 'E', 'T', 'R') // trk2als: metrónomo off/on
 #define VAR_LINKOFS MAKE_FOURCC('L', 'K', 'O', 'F') // trk2als: desfase de Link en ms

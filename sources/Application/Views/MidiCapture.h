@@ -11,8 +11,10 @@
 //    en la última vuelta del loop
 //  - sonando, sin clip en la pista: un clip nuevo en la rejilla de la canción
 
+#include <vector>
+#include "Application/Model/Clip.h"
+
 class ViewData ;
-class Clip ;
 
 class MidiCapture {
 public:
@@ -25,6 +27,10 @@ public:
 	// 'playRow' >= 0: era sin nada sonando: la fila del clip nuevo (para que
 	// arranque a sonar en seguida, como en Live)
 	static const char *Capture(ViewData *d,int &beforeClip,Clip &before,int &playRow) ;
+	// la silueta: lo que caería encima de ese clip si capturas ahora
+	static void Preview(ViewData *d,int clip,std::vector<ClipNote> &out) ;
+	// olvidar lo tocado (para intentar de nuevo); true si había algo
+	static bool Forget(int ch) ;
 } ;
 
 #endif
