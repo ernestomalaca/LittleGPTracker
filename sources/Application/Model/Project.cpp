@@ -65,6 +65,10 @@ tempoNudge_(0)
     this->Insert(scaleRoot);
     Variable *fold = new Variable("fold", VAR_FOLD, true);
     this->Insert(fold);
+    // trk2als: cuantizar (X en el clip: cuánto se acerca a la rejilla) y
+    // swing (como el Move: retrasa las semicorcheas a contratiempo)
+    this->Insert(new Variable("quantize", VAR_QUANTIZE, 70));
+    this->Insert(new Variable("swing", VAR_SWING, 50));
     appliedScale_ = 1;
     appliedRoot_ = 0;
     // trk2als: tipo de cada pista (MIDI o audio, como en Live); se cambia en

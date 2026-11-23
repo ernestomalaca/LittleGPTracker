@@ -1402,6 +1402,11 @@ void Player::playClipStep(int channel) {
         int note = n.pitch + project_->GetTranspose();
         if (note < 0 || note > 127) continue;
         double start = n.tick / 4.0;      // en sextos de paso (rebanadas)
+        // trk2als: swing (como el Move): las semicorcheas a contratiempo, más tarde
+        if (n.start % 2 == 1) {
+            int sw = project_->FindVariable(VAR_SWING)->GetInt();
+            if (sw > 50) start += (sw - 50) / 50.0 * 6.0;
+        }
         double span = n.len * 6.0;
         unsigned long startSlice = sliceCount_ + (unsigned long)start;
         // la voz: la que ya terminó o, si no hay, la que acaba antes

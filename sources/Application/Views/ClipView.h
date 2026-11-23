@@ -100,6 +100,7 @@ class ClipView : public View {
     void changeVelocity(int d);
     bool targets(std::vector<Note> &notes, std::vector<int> &idx);
     void nudge(int d);
+    void quantize();   // trk2als: X + Y: a la rejilla (lo que diga el Proyecto)
     void ratchet(int d);
     void rampVel(int d);
     void moveCursor(int dt, int dp);

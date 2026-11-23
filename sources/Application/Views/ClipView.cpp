@@ -851,6 +851,40 @@ void ClipView::nudge(int d) {
     audition(cursorStep_);
 }
 
+// trk2als: X + Y: lo marcado (sin marca, todo el clip) se acerca a la
+// rejilla, a la línea más cercana, lo que diga el Proyecto (CUANTIZAR, 70%
+// de entrada: queda un poco de lo tocado; otra vez lo acerca más)
+void ClipView::quantize() {
+    std::vector<Note> notes;
+    std::vector<int> idx;
+    if (marking_) {
+        if (!targets(notes, idx)) return;
+    } else {
+        readNotes(notes);
+        for (size_t k = 0; k < notes.size(); k++) idx.push_back(int(k));
+        if (idx.empty()) { message("No hay notas"); return; }
+    }
+    int amt = viewData_->project_->FindVariable(VAR_QUANTIZE)->GetInt();
+    int t = total(), moved = 0, left = 0;
+    for (size_t k = 0; k < idx.size(); k++) {
+        Note &n = notes[idx[k]];
+        if (!n.tick) continue;
+        int pos = n.start * 24 + n.tick;
+        int target = n.tick < 12 ? n.start * 24 : (n.start + 1) * 24;
+        int np = pos + ((target - pos) * amt + (target > pos ? 50 : -50)) / 100;
+        if (np > (t - n.len) * 24) np = (t - n.len) * 24;   // no se sale del clip
+        if (np < 0) np = 0;
+        if (np != pos) moved++;
+        n.start = np / 24;
+        n.tick = np % 24;
+        if (n.tick) left++;
+    }
+    if (!moved) { message(left ? "Cuantizar: ya no se acerca más" : "Ya está en la rejilla"); return; }
+    writeNotes(notes);
+    if (left) message("Cuantizado %d%%", amt);
+    else message("Cuantizado: en la rejilla");
+}
+
 // Y + ← →: rampa de velocity en los golpes (→ crece, ← se apaga)
 void ClipView::rampVel(int d) {
     std::vector<Note> notes;
@@ -1292,6 +1326,11 @@ void ClipView::handleButton(unsigned short mask, bool pressed) {
         return;
     }
 
+    if ((mask & EPBM_X) && (mask & EPBM_Y) && (v == EPBM_X || v == EPBM_Y)) {   // X + Y: cuantizar
+        quantize();
+        isDirty_ = true;
+        return;
+    }
     if (mask & EPBM_X) {               // propiedades de la nota (o de lo marcado)
         if (mask & EPBM_A) {           // X + A: ajuste fino (nudge, velocity ±1)
             if (dt) nudge(dt);

@@ -178,7 +178,7 @@ ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
     struct Chip { FourCC var; int x, y, min, max, xo, yo; };
     const Chip chips[8] = {
         {VAR_MASTERVOL, 1, 6, 10, 100, 1, 10},  {VAR_PREGAIN, 10, 6, 10, 200, 1, 10},
-        {VAR_SOFTCLIP, 19, 6, 0, 4, 1, 4},      {VAR_SOFTCLIP_GAIN, 28, 6, 0, 1, 1, 1},
+        {VAR_QUANTIZE, 19, 6, 0, 100, 5, 25},   {VAR_SWING, 28, 6, 50, 75, 1, 5},   // trk2als (el softclip va al mixer)
         {VAR_MIDIDEVICE, 1, 7, 0, 0, 1, 1},     {VAR_METRONOME, 10, 7, 0, 1, 1, 1},
         {VAR_TRANSPOSE, 19, 7, -48, 48, 1, 12}, {VAR_FOLD, 28, 7, 0, 1, 1, 1},
     };
@@ -533,7 +533,7 @@ void ProjectView::drawBoard() {
     if (fO) DrawText(lx + 12, TY + 76, "+ si va atrasado", dim, 0);
 
     // fichas
-    static const char *chipName[8] = {"VOLUMEN", "DRIVE", "TIPO", "NIVEL", "LATENCIA", "METRÓNOMO", "TRANSP", "FOLD"};
+    static const char *chipName[8] = {"VOLUMEN", "DRIVE", "CUANTIZAR", "SWING", "LATENCIA", "METRÓNOMO", "TRANSP", "FOLD"};
     for (int k = 0; k < 8; k++) {
         int x = 24 + (k % 4) * 150, y = 182 + (k / 4) * 76;
         int cw = 142;
@@ -544,6 +544,7 @@ void ProjectView::drawBoard() {
         Variable *v = &((UIIntVarField *)chipField_[k])->GetVariable();
         std::string val;
         if (k == 6) { snprintf(b, sizeof(b), "%+d", v->GetInt()); val = b; }   // transponer
+        else if (k == 2 || k == 3) { snprintf(b, sizeof(b), "%d%%", v->GetInt()); val = b; }   // cuantizar, swing
         else if (k == 7) val = v->GetInt() ? "sí" : "no";                        // fold
         else if (v->GetType() == Variable::INT) { snprintf(b, sizeof(b), "%d", v->GetInt()); val = b; }
         else val = v->GetString() ? v->GetString() : "--";
