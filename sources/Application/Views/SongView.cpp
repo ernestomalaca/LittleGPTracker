@@ -2088,7 +2088,7 @@ void SongView::clampTrackCursor() {
 }
 
 // trk2als: la columna de escenas (a la derecha, como en Live): A lanza la
-// escena, X + ↑ ↓ sus repeticiones, Select + Start detiene los clips al compás;
+// escena, Y + ↑ ↓ sus repeticiones, Select + Start detiene los clips al compás;
 // ← vuelve a las pistas
 void SongView::processRowButtonMask(unsigned int mask) {
     Player *player = Player::GetInstance();
@@ -2115,7 +2115,7 @@ void SongView::processRowButtonMask(unsigned int mask) {
         isDirty_ = true;
         return;
     }
-    if (mask & EPBM_X) {   // trk2als: X + ↑ ↓: cuántas veces suena la escena (∞, x1 … x16)
+    if (mask & EPBM_Y) {   // trk2als: Y + ↑ ↓ (como dividir en el clip): cuántas veces suena la escena (∞, x1 … x16)
         int dir = (mask & EPBM_UP) ? 1 : (mask & EPBM_DOWN) ? -1 : 0;
         if (dir) {
             unsigned char &r = viewData_->song_->sceneRep_[viewData_->songY_ + viewData_->songOffset_];
