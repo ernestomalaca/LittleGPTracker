@@ -2965,14 +2965,14 @@ void SongView::drawBlockGrid() {
             if (hereRow) FrameRect(SX, y, SW, h, cur, 3, 3);
             GUIColor green = LinkGreen();
             int ts = 12, tx = SX + 8, ty = y + (h - ts) / 2 - (h >= 34 ? 4 : 0);
-            if (queued && !rowPlaying[j]) {   // en espera: el triángulo hueco
+            if (queued && !queueBlink()) {   // en espera del 1: parpadea entre lleno y hueco
                 for (int k = 0; k < ts; k++) {
                     int hh = ts - (k / 2) * 2;
                     if (k < 2 || k >= ts - 2) FillRect(tx + k, ty + k / 2, 1, hh, green);
                     else { FillRect(tx + k, ty + k / 2, 1, 2, green); FillRect(tx + k, ty + k / 2 + hh - 2, 1, 2, green); }
                 }
             } else {
-                GUIColor tcol = rowPlaying[j] ? green : (has ? fg : Mix(bg, fg, 25));
+                GUIColor tcol = (rowPlaying[j] || queued) ? green : (has ? fg : Mix(bg, fg, 25));
                 for (int k = 0; k < ts; k++) FillRect(tx + k, ty + k / 2, 1, ts - (k / 2) * 2, tcol);
             }
             char rl[4];
