@@ -156,7 +156,7 @@ Session (como la de Live)
   Hacia abajo se llega hasta una fila después de la última con clips (o
   hasta la 07): al poner o pegar algo más abajo, hay más espacio.
   L / R (tocados solos), como la octava en el clip: L baja una página, R
-  sube. R tres veces rápido: a la cabecera de la pista (cambiar o editar
+  sube (el cursor también; con pocas filas se posa en la última que hay). R tres veces rápido: a la cabecera de la pista (cambiar o editar
   su sonido).
   Select + Start = "Stop All Clips" de Live (en cualquier celda): todos los
   clips se detienen al terminar el compás y el reloj sigue corriendo, para
