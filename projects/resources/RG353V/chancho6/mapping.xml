@@ -24,8 +24,9 @@
 	<MAP src="but:0:4" dst="/event/lshoulder" />
 	<MAP src="but:0:5" dst="/event/rshoulder" />
 
-	<!-- L2 + R2 juntos, o el botón del frente: prenden y apagan la ayuda -->
+	<!-- L2 + R2 juntos: prenden y apagan la ayuda. R2 solo captura -->
 	<MAP src="but:0:6" dst="/event/l2" />
 	<MAP src="but:0:7" dst="/event/r2" />
-	<MAP src="but:0:12" dst="/event/help" />
+	<!-- el botón del frente (el 10, confirmado con Detectar botones): captura, como R2 -->
+	<MAP src="but:0:10" dst="/event/r2" />
 </MAPPINGS>
