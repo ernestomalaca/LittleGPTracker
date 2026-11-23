@@ -9,6 +9,7 @@
 PlayerChannel::PlayerChannel(int index) {             
     index_=index ;
     instr_=0 ;
+    prev_=0 ;
     muted_=false ;
     muteGain_=1.0f ;
 	mixBus_=0 ;
@@ -28,7 +29,11 @@ PlayerChannel::~PlayerChannel() {
 
 void PlayerChannel::StartInstrument(I_Instrument *instr,unsigned char note,bool trigger) {
    if (instr_) {
+      I_Instrument *old=instr_ ;
       StopInstrument() ;
+      // trk2als: otro clip (otro instrumento): el de antes sigue sonando hasta
+      // terminar su fade de salida, mezclado aparte
+      if (instr_ && old!=instr) prev_=old ;
    }
    /* The note will not trigger if it is out the keymap or, in the case of a
       MIDI instrument, if the channel is muted. */
@@ -69,12 +74,26 @@ void PlayerChannel::StopInstrument() {
 } ;
 
 bool PlayerChannel::Render(fixed *buffer,int samplecount) {
-   if (instr_) {
+   if (instr_ || prev_) {
      bool tableSlice=SyncMaster::GetInstance()->TableSlice() ;
      // trk2als: mute / solo con un fundido de ~8 ms (antes cortaba en seco: click)
      bool silent = muted_ && muteGain_ <= 0.0f ;
-     bool status = instr_->Render(index_, buffer, samplecount,
-                                  tableSlice | (silent << 1));
+     bool status = instr_ ? instr_->Render(index_, buffer, samplecount,
+                                           tableSlice | (silent << 1)) : false ;
+     // trk2als: el clip anterior se termina de apagar (su fade de salida)
+     // aunque ya haya entrado otro: si no, se cortaba en seco (click)
+     if (prev_) {
+         if (!prev_->Releasing(index_)) prev_ = 0 ;
+         else {
+             if ((int)prevBuf_.size() < samplecount * 2) prevBuf_.resize(samplecount * 2) ;
+             bool p = prev_->Render(index_, &prevBuf_[0], samplecount, tableSlice | (silent << 1)) ;
+             if (p) {
+                 if (!status) memcpy(buffer, &prevBuf_[0], samplecount * 2 * sizeof(fixed)) ;
+                 else for (int i = 0; i < samplecount * 2; i++) buffer[i] += prevBuf_[i] ;
+                 status = true ;
+             }
+         }
+     }
      if (status && !silent) {
          // Apply HPF if enabled
          if (hpfMode_ != 0) {
@@ -217,6 +236,7 @@ void PlayerChannel::Reset() {
     // trk2als: al cerrar el proyecto sus instrumentos se borran; una voz que
     // seguía en su cola (release) no puede quedar apuntando a uno de ellos
     instr_=0 ;
+    prev_=0 ;
     muted_=false ;
     muteGain_=1.0f ;
   busIndex_=-1 ;

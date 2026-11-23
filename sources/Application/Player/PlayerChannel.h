@@ -2,6 +2,8 @@
 #ifndef _PLAYER_CHANNEL_H_
 #define _PLAYER_CHANNEL_H_
 
+#include <vector>
+#include <string.h>
 #include "Services/Audio/AudioModule.h"
 #include "Application/Instruments/I_Instrument.h"
 #include "Application/Mixer/MixBus.h"
@@ -14,7 +16,7 @@ public:
 	void StartInstrument(I_Instrument *instr,unsigned char note,bool cleanStart) ;
 	void StopInstrument() ;
 	void ChokeInstrument() ;
-	void KillInstrument() { instr_=0 ; }   // trk2als: deja de mezclarlo ya (sin cola)
+	void KillInstrument() { instr_=0 ; prev_=0 ; }   // trk2als: deja de mezclarlo ya (sin cola)
 	void StartVoice(I_Instrument *instr,int voice,unsigned char note,int velocity) ;   // trk2als
 	void StopVoice(int voice) ;
 	I_Instrument *GetInstrument() ;
@@ -31,7 +33,9 @@ public:
 	int index_ ;
 	I_Instrument *instr_ ;
 	bool muted_ ;
-	float muteGain_ ;   // trk2als: mute / solo con fundido (sin click): 1 suena, 0 callado
+	float muteGain_ ;
+	I_Instrument *prev_ ;              // trk2als: el clip de antes, apagándose
+	std::vector<fixed> prevBuf_ ;   // trk2als: mute / solo con fundido (sin click): 1 suena, 0 callado
     fixed volume_;
     int busIndex_ ;
 	MixBus *mixBus_ ;
