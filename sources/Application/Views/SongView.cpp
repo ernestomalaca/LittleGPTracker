@@ -2962,9 +2962,10 @@ void SongView::drawBlockGrid() {
                 scnRange(top, bot);
                 if (row >= top && row <= bot) FrameRect(X0 - 3, y - 3, SX + SW + 3 - (X0 - 3), h + 6, hi2, 4, 3);
             }
-            if (hereRow) FrameRect(SX, y, SW, h, cur, 3, 3);
+            if (hereRow) FrameRect(SX - 3, y - 3, SW + 6, h + 6, cur, 5, 3);   // el cursor por fuera, como en los clips
             GUIColor green = LinkGreen();
             int ts = 12, tx = SX + 8, ty = y + (h - ts) / 2 - (h >= 34 ? 4 : 0);
+            if (queued && queueBlink()) FrameRect(SX, y, SW, h, hi1, 3, 3);   // el marco, como el de los clips
             if (queued && !queueBlink()) {   // en espera del 1: parpadea entre lleno y hueco
                 for (int k = 0; k < ts; k++) {
                     int hh = ts - (k / 2) * 2;
