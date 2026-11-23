@@ -163,6 +163,12 @@ Loops en complex
   mismo al abrir un proyecto a un tempo nuevo. Ocupa hasta 1 GB (lo menos usado se borra solo); se
   cambia con <WARPDISK value="1024"/> (MB; 0 = no guardar). Se puede
   borrar la carpeta cuando quieras.
+  La música primero: mientras un clip espera su versión (al entrar o al
+  cambiar el tempo), el navegador deja de preparar loops y la prueba
+  espera. Con calor también se modera solo (la consola frena el
+  procesador a 85 °C): desde 75 °C no prepara nada en el navegador; desde
+  80 °C estira con un solo hilo. Lo que suena no se toca. Se cambia con
+  <WARPWARM value="75"/> y <WARPHOT value="80"/>.
 
 Automatización (vista del instrumento)
   Y + Start graba (con precuenta si no suena; si suena, desde el siguiente

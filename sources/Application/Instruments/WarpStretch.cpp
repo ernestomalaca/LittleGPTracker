@@ -64,6 +64,40 @@ namespace {
 // ms desde que arrancó (para empatar el log con lo que se oye)
 long warpMs() { return (long)System::GetInstance()->GetClock() ; }
 
+// trk2als: el calor. La consola frena el procesador a 85 °C; antes de eso,
+// Chancho se modera solo: desde 'warm' deja lo especulativo (preparar loops
+// en el navegador), desde 'hot' estira con un solo hilo. Lo que suena nunca
+std::atomic<int> heatWarm(75), heatHot(80) ;
+
+int readTempC() {
+	const char *path=getenv("TRK_THERMAL") ;
+	FILE *f=fopen(path?path:"/sys/class/thermal/thermal_zone0/temp","r") ;
+	if (!f) return 0 ;
+	long v=0 ;
+	if (fscanf(f,"%ld",&v)!=1) v=0 ;
+	fclose(f) ;
+	return int(v>1000?v/1000:v) ;
+}
+
+// 0 = normal, 1 = tibio, 2 = caliente (2 °C de margen para bajar de nivel)
+int heatLevel() {
+	static std::atomic<long> last(-100000) ;
+	static std::atomic<int> lvl(0) ;
+	long now=warpMs() ;
+	if (now-last.load()<1000) return lvl.load() ;
+	last=now ;
+	int t=readTempC(), cur=lvl.load(), n=cur ;
+	if (t>=heatHot.load()) n=2 ;
+	else if (t>=heatWarm.load()) n=(cur==2 && t>heatHot.load()-2)?2:1 ;
+	else n=(cur>0 && t>heatWarm.load()-2)?(cur==2?1:cur):0 ;
+	if (n!=cur) {
+		lvl=n ;
+		if (getenv("TRK_LOADLOG")) fprintf(stderr,"[WARP] %ld calor %d C: %s\n",now,t,
+		        n==2?"un solo hilo y nada especulativo":n==1?"nada especulativo":"normal") ;
+	}
+	return n ;
+}
+
 struct Entry {
 	WarpCacheKey key ;
 	unsigned fingerprint ;
@@ -91,6 +125,7 @@ size_t budget=size_t(256)*1024*1024 ;
 unsigned long useClock=0 ;
 bool enabled=true ;
 bool workerStarted=false ;
+int busyWorkers=0 ;      // (con mtx) cuántos están estirando algo que alguien espera
 
 // unas pocas muestras repartidas: distingue un sample de otro que quedó en
 // la misma dirección de memoria
@@ -477,20 +512,32 @@ void idleThread() {
 #endif
 }
 
-void worker() {
+void worker(int idx) {
 	idleThread() ;
 	for (;;) {
 		Entry *e ;
-		{
+		for (;;) {
+			int heat=idx>0?heatLevel():0 ;   // (fuera del candado: lee un archivo)
 			std::unique_lock<std::mutex> lk(mtx) ;
-			cv.wait(lk,[]{ return !pending.empty() ; }) ;
+			cv.wait_for(lk,std::chrono::milliseconds(500),[]{ return !pending.empty() ; }) ;
+			if (pending.empty()) continue ;
+			if (heat>=2) { lk.unlock() ; std::this_thread::sleep_for(std::chrono::milliseconds(300)) ; continue ; }
 			e=pending.front() ;
 			pending.pop_front() ;
+			busyWorkers++ ;
+			break ;
 		}
 		build(e) ;
 		std::lock_guard<std::mutex> lk(mtx) ;
 		std::vector<short>().swap(e->src) ;
+		busyWorkers-- ;
 	}
+}
+
+// hay algo que la música está esperando (un clip por entrar, un tempo nuevo)
+bool urgentWork() {
+	std::lock_guard<std::mutex> lk(mtx) ;
+	return !pending.empty() || busyWorkers>0 || !diskQueue.empty() ;
 }
 
 // trk2als: primero la tarjeta, en su propio hilo: lo que ya estaba preparado
@@ -535,7 +582,7 @@ void diskLoader() {
 			e->diskMine=mine ;
 			e->diskTried=true ;
 			pending.push_back(e) ;
-			cv.notify_one() ;
+			cv.notify_all() ;
 		}
 		// trk2als: mientras se estira, la versión de otro tempo que ya está en
 		// la tarjeta: la voz suena con ella a la nueva velocidad (como al
@@ -655,7 +702,9 @@ void *WarpCache::Acquire(const WarpCacheKey &k) {
 		unsigned n=std::thread::hardware_concurrency() ;
 		n=(n>2)?n-2:1 ;
 		if (n>2) n=2 ;
-		for (unsigned i=0;i<n;i++) std::thread(worker).detach() ;
+		if (getenv("TRK_WORKERS")) n=atoi(getenv("TRK_WORKERS")) ;   // (pruebas)
+		if (n<1) n=1 ;
+		for (unsigned i=0;i<n;i++) std::thread(worker,int(i)).detach() ;
 	}
 	return 0 ;
 }
@@ -744,7 +793,20 @@ void pvJob(int gen,std::string in,std::string out,double ratio,float transpose,i
 	}
 	bool sounded=false, finishing=false ;
 	std::unique_lock<std::mutex> fin(pvFinish,std::defer_lock) ;
+	bool dbg=getenv("TRK_LOADLOG")!=0, paused=false ;
 	auto progress=[&](long long done)->bool {
+		// trk2als: la música primero: la prueba espera mientras un clip espera
+		// lo suyo, y lo de dejarlo preparado, también si la consola está tibia
+		for (;;) {
+			bool wait=urgentWork() || (sounded && heatLevel()>=1) ;
+			if (!wait) break ;
+			if (!sounded && pvGen.load()!=gen) return false ;
+			if (!paused && dbg) fprintf(stderr,"[WARP] %ld preparar en el navegador: en pausa\n",warpMs()) ;
+			paused=true ;
+			std::this_thread::sleep_for(std::chrono::milliseconds(50)) ;
+		}
+		if (paused && dbg) fprintf(stderr,"[WARP] %ld preparar en el navegador: sigue\n",warpMs()) ;
+		paused=false ;
 		if (!sounded) {
 			if (pvGen.load()!=gen) return false ;
 			if (loopAt>0 && done>=loopAt) {   // la primera vuelta: a sonar
@@ -828,6 +890,11 @@ int WarpPreview::Request(const char *in,const char *out,double ratio,float trans
 bool WarpPreview::Ready(int job) { return job>0 && pvDone.load()==job && pvGen.load()==job ; }
 bool WarpPreview::Failed(int job) { return job>0 && pvFail.load()==job ; }
 
+void WarpCache::SetHeat(int warm,int hot) {
+	if (warm>0) heatWarm=warm ;
+	if (hot>0) heatHot=hot ;
+}
+
 void WarpDisk::SetDir(const char *dir,int mb) {
 	std::lock_guard<std::mutex> lk(diskMtx) ;
 	if (!dir || mb<=0) { diskDir.clear() ; return ; }
@@ -888,6 +955,7 @@ bool WarpCache::Matches(void *,double,float) { return false ; }
 double WarpCache::Speed(void *) { return 1.0 ; }
 void WarpCache::SetBudget(int) {}
 void WarpCache::SetEnabled(bool) {}
+void WarpCache::SetHeat(int,int) {}
 bool WarpCache::Enabled() { return false ; }
 void WarpStretch::Configure(int channels,int) { channels_=channels ; }
 void WarpStretch::Reset() {}

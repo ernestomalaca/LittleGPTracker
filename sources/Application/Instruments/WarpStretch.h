@@ -64,6 +64,8 @@ public:
 	static double Speed(void *h) ;          // la velocidad con que se estiró
 	static void SetBudget(int megabytes) ;
 	static void SetEnabled(bool on) ;
+	// °C: desde 'warm' nada especulativo; desde 'hot' un solo hilo (la consola frena a 85)
+	static void SetHeat(int warm,int hot) ;
 	static bool Enabled() ;
 } ;
 

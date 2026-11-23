@@ -99,6 +99,10 @@ SampleInstrument::SampleInstrument() {
 		 // trk2als: lo estirado también en la tarjeta (WARPDISK = MB; 0 = no)
 		 const char *wd=Config::GetInstance()->GetValue("WARPDISK") ;
 		 WarpDisk::SetDir(Path("root:warpcache").GetPath().c_str(),wd?atoi(wd):1024) ;
+		 // trk2als: WARPWARM / WARPHOT (°C): cuándo moderarse con el calor
+		 const char *ww=Config::GetInstance()->GetValue("WARPWARM") ;
+		 const char *wh=Config::GetInstance()->GetValue("WARPHOT") ;
+		 WarpCache::SetHeat(ww?atoi(ww):75,wh?atoi(wh):80) ;
 	 }
 	 kitStarting_=false ;
 	 for (int i=0;i<SONG_CHANNEL_COUNT;i++) lastKitSlot_[i]=i ;
