@@ -8,6 +8,7 @@
 #include "Application/Model/Config.h"
 #include "Application/Utils/Latin1.h"
 #include "ModalView.h"
+#include "Application/Views/MidiCapture.h"
 #include "Application/Views/ModalDialogs/MessageBox.h"
 #include "Application/Model/Scale.h"
 
@@ -28,6 +29,7 @@ View::View(GUIWindow &w,ViewData *viewData):
 	topLinks_(-1),
 	topTempo_(0)
 {
+  for (int k=0;k<12;k++) topHeld_[k]=-1 ;   // trk2als
   if (!initPrivate_) 
   {
 	   GUIRect rect=w.GetRect() ;
@@ -446,7 +448,10 @@ void View::refreshTopBar() {
 	Player *player=Player::GetInstance() ;
 	bool running=player && player->IsRunning() ;
 	int links=(player && player->LinkOn())?player->LinkPeers():-1 ;
-	if (running!=topRunning_ || viewData_->project_->GetTempo()!=topTempo_ || links!=topLinks_) {
+	int held[12] ;
+	MidiCapture::HeldClasses(held) ;
+	bool pianoChanged=memcmp(held,topHeld_,sizeof(held))!=0 ;
+	if (running!=topRunning_ || viewData_->project_->GetTempo()!=topTempo_ || links!=topLinks_ || pianoChanged) {
 		std::string ctx=topCtx_ ;
 		drawTopBar(topTab_,ctx.c_str()) ;
 	}
@@ -519,6 +524,27 @@ bool View::drawTopBar(int tab, const char *context) {
 		} else {
 			FrameRect(px,6,lw,19,Mix(bg,LinkGreen(),55),4,2) ;
 			DrawText(px+7,TY+2,lk,Mix(bg,LinkGreen(),70),0) ;
+		}
+	}
+	// trk2als: el pianito (una octava, como el del M8): las notas que tocas en
+	// el teclado MIDI, prendidas del color de la pista, sin importar la octava
+	{
+		int held[12] ;
+		MidiCapture::HeldClasses(held) ;
+		for (int k=0;k<12;k++) topHeld_[k]=held[k] ;
+		const int PW=56, PH=20 ;
+		px-=PW+14 ;
+		int ky=5 ;
+		static const int wk[7]={0,2,4,5,7,9,11}, bk[5]={1,3,6,8,10}, bkAfter[5]={0,1,3,4,5} ;
+		int ww=PW/7 ;
+		for (int i=0;i<7;i++) {
+			int c=held[wk[i]] ;
+			FillRect(px+i*ww,ky,ww-1,PH,c>=0?TrackColor(c):Mix(bg,fg,58),1) ;
+		}
+		for (int i=0;i<5;i++) {
+			int c=held[bk[i]] ;
+			int bx=px+(bkAfter[i]+1)*ww-ww/3-1 ;
+			FillRect(bx,ky,ww*2/3+1,PH*3/5,c>=0?TrackColor(c):Mix(bg,fg,14),1) ;
 		}
 	}
 	// el contexto (p. ej. el kit), en letra chica en lo que queda

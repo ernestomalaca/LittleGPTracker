@@ -1200,6 +1200,12 @@ void ClipView::ProcessButtonMask(unsigned short mask, bool pressed) {
     MixerService::GetInstance()->Unlock();
     Snap after;
     takeSnap(after);
+    // trk2als: el clip vacío se volvió de verdad (le pusiste algo): a su celda
+    if (viewData_->virtualCell_ >= 0 && before.clip != after.clip && !clip().notes.empty()) {
+        unsigned char *cell = viewData_->song_->data_ + viewData_->virtualCell_;
+        if (*cell == 0xFF) *cell = (unsigned char)viewData_->currentChain_;
+        viewData_->virtualCell_ = -1;
+    }
     if (before.chain == after.chain && before.clip != after.clip) {
         undo_.push_back(before);
         if (undo_.size() > 64) undo_.erase(undo_.begin());
@@ -1439,6 +1445,14 @@ void ClipView::handleButton(unsigned short mask, bool pressed) {
 void ClipView::DrawView() {
     Clear();
     ClearShapes();
+    // trk2als: el clip vacío (sin crear): sus compases son los de la silueta
+    if (viewData_->virtualCell_ >= 0 && clip().notes.empty()) {
+        std::vector<ClipNote> g;
+        int pg = 1;
+        MidiCapture::Preview(viewData_, viewData_->currentChain_, g, &pg);
+        clip().pages = pg < 1 ? 1 : pg;
+        if (cursorStep_ >= total()) cursorStep_ = total() - 1;
+    }
 
     GUIColor bg = ColorOf(CD_BACKGROUND);
     GUIColor fg = ColorOf(CD_NORMAL);
@@ -1469,6 +1483,7 @@ void ClipView::DrawView() {
     const std::string &cn = viewData_->song_->GetClipName(viewData_->currentChain_);
     char cname[16];
     sprintf(cname, "Clip %2.2X", viewData_->currentChain_);
+    if (viewData_->virtualCell_ >= 0) sprintf(cname, "clip nuevo");   // trk2als: todavía no existe
     std::string ctx = std::string(viewData_->project_->GetTrackName(viewData_->songX_)) + " > " +
                       (cn.empty() ? std::string(cname) : cn);
     drawTopBar(TAB_CLIP, ctx.c_str());

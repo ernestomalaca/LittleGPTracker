@@ -27,6 +27,7 @@ class SongView : public View, public LaunchHost {
     // trk2als: la captura de R2 (AppWindow): antes y, si cambió algo, a la historia
     void CaptureBegin();
     void CaptureCommit();
+    void openVirtualClip();
     virtual bool InterceptButton(unsigned short phys, unsigned short v, bool pressed,
                                  bool repeat);
     virtual void DrawView();

@@ -212,6 +212,10 @@ protected:
     bool topRunning_;
     int topLinks_;      // trk2als: cuántos links se dibujaron (-1 apagado)
     int topTempo_;
+    int topHeld_[12];   // trk2als: el pianito como se dibujó
+public:
+    void RefreshTopBar() { refreshTopBar(); }   // trk2als: al llegar notas del teclado MIDI
+protected:
     void drawVUMeter(uint8_t leftBars, uint8_t rightBars, GUIPoint pos,
                      GUITextProperties props, int vuIndex,
                      bool forceRedraw = false);

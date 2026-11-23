@@ -6,6 +6,7 @@ ViewData::ViewData(Project *project) {
 	project_=project ;
 	song_=project->song_ ;
 	currentChain_=0 ;
+	virtualCell_=-1 ;
 	songX_=0 ;
 	songY_=0 ;
 	songOffset_=0 ;

@@ -138,6 +138,13 @@ Teclado MIDI por USB
   Las perillas todavía no hacen nada.
   En el clip, las teclas que tocas se prenden en el piano roll (como en
   Note); si tocas una nota que no se ve, la vista va hacia ella.
+  Arriba a la derecha, un pianito de una octava (como el del M8) prende
+  las notas que tocas, del color de la pista, en cualquier pantalla.
+  Clip nuevo: en la Session, Select + → sobre una celda MIDI vacía abre
+  un clip vacío ("clip nuevo") que todavía no existe: tocas, ves la
+  silueta de lo que se crearía (va cambiando mientras tocas) y al
+  capturar se crea en esa celda y arranca. Si le pones notas a mano,
+  también se crea. Si te sales sin nada, no queda.
   R2, el botón del frente o Y + Select (más a la mano) capturan lo que tocaste (como Capture
   MIDI de Live), sin haber grabado: Chancho escucha siempre (el último
   minuto).

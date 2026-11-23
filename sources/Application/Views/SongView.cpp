@@ -425,6 +425,28 @@ void SongView::openCell() {
 }
 
 // trk2als: celda vacía + A = un clip nuevo (Model/Clip.h), de un compás
+// trk2als: Select + → en una celda MIDI vacía: un clip vacío que todavía no
+// está en la Session; ahí se toca (con la silueta) y al capturar o editarlo
+// se vuelve un clip de verdad en esa celda. Si te sales sin nada, no queda
+void SongView::openVirtualClip() {
+    Song *song = viewData_->song_;
+    unsigned short id = song->clips_->GetNext(song->data_, SONG_CHANNEL_COUNT * SONG_ROW_COUNT);
+    if (id == NO_MORE_CLIP) {
+        View::SetNotification("No quedan clips libres");
+        return;
+    }
+    song->clips_->Get(id).Clear();
+    song->clips_->Get(id).pages = 1;
+    song->SetClipName(id, "");
+    viewData_->currentChain_ = id;
+    viewData_->chainRow_ = 0;
+    viewData_->virtualCell_ = viewData_->songX_ + SONG_CHANNEL_COUNT * (viewData_->songY_ + viewData_->songOffset_);
+    ViewType vt = VT_CLIP;
+    ViewEvent ve(VET_SWITCH_VIEW, &vt);
+    SetChanged();
+    NotifyObservers(&ve);
+}
+
 unsigned short SongView::newClipId() {
     Song *song = viewData_->song_;
     unsigned short id = song->clips_->GetNext(song->data_, SONG_CHANNEL_COUNT * SONG_ROW_COUNT);
@@ -1512,6 +1534,8 @@ void SongView::processNormalButtonMask(unsigned int mask) {
                         viewData_->chainRow_ = 0;
                         SetChanged();
                         NotifyObservers(&ve);
+                    } else if (!isAudioColumn(viewData_->songX_) && viewData_->project_->TrackExists(viewData_->songX_)) {
+                        openVirtualClip();   // trk2als: celda vacía: un clip vacío para tocar y capturar
                     }
                 }
 
@@ -2017,6 +2041,8 @@ void SongView::processSelectionButtonMask(unsigned int mask) {
                         viewData_->chainRow_ = 0;
                         SetChanged();
                         NotifyObservers(&ve);
+                    } else if (!isAudioColumn(viewData_->songX_) && viewData_->project_->TrackExists(viewData_->songX_)) {
+                        openVirtualClip();   // trk2als: celda vacía: un clip vacío para tocar y capturar
                     }
                 }
 

@@ -60,6 +60,9 @@ public:
 	int chainCol_ ;			    // .Current column in chain editor
 
 	int currentChain_ ;         // .trk2als: el clip que se edita
+	int virtualCell_ ;          // trk2als: >= 0: currentChain_ es un clip vacío que todavía no está
+	                            // en la Session (la celda col + 8 * fila); se vuelve de verdad al
+	                            // editarlo o capturar
 
 	int currentInstrument_ ;    // .Current edited instrument
 	bool instrumentFromSong_ ;  // .trk2als: se abrió desde un loop de la song

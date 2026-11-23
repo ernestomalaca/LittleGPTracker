@@ -45,7 +45,7 @@ void AppWindow::DispatchMidi() {
     Project *project = d->project_;
     Player *player = Player::GetInstance();
     MixerService *ms = MixerService::GetInstance();
-    bool redraw = false;
+    bool redraw = false, notes = false;
     ms->Lock();
     while (MidiKeys::GetInstance()->Pop(e)) {
         unsigned char hi = e.status & 0xF0;
@@ -57,6 +57,7 @@ void AppWindow::DispatchMidi() {
         }
         if (ch < 0 || ch >= SONG_CHANNEL_COUNT || !project->TrackExists(ch)) continue;
         MidiCapture::Note(ch, e.d1, hi == 0x80 ? 0 : e.d2);   // trk2als: para R2
+        notes = true;
         if (w->_clipView && w->_currentView == (View *)w->_clipView) {   // el piano roll prende la tecla
             w->_clipView->MidiActivity(ch, e.d1, hi == 0x90 && e.d2 > 0);
             redraw = true;
@@ -68,6 +69,10 @@ void AppWindow::DispatchMidi() {
         player->LiveNoteOn(ch, instr, e.d1, e.d2);
     }
     ms->Unlock();
+    if (notes && w->_currentView && !w->_overlayOn) {   // el pianito de la barra de arriba
+        w->_currentView->RefreshTopBar();
+        redraw = true;
+    }
     if (redraw && !w->_overlayOn) w->Redraw();   // (no pasa por onEvent)
 }
 
@@ -1009,6 +1014,11 @@ void AppWindow::Update(Observable &o, I_ObservableData *d) {
         ViewType *vt = (ViewType *)ve->GetData();
         if (_currentView) {
             _currentView->LooseFocus();
+        }
+        // trk2als: el clip vacío que no se usó no queda
+        if (*vt != VT_CLIP && _viewData && _viewData->virtualCell_ >= 0) {
+            _viewData->song_->clips_->Get(_viewData->currentChain_).Clear();
+            _viewData->virtualCell_ = -1;
         }
         // trk2als: la curva del clip es solo mientras se está ahí
         if (*vt != VT_CLIP && _viewData && _viewData->curveID_) {

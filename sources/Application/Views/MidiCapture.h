@@ -28,11 +28,15 @@ public:
 	// sonar en seguida, como en Live)
 	static const char *Capture(ViewData *d,int &beforeClip,Clip &before,int &playRow) ;
 	// la silueta: lo que caería encima de ese clip si capturas ahora
-	static void Preview(ViewData *d,int clip,std::vector<ClipNote> &out) ;
+	// (en el clip vacío que se está viendo: lo que se crearía; 'pages' = sus compases)
+	static void Preview(ViewData *d,int clip,std::vector<ClipNote> &out,int *pages=0) ;
 	// olvidar lo tocado (para intentar de nuevo); true si había algo
 	static bool Forget(int ch) ;
 	// las teclas que están apretadas ahora en esa pista
 	static void Held(int ch,std::vector<int> &pitches) ;
+	// el pianito de la barra de arriba: por cada nota de la octava (C..B), la
+	// pista que la toca ahora (la última), o -1
+	static void HeldClasses(int out[12]) ;
 } ;
 
 #endif
