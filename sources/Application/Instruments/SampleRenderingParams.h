@@ -41,6 +41,11 @@ struct renderParams {
     void *warpCache_ ;       // trk2als: complex ya estirado que lee esta voz (WarpCache), o 0
     int cacheIdx_ ;          // trk2als: cuadro de salida siguiente en warpCache_
     double cacheFrac_ ;      // trk2als: fracción (leyendo el pre-render a otra velocidad)
+    // trk2als: el pre-render de otro tempo sin cambiar el tono (loops tonales):
+    // dos granos que se cruzan, cada uno a velocidad 1 (WSOLA)
+    void *olaCache_ ;        // el pre-render de los granos (0 = empezar de nuevo)
+    int olaT_ ;              // edad del grano nuevo (0..OLA_H)
+    double olaNew_, olaOld_ ;   // dónde empezó cada grano en el pre-render
     double warpReqSpeed_ ;   // trk2als: el tempo nuevo se pide cuando se queda quieto
     unsigned long warpReqAt_ ;
     // trk2als: clip de audio en complex que espera su pre-render en silencio

@@ -145,9 +145,12 @@ Loops en complex
   tempo), Chancho lo estira por detrás y el clip entra en el siguiente 1
   ya listo: puede tardar un compás o dos, pero no se traba. La segunda vez
   entra al instante.
-  Al cambiar el tempo, cada loop sigue con su versión de antes a la nueva
-  velocidad (un poquito más agudo o grave) mientras se estira la nueva, y
-  se pasa a ella al estar lista. Moviendo el tempo de 1 en 1, se estira
+  Al cambiar el tempo (o la transposición), cada loop sigue con su versión
+  de antes, corregida, mientras se estira la nueva, y se pasa a ella al
+  estar lista. Lo tonal conserva el tono y la transposición nueva; la
+  percusión (por el nombre: drum, perc, beat, break, kick, conga...) solo
+  va más rápido o más lento, que en batería suena más limpio. Se cambia
+  con <LOOPKEEPPITCH value="auto"/> (on = siempre el tono; off = nunca). Moviendo el tempo de 1 en 1, se estira
   solo cuando lo dejas quieto. En el navegador, la prueba de un loop
   también suena en complex si LOOPWARP lo pide (tarda un momento en sonar).
   Los loops nuevos entran en re-pitch; para que entren en complex, en
@@ -158,8 +161,8 @@ Loops en complex
   navegador, al escuchar un loop se deja preparado para el tempo del
   proyecto: un puntito verde junto al nombre = ya está listo, entra en
   cuanto lo pones. Un aro verde = preparado, pero a otro tempo: entra
-  igual en seguida con esa versión a la nueva velocidad (un poquito más
-  agudo o grave) y se pasa a la buena cuando termina de estirarse. Lo
+  igual en seguida con esa versión (corregida) y se pasa a la buena
+  cuando termina de estirarse. Lo
   mismo al abrir un proyecto a un tempo nuevo. Ocupa hasta 1 GB (lo menos usado se borra solo); se
   cambia con <WARPDISK value="1024"/> (MB; 0 = no guardar). Se puede
   borrar la carpeta cuando quieras.

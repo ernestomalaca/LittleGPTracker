@@ -351,7 +351,12 @@ private:
 	   int lastNote_ ;
 	   bool cacheKey(renderParams *rp,int start,double speed,float transpose,WarpCacheKey &k) ;
 	   void readCache(renderParams *rp,int size,double speed) ;
-	   void readCacheVar(renderParams *rp,int size,double ratio) ;   // trk2als: a otra velocidad
+	   // trk2als: a otra velocidad; pitch: corrección del tono (transposición nueva / la del pre-render)
+	   void readCacheVar(renderParams *rp,int size,double ratio,double pitch) ;
+	   void readCacheOla(renderParams *rp,int size,double ratio,double pitch) ;   // ...sin cambiar el tono
+	   bool keepPitch() ;   // trk2als: el sample es tonal (o LOOPKEEPPITCH)
+	   int tonalIdx_ ;
+	   bool tonal_ ;
 	   void dropCache(renderParams *rp) ;
 	   bool startSimpler(renderParams *rp,int channel,unsigned char note,int &first,bool &sliced,float &offset) ;
 	   void simplerBlock(renderParams *rp,int size) ; // envolvente -> corte, glide

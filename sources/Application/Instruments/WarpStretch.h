@@ -62,6 +62,7 @@ public:
 	static int Start(void *h) ;            // cuadro del sample donde arranca         // cuadro donde vuelve; -1 sin loop
 	static bool Matches(void *h,double speed,float transpose) ;
 	static double Speed(void *h) ;          // la velocidad con que se estiró
+	static float Transpose(void *h) ;       // trk2als: y la transposición
 	static void SetBudget(int megabytes) ;
 	static void SetEnabled(bool on) ;
 	// °C: desde 'warm' nada especulativo; desde 'hot' un solo hilo (la consola frena a 85)

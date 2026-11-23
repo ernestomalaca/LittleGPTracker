@@ -296,17 +296,18 @@ std::string diskName(const WarpCacheKey &k,unsigned long long content,int srcLo,
 // ticks enteros: la misma velocidad sale distinta por ~0.1%)
 long long speedQ(double speed) { return llround(log(speed)/log(1.0005)) ; }
 
-// el mismo loop y región a cualquier velocidad (para sonar con la de otro
-// tempo mientras se estira la buena)
+// el mismo loop y región a cualquier velocidad y transposición (para sonar
+// con la de otro tempo o tono mientras se estira la buena: la voz lo corrige)
 std::string regionKey(const WarpCacheKey &k,unsigned long long content,int srcLo) {
 	long long f[9]={(long long)content,k.channels,k.start-srcLo,k.loopStart-srcLo,k.loopEnd-srcLo,
-	                k.simpler,k.loop,llround(k.transpose*10000.0),quality_} ;
+	                k.simpler,k.loop,2,quality_} ;   // (2: ya sin la transposición)
 	char b[24] ;
 	snprintf(b,sizeof(b),"%016llx",fnv64(f,sizeof(f))) ;
 	return b ;
 }
 
-std::map<std::string,std::vector<std::pair<double,std::string> > > speedsMap ;   // región -> (velocidad, archivo)
+struct DiskAlt { double speed ; float transpose ; std::string name ; } ;
+std::map<std::string,std::vector<DiskAlt> > speedsMap ;   // región -> versiones en la tarjeta
 bool speedsLoaded=false ;
 
 void speedsLoadLocked() {
@@ -314,35 +315,42 @@ void speedsLoadLocked() {
 	speedsLoaded=true ;
 	FILE *f=fopen((diskDir+"/speeds.txt").c_str(),"r") ;
 	if (!f) return ;
-	char r[40], n[40] ;
+	char line[160], r[40], n[40] ;
 	double sp ;
-	while (fscanf(f,"%39s %lf %39s",r,&sp,n)==3) speedsMap[r].push_back(std::make_pair(sp,std::string(n))) ;
+	float tr ;
+	while (fgets(line,sizeof(line),f)) {
+		if (sscanf(line,"%39s %lf %39s %f",r,&sp,n,&tr)!=4) continue ;
+		DiskAlt a ; a.speed=sp ; a.transpose=tr ; a.name=n ;
+		speedsMap[r].push_back(a) ;
+	}
 	fclose(f) ;
 }
 
-void speedsPut(const std::string &region,double speed,const std::string &name) {
+void speedsPut(const std::string &region,double speed,float transpose,const std::string &name) {
 	if (diskDir.empty() || region.empty()) return ;
 	std::lock_guard<std::mutex> lk(diskMtx) ;
 	speedsLoadLocked() ;
-	std::vector<std::pair<double,std::string> > &v=speedsMap[region] ;
-	for (size_t i=0;i<v.size();i++) if (v[i].second==name) return ;
-	v.push_back(std::make_pair(speed,name)) ;
+	std::vector<DiskAlt> &v=speedsMap[region] ;
+	for (size_t i=0;i<v.size();i++) if (v[i].name==name) return ;
+	DiskAlt a ; a.speed=speed ; a.transpose=transpose ; a.name=name ;
+	v.push_back(a) ;
 	FILE *f=fopen((diskDir+"/speeds.txt").c_str(),"a") ;
-	if (f) { fprintf(f,"%s %.9g %s\n",region.c_str(),speed,name.c_str()) ; fclose(f) ; }
+	if (f) { fprintf(f,"%s %.9g %s %.6g\n",region.c_str(),speed,name.c_str(),transpose) ; fclose(f) ; }
 }
 
-// la versión de otra velocidad más cercana que sigue en la tarjeta
-bool speedsNearest(const std::string &region,double speed,double &found,std::string &name) {
+// la versión más cercana (velocidad y tono) que sigue en la tarjeta
+bool speedsNearest(const std::string &region,double speed,float transpose,double &found,float &foundTr,std::string &name) {
 	std::lock_guard<std::mutex> lk(diskMtx) ;
 	speedsLoadLocked() ;
-	std::map<std::string,std::vector<std::pair<double,std::string> > >::iterator it=speedsMap.find(region) ;
+	std::map<std::string,std::vector<DiskAlt> >::iterator it=speedsMap.find(region) ;
 	if (it==speedsMap.end()) return false ;
 	double best=1e9 ;
 	for (size_t i=0;i<it->second.size();i++) {
+		const DiskAlt &a=it->second[i] ;
 		struct stat st ;
-		if (stat((diskDir+"/"+it->second[i].second).c_str(),&st)) continue ;   // ya se borró
-		double d=fabs(log(it->second[i].first/speed)) ;
-		if (d<best) { best=d ; found=it->second[i].first ; name=it->second[i].second ; }
+		if (stat((diskDir+"/"+a.name).c_str(),&st)) continue ;   // ya se borró
+		double d=fabs(log(a.speed/speed))+fabs(log(a.transpose/transpose)) ;
+		if (d<best) { best=d ; found=a.speed ; foundTr=a.transpose ; name=a.name ; }
 	}
 	return best<1e9 ;
 }
@@ -495,7 +503,7 @@ void build(Entry *e) {
 			return ;
 		}
 		diskSave(mine,k.channels,frames,total,loopAt) ;
-		if (!mine.empty()) speedsPut(regionKey(k,e->content,e->srcLo),k.speed,mine) ;
+		if (!mine.empty()) speedsPut(regionKey(k,e->content,e->srcLo),k.speed,k.transpose,mine) ;
 		diskDone(mine) ;
 	}
 	finish(e,frames,total,loopAt,fromDisk,t0) ;
@@ -564,7 +572,7 @@ void diskLoader() {
 		std::string hit ;
 		int r=diskFind(e->key,e->content,e->srcLo,frames,total,loopAt,mine,&hit,false) ;
 		if (r==1) {
-			speedsPut(regionKey(e->key,e->content,e->srcLo),e->key.speed,hit) ;   // (los de antes no estaban anotados)
+			speedsPut(regionKey(e->key,e->content,e->srcLo),e->key.speed,e->key.transpose,hit) ;   // (los de antes no estaban anotados)
 			finish(e,frames,total,loopAt,true,t0) ;
 			std::lock_guard<std::mutex> lk(mtx) ;
 			std::vector<short>().swap(e->src) ;
@@ -588,14 +596,16 @@ void diskLoader() {
 		// la tarjeta: la voz suena con ella a la nueva velocidad (como al
 		// mover el tempo) y se pasa a la buena cuando esté
 		double altSpeed=0 ;
+		float altTr=1.0f ;
 		std::string alt ;
-		if (k.simpler || !speedsNearest(regionKey(k,e->content,e->srcLo),k.speed,altSpeed,alt)) continue ;
+		if (k.simpler || !speedsNearest(regionKey(k,e->content,e->srcLo),k.speed,k.transpose,altSpeed,altTr,alt)) continue ;
 		std::vector<short> af ;
 		long long alen=0, aloop=-1 ;
 		if (!diskLoad(alt,k.channels,af,alen,aloop)) continue ;
 		Entry *a=new Entry() ;
 		a->key=k ;
 		a->key.speed=altSpeed ;
+		a->key.transpose=altTr ;
 		a->fingerprint=fp ;
 		a->content=e->content ;
 		a->diskTried=true ;
@@ -611,8 +621,8 @@ void diskLoader() {
 		entries.push_back(a) ;
 		bytes+=a->frames.size()*sizeof(short) ;
 		evictLocked(a) ;
-		if (getenv("TRK_LOADLOG")) fprintf(stderr,"[WARP] %ld otro tempo del disco %p sp %.5f (pidió %.5f): suena con esa mientras\n",
-		                                   warpMs(),(void*)k.data,altSpeed,k.speed) ;
+		if (getenv("TRK_LOADLOG")) fprintf(stderr,"[WARP] %ld otra versión del disco %p sp %.5f tr %.4f (pidió %.5f tr %.4f): suena con esa mientras\n",
+		                                   warpMs(),(void*)k.data,altSpeed,altTr,k.speed,k.transpose) ;
 	}
 }
 
@@ -716,6 +726,7 @@ int WarpCache::Length(void *h) { return ((Entry *)h)->length ; }
 int WarpCache::LoopStart(void *h) { return ((Entry *)h)->loopStart ; }
 int WarpCache::Start(void *h) { return ((Entry *)h)->key.start ; }
 double WarpCache::Speed(void *h) { return ((Entry *)h)->key.speed ; }
+float WarpCache::Transpose(void *h) { return ((Entry *)h)->key.transpose ; }
 bool WarpCache::Matches(void *h,double speed,float transpose) {
 	Entry *e=(Entry *)h ;
 	// trk2als: una diferencia de menos de 0.15% no se oye: el mismo
@@ -826,7 +837,7 @@ void pvJob(int gen,std::string in,std::string out,double ratio,float transpose,i
 	}
 	if (ok && !mine.empty()) {
 		diskSave(mine,ch,frames,total,loopAt) ;
-		speedsPut(regionKey(k,content,0),ratio,mine) ;
+		speedsPut(regionKey(k,content,0),ratio,transpose,mine) ;
 		indexPut(in,tempo,mine) ;
 	} else if (!ok && !sounded && pvGen.load()==gen) pvFail.store(gen) ;
 	diskDone(mine) ;
@@ -953,6 +964,7 @@ int WarpCache::LoopStart(void *) { return -1 ; }
 int WarpCache::Start(void *) { return 0 ; }
 bool WarpCache::Matches(void *,double,float) { return false ; }
 double WarpCache::Speed(void *) { return 1.0 ; }
+float WarpCache::Transpose(void *) { return 1.0f ; }
 void WarpCache::SetBudget(int) {}
 void WarpCache::SetEnabled(bool) {}
 void WarpCache::SetHeat(int,int) {}

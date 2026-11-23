@@ -81,6 +81,7 @@ SampleInstrument::SampleInstrument() {
 	 memset(autoOn_,0,sizeof(autoOn_)) ;
 	 memset(autoVal_,0,sizeof(autoVal_)) ;
 	 zoned_=false ;
+	 tonalIdx_=-2 ; tonal_=true ;   // trk2als
 	 zonesPoolSize_=-1 ;
 	 lastNote_=-1 ;
 	 static bool warpCfg=false ;   // trk2als: WARPQUALITY / WARPSPLIT de config.xml
@@ -120,6 +121,7 @@ SampleInstrument::SampleInstrument() {
 		 renderParams_[ch].warpCache_=0 ;
 		 renderParams_[ch].cacheIdx_=0 ;
 		 renderParams_[ch].cacheFrac_=0 ;
+		 renderParams_[ch].olaCache_=0 ;
 		 renderParams_[ch].finished_=true ;
 		 renderParams_[ch].envStage_=4 ;
 		 renderParams_[ch].envLevel_=0 ;
@@ -1902,7 +1904,7 @@ void SampleInstrument::renderComplex(int channel,renderParams *rp,int size) {
 					double p=rp->complexPos_ ;
 					// lo que sonaría con la de antes en este bloque, para el
 					// fundido cruzado (sin escalón: era un click)
-					readCacheVar(rp,size,speed/WarpCache::Speed(old)) ;
+					readCacheVar(rp,size,speed/WarpCache::Speed(old),transpose/WarpCache::Transpose(old)) ;
 					std::vector<short> prev(warpOut_.begin(),warpOut_.begin()+(size+2)*ch) ;
 					int ls2=WarpCache::LoopStart(h2), st2=WarpCache::Start(h2) ;
 					double idx2=(ls2>=0 && p>=rp->rendLoopStart_)?ls2+(p-rp->rendLoopStart_)/speed:(p-st2)/speed ;
@@ -1921,7 +1923,7 @@ void SampleInstrument::renderComplex(int channel,renderParams *rp,int size) {
 					if (getenv("TRK_LOADLOG")) fprintf(stderr,"[WARP] %lu canal %d: pasa al tempo nuevo\n",System::GetInstance()->GetClock(),channel) ;
 					return ;
 				}
-				readCacheVar(rp,size,speed/WarpCache::Speed(old)) ;
+				readCacheVar(rp,size,speed/WarpCache::Speed(old),transpose/WarpCache::Transpose(old)) ;
 				return ;
 			}
 		}
@@ -1944,7 +1946,7 @@ void SampleInstrument::renderComplex(int channel,renderParams *rp,int size) {
 					rp->cacheFrac_=0 ;
 					rp->complexPrimed_=true ;
 					rp->warpFresh_=false ;
-					readCacheVar(rp,size,speed/WarpCache::Speed(hn)) ;
+					readCacheVar(rp,size,speed/WarpCache::Speed(hn),transpose/WarpCache::Transpose(hn)) ;
 					return ;
 				}
 				if (hn) WarpCache::Release(hn) ;
@@ -2003,7 +2005,7 @@ void SampleInstrument::renderComplex(int channel,renderParams *rp,int size) {
 					rp->cacheFrac_=at-int(at) ;
 					rp->complexPrimed_=true ;
 					rp->warpFresh_=false ;
-					readCacheVar(rp,size,ratio) ;
+					readCacheVar(rp,size,ratio,transpose/WarpCache::Transpose(hn)) ;
 					return ;
 				}
 			}
@@ -2135,6 +2137,7 @@ void SampleInstrument::readCache(renderParams *rp,int size,double speed) {
 	idx+=size ;
 	if (ls>=0 && idx>=len) idx=ls+(idx-ls)%(len-ls) ;
 	rp->cacheIdx_=idx ;
+	rp->olaCache_=0 ;   // los granos, si vuelven, empiezan de nuevo
 	double p ;
 	if (ls>=0 && idx>=ls) p=rp->rendLoopStart_+(idx-ls)*speed ;
 	else p=WarpCache::Start(h)+idx*speed ;
@@ -2154,7 +2157,112 @@ static inline long wrapCache(long j,int len,int ls) {
 	return ls+(j-ls)%(len-ls) ;
 }
 
-void SampleInstrument::readCacheVar(renderParams *rp,int size,double ratio) {
+// trk2als: ¿el sample es de percusión? (por el nombre). Con percusión, el
+// pre-render de otro tempo se oye mejor solo más rápido o más lento (un
+// poquito más agudo o grave); con lo tonal se conserva el tono.
+// LOOPKEEPPITCH en config.xml: auto (así), on (siempre), off (nunca)
+static bool drumName(const char *name) {
+	static const char *words[]={"drum","perc","beat","break","kick","snare","hat","conga","bongo",
+	                            "clap","groove","tom","rim","shaker","cajon","timbal","guiro","bombo",
+	                            "tambor","bateria","batería","cymbal","ride","crash",0} ;
+	std::string n(name?name:"") ;
+	for (size_t i=0;i<n.size();i++) n[i]=char(tolower((unsigned char)n[i])) ;
+	for (int i=0;words[i];i++) if (n.find(words[i])!=std::string::npos) return true ;
+	return false ;
+}
+
+bool SampleInstrument::keepPitch() {
+	static int mode=-1 ;   // 0 auto, 1 siempre, 2 nunca
+	if (mode<0) {
+		const char *v=Config::GetInstance()->GetValue("LOOPKEEPPITCH") ;
+		mode=(v && !strcmp(v,"on"))?1:(v && !strcmp(v,"off"))?2:0 ;
+	}
+	if (mode) return mode==1 ;
+	int idx=GetSampleIndex() ;
+	if (idx!=tonalIdx_) {   // (solo cuando cambia el sample)
+		tonalIdx_=idx ;
+		char **names=SamplePool::GetInstance()->GetNameList() ;
+		tonal_=idx<0 || !names || !drumName(names[idx]) ;
+	}
+	return tonal_ ;
+}
+
+static const int OLA_G=2048, OLA_H=1024 ;   // grano de ~46 ms, cruzados a la mitad
+
+struct OlaSrc { const short *f ; int len, ls, ch ; } ;
+
+static inline int olaAt(const OlaSrc &s,long j,int c) {
+	if (j<0) return 0 ;
+	long k=wrapCache(j,s.len,s.ls) ;
+	return k<0?0:s.f[k*s.ch+c] ;
+}
+
+static inline float olaAtF(const OlaSrc &s,double x,int c) {
+	long j=(long)floor(x) ;
+	float fr=float(x-j) ;
+	int a=olaAt(s,j,c), b=olaAt(s,j+1,c) ;
+	return a+(b-a)*fr ;
+}
+
+static inline int olaMono(const OlaSrc &s,long j) {
+	return s.ch>1?(olaAt(s,j,0)+olaAt(s,j,1))>>1:olaAt(s,j,0) ;
+}
+
+// los granos: cada uno lee a velocidad 'pitch' (1 = el tono no cambia; otro
+// valor corrige un cambio de transposición); uno nuevo cada OLA_H cuadros,
+// desde donde va el tiempo, en el punto (±6 ms) que mejor empata con lo que
+// está sonando (WSOLA)
+void SampleInstrument::readCacheOla(renderParams *rp,int size,double ratio,double pitch) {
+	static float win[OLA_G] ;
+	static bool winOk=false ;
+	if (!winOk) {
+		for (int i=0;i<OLA_G;i++) { float sn=sinf(3.14159265f*i/OLA_G) ; win[i]=sn*sn ; }
+		winOk=true ;
+	}
+	void *h=rp->warpCache_ ;
+	OlaSrc src ;
+	src.f=WarpCache::Frames(h) ;
+	src.len=WarpCache::Length(h) ;
+	src.ls=WarpCache::LoopStart(h) ;
+	src.ch=rp->channelCount_>1?2:1 ;
+	int ch=src.ch ;
+	double pos=rp->cacheIdx_+rp->cacheFrac_ ;
+	if (rp->olaCache_!=h) {   // empieza: como si un grano ya fuera a la mitad
+		rp->olaCache_=h ;
+		rp->olaT_=0 ;
+		rp->olaNew_=floor(pos) ;
+		rp->olaOld_=floor(pos)-OLA_H*pitch ;
+	}
+	int t=rp->olaT_ ;
+	double gN=rp->olaNew_, gO=rp->olaOld_ ;
+	for (int i=0;i<size+2;i++) {
+		if (i==size) { rp->olaT_=t ; rp->olaNew_=gN ; rp->olaOld_=gO ; }   // (+2: solo para interpolar)
+		if (t>=OLA_H) {
+			gO=gN ;
+			long target=long(pos+i*ratio), nat=long(gO+OLA_H*pitch) ;
+			long best=target ;
+			long long bestC=0 ;
+			bool first=true ;
+			for (int d=-256;d<=256;d+=4) {
+				long long c=0 ;
+				for (int k=0;k<128;k+=2) c+=(long long)olaMono(src,target+d+k)*olaMono(src,nat+k) ;
+				if (first || c>bestC) { bestC=c ; best=target+d ; first=false ; }
+			}
+			gN=double(best) ;
+			t=0 ;
+		}
+		float wn=win[t], wo=win[t+OLA_H] ;
+		for (int c=0;c<ch;c++) {
+			float v=wn*olaAtF(src,gN+t*pitch,c)+wo*olaAtF(src,gO+(t+OLA_H)*pitch,c) ;
+			if (v>32767.0f) v=32767.0f ;
+			if (v<-32768.0f) v=-32768.0f ;
+			warpOut_[i*ch+c]=short(v) ;
+		}
+		t++ ;
+	}
+}
+
+void SampleInstrument::readCacheVar(renderParams *rp,int size,double ratio,double pitch) {
 	void *h=rp->warpCache_ ;
 	const short *f=WarpCache::Frames(h) ;
 	int len=WarpCache::Length(h), ls=WarpCache::LoopStart(h) ;
@@ -2162,7 +2270,10 @@ void SampleInstrument::readCacheVar(renderParams *rp,int size,double ratio) {
 	double cs=WarpCache::Speed(h) ;
 	if ((int)warpOut_.size()<(size+2)*ch) warpOut_.resize((size+2)*ch) ;
 	double pos=rp->cacheIdx_+rp->cacheFrac_ ;
-	for (int i=0;i<size+2;i++) {
+	// trk2als: lo tonal conserva el tono; y si cambió la transposición, se
+	// corrige (también en percusión: si no, el primer tiempo sonaba en el tono de antes)
+	if (keepPitch() || fabs(pitch-1.0)>0.0001) readCacheOla(rp,size,ratio,pitch) ;
+	else for (int i=0;i<size+2;i++) {
 		double q=pos+i*ratio ;
 		long j0=long(q) ;
 		float fr=float(q-j0) ;
