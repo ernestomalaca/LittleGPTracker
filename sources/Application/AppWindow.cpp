@@ -917,13 +917,19 @@ void AppWindow::captureNow() {
         m = MidiCapture::Capture(_viewData, bc, before, playRow);
         if (m && _songView) _songView->CaptureCommit();   // Select + L en la Session lo quita
         if (bc >= 0 && _clipView) _clipView->PushUndo(bc, before);
-        if (playRow >= 0) {   // sin nada sonando: el clip nuevo arranca ya (como en Live)
+        if (playRow >= 0) {   // el clip nuevo suena en seguida (como en Live)
             ViewData *d = _viewData;
             if (playRow < d->songOffset_ || playRow >= d->songOffset_ + 8) d->songOffset_ = playRow;
             d->songY_ = playRow - d->songOffset_;
             Player *player = Player::GetInstance();
-            player->SetSequencerMode(SM_LIVE);
-            player->OnSongStartButton(d->songX_, d->songX_, false, false);
+            // sin nada sonando: arranca ya (en live); sonando en live: entra en
+            // el siguiente compás. Sonando en modo song, lo toca la canción
+            if (!player->IsRunning()) {
+                player->SetSequencerMode(SM_LIVE);
+                player->OnSongStartButton(d->songX_, d->songX_, false, false);
+            } else if (player->GetSequencerMode() == SM_LIVE) {
+                player->OnSongStartButton(d->songX_, d->songX_, false, false);
+            }
         }
     }
     // la pista donde se movió algo por última vez

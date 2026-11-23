@@ -149,7 +149,7 @@ Teclado MIDI por USB
   - Sonando, con un clip MIDI en esa pista: lo tocado en la última vuelta
     del loop se agrega encima del clip (Select + L en el clip lo quita).
   - Sonando, sin clip en esa pista: un clip nuevo, en la rejilla de la
-    canción.
+    canción; en modo live entra a sonar en el siguiente compás.
   Las notas quedan como las tocaste (con su nudge, sin cuantizar). R2
   captura lo último que hiciste: notas tocadas o un parámetro movido.
   Select + L en la Session deshace la captura (también el tempo que

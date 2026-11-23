@@ -24,8 +24,8 @@ public:
 	static unsigned long LastNoteMs() ;
 	// lo vuelve clip; devuelve el aviso (o 0 si no había nada). Si cambió un
 	// clip que ya existía, 'beforeClip' >= 0 y 'before' es como estaba (deshacer)
-	// 'playRow' >= 0: era sin nada sonando: la fila del clip nuevo (para que
-	// arranque a sonar en seguida, como en Live)
+	// 'playRow' >= 0: se hizo un clip nuevo: su fila (para que arranque a
+	// sonar en seguida, como en Live)
 	static const char *Capture(ViewData *d,int &beforeClip,Clip &before,int &playRow) ;
 	// la silueta: lo que caería encima de ese clip si capturas ahora
 	static void Preview(ViewData *d,int clip,std::vector<ClipNote> &out) ;
