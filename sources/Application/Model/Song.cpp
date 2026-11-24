@@ -8,6 +8,7 @@ Song::Song():Persistent("SONG") {
 	memset(data_,0xFF,SONG_CHANNEL_COUNT*SONG_ROW_COUNT) ;
 	clips_=new ClipBank() ;
 	memset(sceneRep_,0,sizeof(sceneRep_)) ;
+	followOff_=false ;
 } ;
 
 Song::~Song() {
@@ -21,6 +22,7 @@ void Song::SaveContent(TiXmlNode *node) {
 	bool any=false ;
 	for (int i=0;i<SONG_ROW_COUNT;i++) any|=sceneRep_[i]!=0 ;
 	if (any) saveHexBuffer(node,"SCENEREP",sceneRep_,SONG_ROW_COUNT) ;
+	if (followOff_) { unsigned char off=1 ; saveHexBuffer(node,"SCENEOFF",&off,1) ; }
 } ;
 
 void Song::RestoreContent(TiXmlElement *element) {
@@ -30,6 +32,7 @@ void Song::RestoreContent(TiXmlElement *element) {
 		if (!strcmp("SONG",value)) restoreHexBuffer(current,data_) ;
 		if (!strcmp("CLIPS",value)) clips_->Restore(current) ;
 		if (!strcmp("SCENEREP",value)) restoreHexBuffer(current,sceneRep_) ;
+		if (!strcmp("SCENEOFF",value)) { unsigned char off[64]={0} ; restoreHexBuffer(current,off) ; followOff_=off[0]!=0 ; }
 		current=current->NextSiblingElement() ;
 	}
 } ;

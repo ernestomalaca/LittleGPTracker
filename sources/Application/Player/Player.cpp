@@ -54,6 +54,7 @@ Player::Player() {
     countInRec_ = true;
     for (int i = 0; i < SONG_CHANNEL_COUNT; i++) { launched_[i] = -1; stopCell_[i] = -1; }
     sceneRow_ = scenePending_ = -1; sceneStart_ = 0;
+    followHold_ = false;
     countIn_ = false;
     countStep_ = 0;
     countFirst_ = false;
@@ -999,7 +1000,7 @@ void Player::preFadeBar(SyncMaster *sync) {
     bool sceneNext = false;
     if (sceneRow_ >= 0) {
         int rep = viewData_->song_->sceneRep_[sceneRow_];
-        sceneNext = rep > 0 && (metroStep_ + 1 - sceneStart_) / 16 >= rep * sceneBars(sceneRow_);
+        sceneNext = rep > 0 && followActive() && (metroStep_ + 1 - sceneStart_) / 16 >= rep * sceneBars(sceneRow_);
     }
     for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
         QueueingMode q = liveQueueingMode_[i];
@@ -1477,7 +1478,7 @@ void Player::LaunchGroup(int row, int from, int to) {
 
 // trk2als: una vuelta de la escena = lo que dura su clip más largo
 bool Player::SceneFollow(int &next, int &barsLeft) {
-    if (!isRunning_ || sceneRow_ < 0) return false;
+    if (!isRunning_ || sceneRow_ < 0 || !followActive()) return false;
     int rep = viewData_->song_->sceneRep_[sceneRow_];
     if (rep <= 0) return false;
     next = sceneRow_ + 1;
@@ -1506,8 +1507,14 @@ int Player::sceneBars(int row) {
 
 // trk2als: en cada uno del compás: si la escena ya sonó sus repeticiones,
 // lanza la de abajo (entra en este mismo uno); y lo lanzado empieza a contar
+bool Player::followActive() {
+    return !followHold_ && !viewData_->song_->followOff_;
+}
+
 void Player::sceneTick() {
-    if (sceneRow_ >= 0) {
+    // en pausa (editando, o apagadas): la cuenta no avanza
+    if (sceneRow_ >= 0 && !followActive()) sceneStart_ += 16;
+    else if (sceneRow_ >= 0) {
         int rep = viewData_->song_->sceneRep_[sceneRow_];
         if (rep > 0 && (metroStep_ - sceneStart_) / 16 >= rep * sceneBars(sceneRow_)) {
             int next = sceneRow_ + 1;

@@ -263,6 +263,10 @@ private:
 public:
 	// trk2als: la escena que sigue sola (xN): cuál entra y cuántos compases faltan
 	bool SceneFollow(int &next, int &barsLeft) ;
+	// trk2als: editando un clip o un instrumento las escenas no avanzan
+	void SetFollowHold(bool h) { followHold_ = h ; }
+	bool followActive() ;
+	bool followHold_ ;
 	// trk2als: Start desde el clip o el instrumento: como en la Session (para y
 	// se acuerda de lo lanzado; otra vez Start, sigue). Si no había nada
 	// lanzado, arranca este clip

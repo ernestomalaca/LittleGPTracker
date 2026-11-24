@@ -2154,6 +2154,13 @@ void SongView::processRowButtonMask(unsigned int mask) {
         }
         return;
     }
+    if ((mask & EPBM_B) && (mask & EPBM_Y)) {   // B + Y: las repeticiones (xN) apagadas / prendidas
+        Song *song = viewData_->song_;
+        song->followOff_ = !song->followOff_;
+        View::SetNotification(song->followOff_ ? "repeticiones apagadas" : "repeticiones prendidas");
+        isDirty_ = true;
+        return;
+    }
     if (mask & EPBM_B) {
         if (mask & EPBM_DOWN) updateSongOffset(SongView::jumpLength_);
         if (mask & EPBM_UP) updateSongOffset(-SongView::jumpLength_);
@@ -3102,7 +3109,8 @@ void SongView::drawBlockGrid() {
             int cy = y + h - 19, ch = 15;
             if (rep > 0) {
                 char rb[6];   // trk2als: grande y sin recuadro
-                snprintf(rb, sizeof(rb), "x%d", rep);
+                if (viewData_->song_->followOff_) strcpy(rb, "--");   // apagadas: guardadas, sin número
+                else snprintf(rb, sizeof(rb), "x%d", rep);
                 DrawText(SX + 5, cy, rb, dim, 1);   // siempre en gris: no se confunde con el número
             } else if (hereRow && has) {   // ∞ (se queda ahí): solo al editarla
                 FrameRect(SX + 6, cy + 3, 10, 9, fg, 4, 2);

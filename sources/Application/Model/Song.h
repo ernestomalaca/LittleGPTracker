@@ -34,6 +34,9 @@ public:
 	// trk2als: cuántas veces suena cada escena antes de pasar a la de abajo
 	// (como las follow actions de escena de Live); 0 = se queda ahí
 	unsigned char sceneRep_[SONG_ROW_COUNT] ;
+	// B + Y en la columna de escenas: las repeticiones (xN) apagadas, para
+	// tocar las escenas a mano; los números se quedan guardados
+	bool followOff_ ;
 
 	const std::string &GetClipName(int clip) { return clips_->Get(clip).name ; }
 	void SetClipName(int clip,const std::string &name) { clips_->Get(clip).name=name ; }

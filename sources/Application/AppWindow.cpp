@@ -1069,6 +1069,8 @@ void AppWindow::Update(Observable &o, I_ObservableData *d) {
             _currentView = _clipView;
             break;
         }
+        // trk2als: editando un clip o un instrumento las escenas no avanzan solas
+        Player::GetInstance()->SetFollowHold(_currentView == _clipView || _currentView == _instrumentView);
         _shapes.clear(); // trk2als: las figuras son de la pantalla anterior
         TrimShapeLayers(0);
         _shapesDirty = true;
