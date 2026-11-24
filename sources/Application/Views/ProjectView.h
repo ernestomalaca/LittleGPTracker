@@ -39,7 +39,7 @@ private:
   // trk2als: el tablero
   void drawBoard();
   UIField *rootField_, *scaleField_, *linkField_, *ofsField_;
-  enum { CHIPS = 10 };
+  enum { CHIPS = 11 };
   UIField *chipField_[CHIPS];
   // trk2als: la latencia del audio (config.xml; toma efecto al reiniciar)
   Variable *latVar_;
@@ -48,6 +48,10 @@ private:
   int themeLast_;
   char *themeNames_[32];
   int themeCount_;
+  Variable *fontVar_;   // trk2als: la fuente (chancho6/fuentes)
+  int fontLast_;
+  char *fontNames_[32];
+  int fontCount_;
   void drawBigNumber(int x, int y, const char *txt, int h, GUIColor c);
   UIField *btnField_[7];
   std::string msg_;

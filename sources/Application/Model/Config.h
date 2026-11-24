@@ -22,6 +22,7 @@ public:
 	bool ApplyTheme(const char *name) ;
 	static int Generation() { return generation_ ; }
 	void Set(const char *key,const char *value) ;
+	static void Touch() { generation_++ ; }   // algo de la pantalla cambió (la fuente)
 private:
 	static int generation_ ;
 	std::map<std::string,std::string> themeBase_ ;

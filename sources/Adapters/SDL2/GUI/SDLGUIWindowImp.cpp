@@ -14,6 +14,7 @@
 #include "Application/Utils/Latin1.h"
 #include "Resources/hdfont_small.h"
 #include "Resources/hdfont32.h"
+#include "Application/Utils/Fonts.h"
 #include <math.h>
 #include <assert.h>
 #include <string.h>
@@ -366,7 +367,8 @@ void SDLGUIWindowImp::drawHDChar(unsigned char c, int xx, int yy,
     int size = HDFONT_SIZE * hdScale_;
     if (xx + size > surface_->w || yy + size > surface_->h)
         return;
-    const unsigned char *src = hdfont[c];
+    Fonts::Data *fd = Fonts::Current();
+    const unsigned char *src = fd ? fd->hd[c] : hdfont[c];
     for (int y = 0; y < HDFONT_SIZE; y++) {
         for (int sy = 0; sy < hdScale_; sy++) {
             unsigned char *dest = ((unsigned char *)surface_->pixels) +
@@ -511,7 +513,8 @@ void SDLGUIWindowImp::BlendText(const char *s, GUIPoint &pos, GUIColor &c,
         unsigned char ch = (unsigned char)*s;   // trk2als: 256 (con tildes)
         if (ch == ' ') continue;
         if (x + size > maxX || y + sizeY > maxY || x < 0 || y < 0) continue;
-        const unsigned char *g = big ? hdfont32[ch] : scale ? hdfont[ch] : hdfont_small[ch];
+        Fonts::Data *fd = Fonts::Current();
+        const unsigned char *g = big ? hdfont32[ch] : scale ? (fd ? fd->hd[ch] : hdfont[ch]) : (fd ? fd->small[ch] : hdfont_small[ch]);
         for (int dy = 0; dy < sizeY; dy++) {
             int sy = dy * gh / sizeY;
             for (int dx = 0; dx < size; dx++) {

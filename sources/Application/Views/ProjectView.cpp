@@ -134,6 +134,39 @@ static void PurgeCallback(View &v,ModalView &dialog) {
 	((ProjectView &)v).OnPurgeInstruments(dialog.GetReturnCode()==MBL_YES) ;
 } ;
 
+// trk2als: los nombres de los archivos <dir>/*<ext> (sin los ocultos), en orden;
+// primero va "first" (lo que trae Chancho de fábrica)
+static int listNames(const char *dir, const char *ext, const char *first, char **names, int max) {
+    int n = 0;
+    names[n++] = strdup(first);
+    Path root(dir);
+    I_Dir *d = FileSystem::GetInstance()->Open(root.GetPath().c_str());
+    if (!d) return n;
+    std::string mask = std::string("*") + ext;
+    d->GetContent((char *)mask.c_str());
+    std::vector<std::string> found;
+    size_t el = strlen(ext);
+    IteratorPtr<Path> it(d->GetIterator());
+    for (it->Begin(); !it->IsDone(); it->Next()) {
+        std::string nm = it->CurrentItem().GetName();
+        // fuera los ocultos (los "._algo" que deja macOS al copiar)
+        if (nm.size() > el && nm[0] != '.' && nm.substr(nm.size() - el) == ext) {
+            nm = nm.substr(0, nm.size() - el);
+            if (nm != first) found.push_back(nm);
+        }
+    }
+    delete d;
+    std::sort(found.begin(), found.end());
+    for (size_t i = 0; i < found.size() && n < max; i++) names[n++] = strdup(found[i].c_str());
+    return n;
+}
+
+static int indexOf(const char *cur, char **names, int n) {
+    for (int i = 0; cur && i < n; i++)
+        if (!strcmp(cur, names[i])) return i;
+    return 0;
+}
+
 ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
     msgAt_ = 0;
 
@@ -187,6 +220,7 @@ ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
         {VAR_TRANSPOSE, 19, 7, -48, 48, 1, 12}, {VAR_FOLD, 28, 7, 0, 1, 1, 1},
         {VAR_FOLLOW, 1, 8, 0, 1, 1, 1},   // trk2als: la tercera fila (aquí van entrando los ajustes nuevos)
         {VAR_FOLLOW, 10, 8, 0, 0, 1, 1},  // el tema (su variable es themeVar_)
+        {VAR_FOLLOW, 19, 8, 0, 0, 1, 1},  // la fuente (fontVar_)
     };
     // trk2als: la ficha 4 (era la salida MIDI de LGPT, que aquí no hay) es
     // la latencia: baja 256/2, media 512/2, alta 512/4 (bloque / reserva)
@@ -198,39 +232,17 @@ ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
         latLast_ = b <= 256 ? 0 : (p <= 2 ? 1 : 2);
         latVar_ = new Variable("latencia", 0, latNames, 3, latLast_);
     }
-    // trk2als: los temas: lavanda (config.xml) y los de chancho6/temas/*.xml
-    {
-        themeCount_ = 0;
-        themeNames_[themeCount_++] = strdup("lavanda");
-        Path root("bin:temas");
-        I_Dir *dir = FileSystem::GetInstance()->Open(root.GetPath().c_str());
-        if (dir) {
-            dir->GetContent((char *)"*.xml");
-            std::vector<std::string> found;
-            IteratorPtr<Path> it(dir->GetIterator());
-            for (it->Begin(); !it->IsDone(); it->Next()) {
-                std::string n = it->CurrentItem().GetName();
-                // fuera los ocultos (los "._algo" que deja macOS al copiar)
-                if (n.size() > 4 && n[0] != '.' && n.substr(n.size() - 4) == ".xml") {
-                    n = n.substr(0, n.size() - 4);
-                    if (n != "lavanda") found.push_back(n);
-                }
-            }
-            delete dir;
-            std::sort(found.begin(), found.end());
-            for (size_t i = 0; i < found.size() && themeCount_ < 32; i++)
-                themeNames_[themeCount_++] = strdup(found[i].c_str());
-        }
-        const char *cur = Config::GetInstance()->GetValue("THEME");
-        themeLast_ = 0;
-        for (int i = 0; cur && i < themeCount_; i++)
-            if (!strcmp(cur, themeNames_[i])) themeLast_ = i;
-        themeVar_ = new Variable("tema", 0, themeNames_, themeCount_, themeLast_);
-    }
+    // trk2als: los temas (lavanda = config.xml) y las fuentes (dejavu = la de siempre)
+    themeCount_ = listNames("bin:temas", ".xml", "lavanda", themeNames_, 32);
+    themeLast_ = indexOf(Config::GetInstance()->GetValue("THEME"), themeNames_, themeCount_);
+    themeVar_ = new Variable("tema", 0, themeNames_, themeCount_, themeLast_);
+    fontCount_ = listNames("bin:fuentes", ".fnt", "dejavu", fontNames_, 32);
+    fontLast_ = indexOf(Config::GetInstance()->GetValue("FONT"), fontNames_, fontCount_);
+    fontVar_ = new Variable("fuente", 0, fontNames_, fontCount_, fontLast_);
     for (int k = 0; k < CHIPS; k++) {
-        v = (k == 4) ? latVar_ : (k == 9) ? themeVar_ : project_->FindVariable(chips[k].var);
+        v = (k == 4) ? latVar_ : (k == 9) ? themeVar_ : (k == 10) ? fontVar_ : project_->FindVariable(chips[k].var);
         NAssert(v);
-        int mx = k == 4 ? 2 : k == 9 ? themeCount_ - 1 : chips[k].max;
+        int mx = k == 4 ? 2 : k == 9 ? themeCount_ - 1 : k == 10 ? fontCount_ - 1 : chips[k].max;
         position = GUIPoint(chips[k].x, chips[k].y);
         UIIntVarField *cf = new UIIntVarField(position, *v, "%s", chips[k].min, mx, chips[k].xo, chips[k].yo);
         chipField_[k] = cf;
@@ -281,6 +293,16 @@ void ProjectView::ProcessButtonMask(unsigned short mask,bool pressed) {
         Config *cfg = Config::GetInstance();
         cfg->ApplyTheme(name);
         cfg->SetPersistent("THEME", name);
+        ((AppWindow &)w_).ReloadTheme();
+        isDirty_ = true;
+    }
+    if (fontVar_ && fontVar_->GetInt() != fontLast_) {
+        fontLast_ = fontVar_->GetInt();
+        const char *name = fontNames_[fontLast_];
+        Config *cfg = Config::GetInstance();
+        cfg->Set("FONT", name);
+        cfg->SetPersistent("FONT", name);
+        Config::Touch();
         ((AppWindow &)w_).ReloadTheme();
         isDirty_ = true;
     }
@@ -579,7 +601,7 @@ void ProjectView::drawBoard() {
     if (fO) DrawText(lx + 12, TY + 76, "+ si va atrasado", dim, 0);
 
     // fichas
-    static const char *chipName[CHIPS] = {"VOLUMEN", "DRIVE", "CUANTIZAR", "SWING", "LATENCIA", "METRÓNOMO", "TRANSP", "FOLD", "FOLLOW", "TEMA"};
+    static const char *chipName[CHIPS] = {"VOLUMEN", "DRIVE", "CUANTIZAR", "SWING", "LATENCIA", "METRÓNOMO", "TRANSP", "FOLD", "FOLLOW", "TEMA", "FUENTE"};
     for (int k = 0; k < CHIPS; k++) {
         // trk2als: tres filas (más bajitas) para que quepan los ajustes nuevos
         int x = 24 + (k % 4) * 150, y = 176 + (k / 4) * 58;
@@ -599,7 +621,7 @@ void ProjectView::drawBoard() {
         if (val == "off") val = "no";
         if (val == "on") val = "sí";
         if (val.empty() || val == "(null)") val = "--";
-        if (val.size() > (k == 9 ? 8u : 7u)) val = val.substr(0, k == 9 ? 8 : 7);
+        if (val.size() > (k >= 9 ? 8u : 7u)) val = val.substr(0, k >= 9 ? 8 : 7);
         DrawText(x + 12, y + 24, val.c_str(), fg, 1);
     }
 

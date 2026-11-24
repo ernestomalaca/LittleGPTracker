@@ -230,6 +230,9 @@ Cuantizar y swing
   instante y se queda guardado. lavanda (el de siempre), papel, fosforo,
   ambar, cga, live, macgris y negativo. Viven en chancho6/temas: para
   hacer el tuyo copia uno con otro nombre y cambia los colores (en hex).
+  Fuente (Proyecto > FUENTE): la letra de la pantalla. dejavu (la de
+  siempre), atkinson (hecha para leerse fácil), jetmono, plex y spleen (de
+  píxeles). Viven en chancho6/fuentes (se hacen con mkfnt.py).
   Experimento: DITHER = 1 en un tema lo deja en 1 bit, con los grises en
   trama de puntos como el Mac clásico (2 = puntos gordos).
 

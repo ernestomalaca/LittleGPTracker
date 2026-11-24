@@ -24,6 +24,7 @@
 #include <utime.h>
 #endif
 #include "Resources/hdfont.h"
+#include "Application/Utils/Fonts.h"
 #include "Application/Model/Config.h"
 #include "Application/Utils/ProjectName.h"
 #include "Application/Utils/Latin1.h"
@@ -1367,7 +1368,8 @@ void AppWindow::drawSplash() {
     int ty = y0 + h / 2 + textH / 2;     // la base, abajo
     for (int i = 0; i < len; i++) {
         unsigned char ch = ((unsigned char)name[i]) & 127;
-        const unsigned char *g = hdfont[ch];
+        Fonts::Data *fd = Fonts::Current();
+        const unsigned char *g = fd ? fd->hd[ch] : hdfont[ch];
         for (int gy = 0; gy < 16; gy++) {
             for (int gx = 0; gx < 16; gx++) {
                 if (g[gy * 16 + gx] < 128) continue;
