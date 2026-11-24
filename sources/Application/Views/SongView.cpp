@@ -3188,12 +3188,15 @@ void SongView::drawBlockGrid() {
     char ld[8];   // la carga (lo que era "rg"), en %
     snprintf(ld, sizeof(ld), "%d%%", atoi(lt + 2));
     FillRect(SX, VY, SW, VH, panel, 3);
-    DrawText(SX + 7, VY + 3, player->Clipped() ? "CLIP" : ld, player->Clipped() ? ColorOf(CD_MUTE) : dim, 0);
-    if (player->IsRunning()) {
-        int t = int(player->GetPlayTime());
-        char tb[12];
-        snprintf(tb, sizeof(tb), "%d:%02d", t / 60, t % 60);
-        DrawText(SX + 7, VY + 17, tb, dim, 0);
+    // trk2als: solo la carga, en grande (el tiempo no hacía falta)
+    {
+        int load = atoi(lt + 2);
+        if (load >= 100) snprintf(ld, sizeof(ld), "MAX");
+        bool clip = player->Clipped();
+        const char *txt = clip ? "CLP" : ld;
+        int tw = 16 * int(strlen(txt));
+        DrawText(SX + (SW - tw) / 2, VY + (VH - 16) / 2, txt,
+                 clip ? ColorOf(CD_MUTE) : (load >= 80 ? ColorOf(CD_MUTE) : dim), 1);
     }
     for (int i = 0; i < SONG_CHANNEL_COUNT && i < trackCount && !noticeOn(); i++) {
         int x = X0 + i * COLW;
