@@ -3060,7 +3060,7 @@ void SongView::drawBlockGrid() {
             if (rep > 0) {
                 char rb[6];   // trk2als: grande y sin recuadro
                 snprintf(rb, sizeof(rb), "x%d", rep);
-                DrawText(SX + 5, cy, rb, hereRow ? hi2 : dim, 1);   // en gris: no se confunde con el número
+                DrawText(SX + 5, cy, rb, dim, 1);   // siempre en gris: no se confunde con el número
             } else if (hereRow && has) {   // ∞ (se queda ahí): solo al editarla
                 FrameRect(SX + 6, cy + 3, 10, 9, fg, 4, 2);
                 FrameRect(SX + 15, cy + 3, 10, 9, fg, 4, 2);
