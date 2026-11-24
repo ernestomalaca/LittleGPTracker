@@ -789,7 +789,7 @@ void PresetDialog::drawShapes() {
 			if (e.kind == K_UP) { name = "volver" ; sub = "carpeta de arriba" ; }
 			if (e.kind == K_HERE) { name = "Guardar aquí" ; sub = folder_.empty() ? "presets" : folder_ ; }
 			if (e.kind == K_EMPTY)
-				sub = e.zones == PD_EMPTY_KIT ? "armarlo pad por pad" :
+				sub = e.zones == PD_EMPTY_KIT ? "arma cada pad" :
 				      e.zones == PD_IMPORT_SF2 ? "Carga un soundfont" : "eliges el sample tú" ;
 		}
 		// trk2als: lanzado a la pista: cargando / esperando el 1 / sonando
