@@ -234,7 +234,7 @@ void NewProjectDialog::drawShapes() {
     std::string t = title_.empty() ? "Guardar como" : title_;
     t = UpperUtf8(t);   // con tildes
     DrawText(32, 24, t.c_str(), acc, 1);
-    if (keyboard_) DrawText(PX + PW - 24 - 8 * 22, 28, "Start cierra el teclado", dim, 0);
+    if (keyboard_) DrawText(PX + PW - 24 - 16 * 12, 24, "Start: listo", dim, 1);   // trk2als: todo grande
 
     // el nombre
     const int FY = 52, FH = 72;
@@ -248,7 +248,7 @@ void NewProjectDialog::drawShapes() {
     if (name_.empty()) DrawText(nx + 36, ny + 10, "sin nombre", dim, 1);
     char cnt[16];
     snprintf(cnt, sizeof(cnt), "%d/%d", (int)name_.size(), MAX_NAME_LENGTH);
-    DrawText(PX + PW - 32 - 8 * (int)strlen(cnt), FY + 8, cnt, dim, 0);
+    DrawText(PX + PW - 32 - 16 * (int)strlen(cnt), FY + 8, cnt, dim, 1);
 
     bool warning = !warn_.empty() && SDL_GetTicks() - warnTime_ < 2500;
 
@@ -271,18 +271,18 @@ void NewProjectDialog::drawShapes() {
             bool on = (krow_ == 4 && specialAt(kcol_) == s);
             int x = X0 + span[s][0] * (W + G), w = span[s][1] * (W + G) - G;
             FillRect(x, y, w, H, on ? acc : card, 6);
-            int tw = 8 * strlen(sp[s]);
-            DrawText(x + (w - tw) / 2, y + (H - 12) / 2, sp[s], on ? bg : fg, 0);
+            int tw = 16 * strlen(sp[s]);
+            DrawText(x + (w - tw) / 2, y + (H - 16) / 2, sp[s], on ? bg : fg, 1);
         }
-        if (warning) DrawText(32, 398, warn_.c_str(), warnc, 0);
-        else DrawText(32, 398, "A escribe   B borra   L / R mueven el cursor", dim, 0);
+        if (warning) DrawText(32, 398, warn_.c_str(), warnc, 1);
+        else DrawText(32, 398, "A escribe · B borra · L/R cursor", dim, 1);
         return;
     }
 
     // sin teclado: la ayuda y los botones
-    DrawText(44, 146, "A en el nombre abre el teclado", dim, 0);
-    if (warning) DrawText(44, 166, warn_.c_str(), warnc, 0);
-    else if (name_.empty()) DrawText(44, 166, "Ponle nombre para poder guardar", warnc, 0);
+    DrawText(44, 146, "A en el nombre abre el teclado", dim, 1);
+    if (warning) DrawText(44, 174, warn_.c_str(), warnc, 1);
+    else if (name_.empty()) DrawText(44, 174, "Ponle nombre para guardar", warnc, 1);
 
     const int BH = 36, BY = PY + PH - 24 - BH;
     int bx = 616 - (buttonW[0] + buttonW[1] + buttonW[2] + 32);
@@ -301,5 +301,5 @@ void NewProjectDialog::drawShapes() {
         }
         bx += w + 16;
     }
-    DrawText(32, BY + 5, "Start guarda", dim, 0);
+    DrawText(44, 202, "Start guarda", dim, 1);   // (abajo chocaba con los botones)
 }

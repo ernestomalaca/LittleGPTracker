@@ -683,8 +683,13 @@ void PresetDialog::drawShapes() {
 	std::string where = folder_.empty() ? std::string("sueltos") : folder_ ;
 	if (pick_ && InstrumentPresets::IsLib(where)) where = where.substr(where.find('/') + 1) ;   // "Librería/Drums"
 	for (size_t i = 0; (i = where.find('/', i)) != std::string::npos; i += 3) where.replace(i, 1, " / ") ;
-	if (TextLen(where) > 40) where = ".." + where.substr(where.size() - 38) ;
-	DrawText(PX + PW - 24 - 8 * TextLen(where), 28, where.c_str(), dim, 0) ;
+	{   // trk2als: grande, en lo que deja el título
+		int room = (PX + PW - 24 - (32 + 16 * TextLen(t) + 24)) / 16 ;
+		std::string lw = ToLatin1(where) ;
+		if (room > 2 && (int)lw.size() > room) lw = ".." + lw.substr(lw.size() - (room - 2)) ;
+		where = FromLatin1(lw) ;
+		DrawText(PX + PW - 24 - 16 * TextLen(where), 24, where.c_str(), dim, 1) ;
+	}
 
 	// columna de carpetas
 	const int TX = 24, TY = 56, TW = 196, TH = 340, TR = 40 ;
@@ -721,7 +726,7 @@ void PresetDialog::drawShapes() {
 	if (selected_ >= top_ + LIST_ROWS) top_ = selected_ - LIST_ROWS + 1 ;
 	if (n == 0) {
 		DrawText(LX + 8, LY + 12, kind_ == InstrumentPresets::PK_KIT ? "Todavía no hay kits aquí" : "Elige una carpeta", fg, 1) ;
-		DrawText(LX + 8, LY + 36, "a la izquierda", dim, 0) ;
+		DrawText(LX + 8, LY + 36, "a la izquierda", dim, 1) ;
 	}
 	for (int i = 0; i < LIST_ROWS && top_ + i < n; i++) {
 		const Entry &e = entries_[top_ + i] ;
@@ -815,7 +820,11 @@ void PresetDialog::drawShapes() {
 			if (ready == 2) FillRect(dx, y + 15, 9, 9, green, 4) ;
 			else FrameRect(dx, y + 15, 9, 9, green, 4, 2) ;
 		}
-		DrawText(nx, y + 29, sub.c_str(), dim, 0) ;
+		{
+			int sroom = (LX + LW - 50 - nx) / 16 ;
+			if (TextLen(sub) > sroom) sub = FromLatin1(ToLatin1(sub).substr(0, sroom)) ;
+			DrawText(nx, y + 27, sub.c_str(), dim, 1) ;
+		}
 		if (lst == PresetLauncher::LS_SOUNDING && !(sel && col_ == 1)) {   // en la pista: el play de los clips
 			int tx = LX + LW - 30, ty = y + 15 ;
 			for (int k = 0; k < 9; k++) FillRect(tx + k, ty + k / 2, 1, 10 - (k / 2) * 2, fg) ;
@@ -849,31 +858,36 @@ void PresetDialog::drawShapes() {
 
 	// abajo: lo que suena y los botones
 	const int BY = 410 ;
+	// trk2als: todo con letra grande: ayudas cortas, y X / Y como palabras que
+	// se prenden (acento) o se apagan (gris)
+	const int R = 616 - 12 ;
 	if (bHint_) {   // B apretado un rato
 		FillRect(24, BY, 592, 34, Mix(bg, acc, 22), 6) ;
-		DrawText(36, BY + 11, "suelta B: sale del navegador", acc, 0) ;
+		DrawText(36, BY + 9, "suelta B: sale del navegador", acc, 1) ;
 	} else if (!playing_.empty()) {
+		const char *act = launcher_ ? "A lanza" : pick_ ? "A elige" : "A carga" ;
 		std::string s = (inClip_ ? "en el clip: " : "sonando: ") + playing_ ;
+		int room = (R - 16 * 7 - 16 - 36) / 16 ;
+		if (TextLen(s) > room) s = FromLatin1(ToLatin1(s).substr(0, room)) ;
 		FillRect(24, BY, 592, 34, Mix(bg, acc, 14), 6) ;
-		DrawText(36, BY + 11, s.c_str(), acc, 0) ;
-		DrawText(616 - 12 - 8 * 18, BY + 11, launcher_ ? "A lanza   B atrás" : pick_ ? "A elige   B atrás" : "A carga   B atrás", fg, 0) ;
-	} else if (forSave_) {
-		DrawText(32, BY + 11, col_ == 0 ? "A o derecha entra   B cancela" : "A elige / entra   izquierda o B atrás", dim, 0) ;
-	} else if (launcher_) {
-		DrawText(32, BY + 11, col_ == 0 ? "A o derecha entra   B cierra" : "A lanza, otra vez cierra   B atrás", dim, 0) ;
-		const char *ac = autoClose() ? "Y cierra: sí" : "Y cierra: no" ;
-		int ax = 616 - 12 - 8 * TextLen(ac) ;
-		DrawText(ax, BY + 11, ac, autoClose() ? acc : dim, 0) ;
-		{   // la pre-escucha: X la cambia
-			const char *pv = previewEnabled() ? "X escucha: sí" : "X escucha: no" ;
-			DrawText(ax - 16 - 8 * TextLen(pv), BY + 11, pv, previewEnabled() ? acc : dim, 0) ;
-		}
+		DrawText(36, BY + 9, s.c_str(), acc, 1) ;
+		DrawText(R - 16 * 7, BY + 9, act, fg, 1) ;
 	} else {
-		DrawText(32, BY + 11, col_ == 0 ? "A o derecha entra   B cierra"
-		                      : pick_ ? "A elige   izquierda o B atrás" : "A entra / carga   izquierda o B atrás", dim, 0) ;
-		// la pre-escucha: X la cambia
-		const char *pv = previewEnabled() ? "X escucha: sí" : "X escucha: no" ;
-		DrawText(616 - 12 - 8 * TextLen(pv), BY + 11, pv, previewEnabled() ? acc : dim, 0) ;
+		const char *h ;
+		if (forSave_) h = col_ == 0 ? "A entra · B cancela" : "A elige · < atrás" ;
+		else if (launcher_) h = col_ == 0 ? "A entra · B cierra" : "A lanza · B atrás" ;
+		else h = col_ == 0 ? "A entra · B cierra" : pick_ ? "A elige · < atrás" : "A carga · < atrás" ;
+		DrawText(32, BY + 9, h, dim, 1) ;
+		if (!forSave_) {
+			int x = R ;
+			if (launcher_) {
+				x -= 16 * 8 ;
+				DrawText(x, BY + 9, "Y cierra", autoClose() ? acc : dim, 1) ;
+				x -= 16 ;
+			}
+			x -= 16 * 5 ;
+			DrawText(x, BY + 9, "X oye", previewEnabled() ? acc : dim, 1) ;
+		}
 	}
 }
 
