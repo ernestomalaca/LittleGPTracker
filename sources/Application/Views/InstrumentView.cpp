@@ -1576,7 +1576,7 @@ void InstrumentView::turnPage(int dir) {
 
 void InstrumentView::drawGrid() {
 	GUIColor bg=ColorOf(CD_BACKGROUND), fg=ColorOf(CD_NORMAL) ;
-	GUIColor card=Mix(bg,fg,9), dim=Mix(bg,fg,50) ;
+	GUIColor card=bg, dim=Mix(bg,fg,50) ;   // sin cajita: del color del fondo
 	bool aHeld=(View::physMask_&EPBM_A)!=0 ;
 	UIField *focus=GetFocus() ;
 
@@ -1637,7 +1637,7 @@ void InstrumentView::drawGrid() {
 		bool here=(&f==focus) ;
 		bool moving=here && aHeld && !f.IsStatic() ;
 		GUIColor box=moving?fg:card, ink=moving?bg:fg, soft=Mix(box,ink,55) ;
-		FillRect(cx,cy,cw,ch,box,7) ;
+		if (moving) FillRect(cx,cy,cw,ch,box,7) ;
 		if (here && !moving) FrameRect(cx,cy,cw,ch,fg,7,3) ;
 		DrawText(cx+12,cy+10,name.c_str(),soft,1) ;
 		if (value.empty()) continue ;
@@ -1674,13 +1674,7 @@ void InstrumentView::drawGrid() {
 			}
 		}
 	}
-	// las cajas vacías: tenues, para que se vea la rejilla de 8
-	for (int k=0;k<8;k++) {
-		if (used[k]) continue ;
-		int cx,cy,cw,ch ;
-		gridBox(k,cx,cy,cw,ch) ;
-		FillRect(cx,cy,cw,ch,Mix(bg,fg,4),7) ;
-	}
+	(void)used ;
 }
 
 /************************************************************
