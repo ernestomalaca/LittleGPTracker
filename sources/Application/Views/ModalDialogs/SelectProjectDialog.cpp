@@ -1,6 +1,7 @@
 
 #include "SelectProjectDialog.h"
 #include "Application/Utils/ProjectName.h"
+#include "Application/Utils/Latin1.h"
 #include "NewProjectDialog.h"
 #include "System/Console/Trace.h"
 #include "Application/Views/ModalDialogs/MessageBox.h"
@@ -227,9 +228,11 @@ void SelectProjectDialog::drawShapes() {
 
 	DrawText(RX+8,28,"CANCIONES",acc,1) ;
 	char b[64] ;
-	if (size>0) {
+	// trk2als: todo con letra grande (la chica costaba leerla)
+	bool notice=(SDL_GetTicks()-notificationTime_)<=NOTIFICATION_TIMEOUT && !displayNotification_.empty() ;
+	if (size>0 && !notice) {
 		snprintf(b,sizeof(b),"%d de %d",currentProject_+1,size) ;
-		DrawText(RX+RW-8-8*(int)strlen(b),30,b,dim,0) ;
+		DrawText(RX+RW-8-16*TextLen(b),28,b,dim,1) ;
 	}
 
 	IteratorPtr<Path> it(content_.GetIterator()) ;
@@ -263,10 +266,10 @@ void SelectProjectDialog::drawShapes() {
 		int room=(RW-(tx-RX)-ts-16-56)/16 ;
 		if ((int)title.size()>room) title=title.substr(0,room-2)+".." ;
 		int nx=tx+ts+16 ;
-		DrawText(nx,y+7,title.c_str(),(here||proj)?fg:dim,1) ;
+		DrawText(nx,y+5,title.c_str(),(here||proj)?fg:dim,1) ;
 		std::string sub=proj?ago(times_[count]):(name==".."?"carpeta de arriba":"carpeta") ;
 		if (proj && sub.empty()) sub="sin guardar" ;
-		DrawText(nx,y+29,sub.c_str(),dim,0) ;
+		DrawText(nx,y+27,sub.c_str(),dim,1) ;
 		// el botoncito de abrir en el elegido
 		if (here && selected_==0) {
 			int cx=RX+RW-44, cy=y+(ROWH-6)/2-15 ;
@@ -283,7 +286,7 @@ void SelectProjectDialog::drawShapes() {
 	}
 	if (size==0) {
 		DrawText(RX+8,LY+8,"Todavía no hay proyectos",fg,1) ;
-		DrawText(RX+8,LY+34,"Nueva para empezar uno",dim,0) ;
+		DrawText(RX+8,LY+34,"Nueva para empezar uno",dim,1) ;
 	}
 
 	// barrita de lugar, si hay más de los que caben
@@ -309,16 +312,16 @@ void SelectProjectDialog::drawShapes() {
 		}
 		bx+=112+GAP ;
 	}
-	DrawText(RX+8,BY+5,"A abre  <> botones",dim,0) ;
-	DrawText(RX+8,BY+19,"A+B borra",dim,0) ;
+	DrawText(RX+8,BY+9,"A+B borra",dim,1) ;
 
 	// los avisos (la rejilla queda tapada)
-	if ((SDL_GetTicks()-notificationTime_)<=NOTIFICATION_TIMEOUT && !displayNotification_.empty()) {
+	if (notice) {   // en el lugar del "1 de 4", grande
 		std::string n=displayNotification_ ;
 		size_t nl=n.find('\n') ;
 		if (nl!=std::string::npos) n=n.substr(0,nl) ;
-		if (n.size()>38) n=n.substr(0,38) ;
-		DrawText(RX+8+176,30,n.c_str(),fg,0) ;
+		int room=(RW-16-160)/16 ;
+		if ((int)n.size()>room) n=n.substr(0,room) ;
+		DrawText(RX+RW-8-16*TextLen(n.c_str()),28,n.c_str(),fg,1) ;
 	}
 }
 
