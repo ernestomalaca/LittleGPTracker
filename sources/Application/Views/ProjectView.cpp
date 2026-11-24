@@ -2,6 +2,8 @@
 #include "Application/Instruments/SamplePool.h"
 #include "Application/Utils/ProjectName.h"
 #include "Application/Utils/Latin1.h"
+#include <strings.h>
+#include <stdint.h>
 #include "Application/Player/Player.h"
 #ifdef WEBSERVER
 #include "Services/Web/WebServer.h"
@@ -264,6 +266,7 @@ ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
         btnName_[k] = btns[k].name;
     }
     SetFocus(tempoField_);
+    buildMenu();
 }
 
 ProjectView::~ProjectView() {
@@ -274,7 +277,10 @@ void ProjectView::ProcessButtonMask(unsigned short mask,bool pressed) {
     if (!pressed)
         return;
 
-    FieldView::ProcessButtonMask(mask);
+    // trk2als: el menú (como las Settings de Live); con R/L/Select, lo de siempre
+    bool menu = SupportsShapes() && !(mask & (EPBM_R | EPBM_L | EPBM_SELECT | EPBM_START));
+    if (menu) menuInput(mask);
+    else FieldView::ProcessButtonMask(mask);
 
     // trk2als: la latencia cambió: a config.xml (al reiniciar toma efecto)
     if (latVar_ && latVar_->GetInt() != latLast_) {
@@ -338,7 +344,7 @@ void ProjectView::DrawView() {
 
     // trk2als: el tablero, todo con figuras
     if (drawTopBar(-1, "")) {
-        drawBoard();
+        drawMenu();
     } else {
         GUITextProperties props ;
         GUIPoint pos=GetTitlePosition() ;
@@ -721,4 +727,217 @@ bool ProjectView::Tick() {
         return true;
     }
     return false;
+}
+
+
+/************************************************************
+ trk2als: el Proyecto como las Settings de Live
+ ************************************************************/
+
+void ProjectView::buildMenu() {
+    static const char *secs[MSECS] = {"Canción", "Pantalla", "Tema", "Audio", "Link",
+                                      "Tempo y MIDI", "Archivos", "Grabar/warp", "Proyecto"};
+    for (int s = 0; s < MSECS; s++) { mSec_[s] = secs[s]; mCount_[s] = 0; mItem_i_[s] = 0; }
+    mSec_i_ = 0; mCol_ = 0;
+    struct Add {
+        ProjectView *pv;
+        void operator()(int s, const char *l, Variable *v, int kind, int mn, int mx, int sm, int bg, int act = 0) {
+            if (pv->mCount_[s] >= MITEMS) return;
+            if (kind == MK_VAR && !v) return;
+            MItem &it = pv->mItem_[s][pv->mCount_[s]++];
+            it.label = l; it.v = v; it.kind = kind; it.min = mn; it.max = mx;
+            it.small = sm; it.big = bg; it.action = act;
+        }
+    } add = {this};
+    Project *p = project_;
+    add(0, "Tempo", p->FindVariable(VAR_TEMPO), MK_VAR, 20, 999, 1, 10);
+    add(0, "Nota", p->FindVariable(VAR_SCALEROOT), MK_VAR, 0, 11, 1, 12);
+    Variable *sc = p->FindVariable(VAR_SCALE);
+    add(0, "Escala", sc, MK_VAR, 0, sc ? sc->GetListSize() - 1 : 0, 1, 10);
+    add(0, "Swing", p->FindVariable(VAR_SWING), MK_VAR, 50, 75, 1, 5);
+    add(0, "Cuantizar", p->FindVariable(VAR_QUANTIZE), MK_VAR, 0, 100, 5, 25);
+    add(0, "Volumen", p->FindVariable(VAR_MASTERVOL), MK_VAR, 10, 100, 1, 10);
+    add(0, "Drive", p->FindVariable(VAR_PREGAIN), MK_VAR, 10, 200, 1, 10);
+    add(0, "Metrónomo", p->FindVariable(VAR_METRONOME), MK_VAR, 0, 1, 1, 1);
+    add(1, "Follow", p->FindVariable(VAR_FOLLOW), MK_VAR, 0, 1, 1, 1);
+    add(1, "Fold", p->FindVariable(VAR_FOLD), MK_VAR, 0, 1, 1, 1);
+    add(1, "Fuente", fontVar_, MK_VAR, 0, fontCount_ - 1, 1, 1);
+    add(2, "Tema", themeVar_, MK_VAR, 0, themeCount_ - 1, 1, 1);
+    add(3, "Latencia", latVar_, MK_VAR, 0, 2, 1, 1);
+    add(4, "Ableton Link", p->FindVariable(VAR_LINK), MK_VAR, 0, 2, 1, 1);
+    add(4, "Desfase", p->FindVariable(VAR_LINKOFS), MK_VAR, -250, 250, 5, 25);
+    add(5, "Transponer", p->FindVariable(VAR_TRANSPOSE), MK_VAR, -48, 48, 1, 12);
+#ifdef WEBSERVER
+    add(6, "chancho.local", 0, MK_WEB, 0, 0, 0, 0, MAKE_FOURCC('W','E','B','!'));
+#endif
+    add(6, "Recopilar", 0, MK_ACTION, 0, 0, 0, 0, ACTION_COLLECT);
+    add(6, "Limpiar sin usar", 0, MK_ACTION, 0, 0, 0, 0, ACTION_PURGE_INSTRUMENT);
+    add(7, "Warp nuevos", 0, MK_WARP, 0, 1, 1, 1);
+    add(8, "Guardar", 0, MK_ACTION, 0, 0, 0, 0, ACTION_SAVE);
+    add(8, "Guardar como", 0, MK_ACTION, 0, 0, 0, 0, ACTION_SAVE_AS);
+    add(8, "Cargar canción", 0, MK_ACTION, 0, 0, 0, 0, ACTION_LOAD);
+    add(8, "Salir", 0, MK_ACTION, 0, 0, 0, 0, ACTION_QUIT);
+}
+
+std::string ProjectView::menuValue(const MItem &it) {
+    char b[48];
+    if (it.kind == MK_WARP) {
+        const char *lw = Config::GetInstance()->GetValue("LOOPWARP");
+        return (lw && !strcasecmp(lw, "complex")) ? "complex" : "re-pitch";
+    }
+#ifdef WEBSERVER
+    if (it.kind == MK_WEB) return WebServer::GetInstance()->IsRunning() ? "prendido" : "apagado";
+#endif
+    if (it.kind != MK_VAR || !it.v) return "";
+    Variable *v = it.v;
+    FourCC id = v->GetID();
+    int n = v->GetInt();
+    if (id == VAR_TEMPO) { snprintf(b, sizeof(b), "%d bpm", project_->GetTempo()); return b; }
+    if (id == VAR_SWING) { if (n <= 50) return "no"; snprintf(b, sizeof(b), "%d%%", n); return b; }
+    if (id == VAR_QUANTIZE) { snprintf(b, sizeof(b), "%d%%", n); return b; }
+    if (id == VAR_TRANSPOSE) { snprintf(b, sizeof(b), "%+d", n); return b; }
+    if (id == VAR_LINKOFS) { snprintf(b, sizeof(b), "%+d ms", n); return b; }
+    if (id == VAR_LINK) return n == 0 ? "no" : n == 1 ? "sí" : "sí + play";
+    if (id == VAR_METRONOME || id == VAR_FOLD || id == VAR_FOLLOW) return n ? "sí" : "no";
+    if (v->GetType() == Variable::BOOL) return v->GetBool() ? "sí" : "no";
+    if (v->GetType() == Variable::INT) { snprintf(b, sizeof(b), "%d", n); return b; }
+    std::string s = v->GetString() ? v->GetString() : "--";
+    if (s == "on") s = "sí";
+    if (s == "off") s = "no";
+    return s;
+}
+
+void ProjectView::menuChange(MItem &it, int delta) {
+    if (it.kind == MK_WARP) {
+        const char *lw = Config::GetInstance()->GetValue("LOOPWARP");
+        bool cplx = lw && !strcasecmp(lw, "complex");
+        Config::GetInstance()->SetPersistent("LOOPWARP", cplx ? "re-pitch" : "complex");
+        isDirty_ = true;
+        return;
+    }
+    if (it.kind != MK_VAR || !it.v) return;
+    Variable *v = it.v;
+    if (v->GetType() == Variable::BOOL) { v->SetBool(!v->GetBool()); isDirty_ = true; return; }
+    int n = v->GetInt() + delta;
+    if (n < it.min) n = it.min;
+    if (n > it.max) n = it.max;
+    v->SetInt(n);
+    isDirty_ = true;
+}
+
+void ProjectView::menuAction(int fourcc) {
+#ifdef WEBSERVER
+    if (fourcc == MAKE_FOURCC('W','E','B','!')) {
+        WebServer *web = WebServer::GetInstance();
+        if (!web->Allowed()) { notify("WEB apagado en config.xml"); return; }
+        web->Toggle();
+        notify(web->IsRunning() ? "chancho.local prendido" : "chancho.local apagado");
+        isDirty_ = true;
+        return;
+    }
+#endif
+    // las de siempre (guardar, recopilar...): el mismo camino que los botones
+#ifdef _64BIT
+    int fc = fourcc;
+    Update(*this, (I_ObservableData *)&fc);
+#else
+    Update(*this, (I_ObservableData *)(uintptr_t)fourcc);
+#endif
+}
+
+bool ProjectView::menuInput(unsigned short mask) {
+    int s = mSec_i_;
+    if (mCol_ == 0) {   // las secciones
+        if (mask == EPBM_UP) mSec_i_ = (mSec_i_ + MSECS - 1) % MSECS;
+        else if (mask == EPBM_DOWN) mSec_i_ = (mSec_i_ + 1) % MSECS;
+        else if ((mask == EPBM_RIGHT || mask == EPBM_A) && mCount_[s] > 0) mCol_ = 1;
+        else return false;
+        isDirty_ = true;
+        return true;
+    }
+    int &i = mItem_i_[s];
+    MItem &it = mItem_[s][i];
+    if (mask & EPBM_A) {   // A + flechas cambia; A solo hace la acción
+        int d = 0;
+        if (mask & EPBM_LEFT) d = -it.small;
+        else if (mask & EPBM_RIGHT) d = it.small;
+        else if (mask & EPBM_DOWN) d = -it.big;
+        else if (mask & EPBM_UP) d = it.big;
+        if (d) menuChange(it, d);
+        else if (mask == EPBM_A) {
+            if (it.kind == MK_ACTION || it.kind == MK_WEB) menuAction(it.action);
+            else if (it.kind == MK_WARP) menuChange(it, 1);
+        }
+        return true;
+    }
+    if (mask == EPBM_UP) i = (i + mCount_[s] - 1) % mCount_[s];
+    else if (mask == EPBM_DOWN) i = (i + 1) % mCount_[s];
+    else if (mask == EPBM_LEFT || mask == EPBM_B) mCol_ = 0;
+    else return false;
+    isDirty_ = true;
+    return true;
+}
+
+void ProjectView::drawMenu() {
+    GUIColor bg = ColorOf(CD_BACKGROUND), fg = ColorOf(CD_NORMAL);
+    GUIColor acc = ColorOf(CD_HILITE2);
+    GUIColor card = Mix(bg, fg, GridPct(8)), rule = Mix(bg, fg, GridPct(20));
+    GUIColor dim = Mix(bg, fg, 50);
+    // las secciones, con una raya después de Canción y antes de Proyecto
+    const int LX = 12, LW = 222, LY = 40;
+    FillRect(LX, LY, LW, 382, card, 8);
+    int y = 48;
+    for (int s = 0; s < MSECS; s++) {
+        if (s == 1 || s == MSECS - 1) { FillRect(LX + 12, y + 3, LW - 24, 2, rule); y += 10; }
+        bool here = s == mSec_i_;
+        if (here) FillRect(LX + 6, y, LW - 12, 32, mCol_ == 0 ? acc : Mix(bg, fg, GridPct(20)), 5);
+        DrawText(LX + 14, y + 8, mSec_[s], here && mCol_ == 0 ? bg : fg, 1);
+        y += 36;
+    }
+    // los ajustes de la sección
+    const int RX = 244, RW = 384;
+    int s = mSec_i_;
+    std::string title = mSec_[s];
+    if (s == 7) title = "Grabar, warp y lanzar";
+    title = ToLatin1(title);   // en mayúsculas, con todo y tildes
+    for (size_t k = 0; k < title.size(); k++) {
+        unsigned char c = (unsigned char)title[k];
+        if ((c >= 'a' && c <= 'z') || (c >= 0xE0 && c <= 0xFE && c != 0xF7)) title[k] = (char)(c - 32);
+    }
+    DrawText(RX + 8, 44, FromLatin1(title).c_str(), dim, 1);
+    for (int i = 0; i < mCount_[s]; i++) {
+        const MItem &it = mItem_[s][i];
+        int iy = 72 + i * 44;
+        bool here = mCol_ == 1 && i == mItem_i_[s];
+        if (here) {
+            FillRect(RX, iy, RW, 38, card, 6);
+            FrameRect(RX, iy, RW, 38, acc, 6, 2);
+        }
+        bool act = it.kind == MK_ACTION;
+        DrawText(RX + 12, iy + 11, it.label, act ? fg : dim, 1);
+        if (act) {
+            if (here) {   // el botoncito de hacer
+                int cx = RX + RW - 36, cy = iy + 5;
+                FillRect(cx, cy, 28, 28, acc, 14);
+                for (int k = 0; k < 9; k++) {
+                    int hh = (9 - k) * 2 - 1;
+                    FillRect(cx + 11 + k, cy + 14 - hh / 2, 1, hh, bg);
+                }
+            }
+            continue;
+        }
+        std::string val = menuValue(it);
+        int room = (RW - 24 - 16 * TextLen(it.label) - 16) / 16;
+        if (room < 1) room = 1;
+        std::string lv = ToLatin1(val);
+        if ((int)lv.size() > room) lv = lv.substr(0, room);
+        int vx = RX + RW - 12 - 16 * (int)lv.size();
+        if (here) FillRect(vx - 5, iy + 6, 16 * (int)lv.size() + 10, 26, acc, 4);
+        DrawText(vx, iy + 11, FromLatin1(lv).c_str(), here ? bg : fg, 1);
+    }
+    // la franja de ayuda
+    FillRect(12, 432, 616, 2, rule);
+    const char *help = mCol_ == 0 ? "^v sección  > entra" :
+                       (mItem_[s][mItem_i_[s]].kind == MK_ACTION ? "A hace  < sale" : "A+<> cambia  < sale");
+    DrawText(16, 446, help, dim, 1);
 }

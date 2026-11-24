@@ -53,6 +53,21 @@ private:
   char *fontNames_[32];
   int fontCount_;
   void drawBigNumber(int x, int y, const char *txt, int h, GUIColor c);
+  // trk2als: el Proyecto como las Settings de Live: secciones a la izquierda,
+  // sus ajustes a la derecha, todo con letra grande
+  struct MItem { const char *label; Variable *v; int kind, min, max, small, big, action; };
+  enum { MK_VAR, MK_ACTION, MK_WARP, MK_WEB };
+  enum { MSECS = 9, MITEMS = 8 };
+  MItem mItem_[MSECS][MITEMS];
+  int mCount_[MSECS];
+  const char *mSec_[MSECS];
+  int mSec_i_, mItem_i_[MSECS], mCol_;
+  void buildMenu();
+  void drawMenu();
+  bool menuInput(unsigned short mask);
+  std::string menuValue(const MItem &it);
+  void menuAction(int fourcc);
+  void menuChange(MItem &it, int delta);
   UIField *btnField_[7];
   std::string msg_;
   unsigned long msgAt_;
