@@ -129,6 +129,7 @@ SampleInstrument::SampleInstrument() {
 		 renderParams_[ch].audioClip_=false ;
 		 renderParams_[ch].declickIn_=-1 ;
 		 renderParams_[ch].declickOut_=renderParams_[ch].declickOutLen_=0 ;
+		 renderParams_[ch].declickDelay_=0 ;
 		 renderParams_[ch].chokeMs_=0 ; renderParams_[ch].padDecay_=0 ; renderParams_[ch].padClock_=0 ; renderParams_[ch].padChoke_=0 ; renderParams_[ch].startDelay_=0 ;
 	 }
 
@@ -475,6 +476,7 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
      rp->audioClip_=false ;
      rp->declickIn_=-1 ;
      rp->declickOut_=rp->declickOutLen_=0 ;   // (si no, la salida de la voz anterior callaba a la nueva)
+     rp->declickDelay_=0 ;
      if (audioClip && GetSimpler(SIP_A_FADE)) {
          rp->audioClip_=true ;
          rp->declickIn_=0 ;
@@ -924,6 +926,7 @@ void SampleInstrument::Stop(int channel) {
 	 // trk2als: clip de audio con fade: se apaga en 10 ms en vez de cortarse
 	 if (rp->audioClip_ && !rp->finished_) {
 		 if (rp->declickOutLen_==0) rp->declickOut_=rp->declickOutLen_=441 ;
+		 rp->declickDelay_=0 ;   // (si había uno anunciado, ya)
 		 return ;
 	 }
 	 if (rp->simpler_ && !rp->finished_) {
@@ -1115,7 +1118,9 @@ void SampleInstrument::declickVoice(renderParams *rp,fixed *buffer,int size) {
 			g=float(rp->declickIn_)/inLen ;
 			if (++rp->declickIn_>=inLen) rp->declickIn_=-1 ;
 		}
-		if (rp->declickOutLen_>0) {
+		if (rp->declickOutLen_>0 && rp->declickDelay_>0) {
+			rp->declickDelay_-- ;     // el fade anunciado todavía no empieza
+		} else if (rp->declickOutLen_>0) {
 			if (rp->declickOut_<=0) {
 				g=0 ;                     // ya se apagó: silencio hasta el final del bloque
 				rp->declickOut_=-1 ;
@@ -1136,6 +1141,18 @@ void SampleInstrument::declickVoice(renderParams *rp,fixed *buffer,int size) {
 		rp->declickOutLen_=0 ;
 		rp->finished_=true ;
 	}
+}
+
+// trk2als: el clip de audio del canal va a cambiar (relanzarse, otro clip o
+// detenerse) en el compás: se apaga en len muestras terminando justo ahí. Si
+// no, la nota que el clip toca en ese uno alcanzaba a sonar unos ms: click
+void SampleInstrument::PreFade(int channel,int delay,int len) {
+	if (channel<0 || channel>=SONG_CHANNEL_COUNT) return ;
+	renderParams *rp=renderParams_+channel ;
+	if (!rp->audioClip_ || rp->finished_ || rp->declickOutLen_>0) return ;
+	if (delay<0) delay=0 ;
+	rp->declickDelay_=delay ;
+	rp->declickOut_=rp->declickOutLen_=len ;
 }
 
 void SampleInstrument::InitAudioClip() {

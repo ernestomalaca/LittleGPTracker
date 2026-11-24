@@ -179,6 +179,7 @@ public:
        virtual void Stop(int channel) ;
        virtual bool Releasing(int channel) ;
        virtual void Choke(int channel) ;
+       virtual void PreFade(int channel,int delay,int len) ;
        virtual bool StartVoice(int channel,int voice,unsigned char note,int velocity,int flags=1) ;
        virtual void StopVoice(int channel,int voice) ;
        virtual void SetStartDelay(int channel,int voice,int samples) ;

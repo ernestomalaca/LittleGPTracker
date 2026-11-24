@@ -258,6 +258,7 @@ private:
 	// trk2als: la escena que suena y sus repeticiones (song->sceneRep_)
 	int sceneRow_, scenePending_, sceneStart_ ;
 	void sceneTick() ;
+	void preFadeBar(SyncMaster *sync) ;   // trk2als
 	int sceneBars(int row) ;
 	int launched_[SONG_CHANNEL_COUNT] ;   // trk2als: la fila que estaba sonando al parar (-1 nada)
 	bool countIn_ ;          // en la precuenta (no suena nada más)

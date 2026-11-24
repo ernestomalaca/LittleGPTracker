@@ -83,6 +83,10 @@ void PlayerMixer::StartChannel(int channel) {
 	isChannelPlaying_[Phys(channel)]=true ;
 } ;
 
+void PlayerMixer::PreFade(int channel,int delay,int len) {   // trk2als
+	channel_[Phys(channel)]->PreFade(delay,len) ;
+}
+
 void PlayerMixer::ChokeChannel(int channel) {   // trk2als
 	channel_[Phys(channel)]->ChokeInstrument() ;
 } ;
