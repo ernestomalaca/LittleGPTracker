@@ -1125,7 +1125,8 @@ void SampleInstrument::declickVoice(renderParams *rp,fixed *buffer,int size) {
 				g=0 ;                     // ya se apagó: silencio hasta el final del bloque
 				rp->declickOut_=-1 ;
 			} else {
-				g*=float(rp->declickOut_)/rp->declickOutLen_ ;
+				// curva suave (coseno): la bajada lineal corta se oía como "tic"
+				g*=0.5f*(1.0f-cosf(3.14159265f*float(rp->declickOut_)/rp->declickOutLen_)) ;
 				rp->declickOut_-- ;
 				if (rp->declickOut_==0) rp->declickOut_=-1 ;   // terminó
 			}

@@ -989,8 +989,11 @@ void Player::playCursorPosition(int channel) {
 // cambia de clip o se detiene en el compás apaga su clip de audio en 4 ms
 // terminando justo en el uno (la nota que el clip toca ahí ya no alcanza a sonar)
 void Player::preFadeBar(SyncMaster *sync) {
-    const int len = 176;
-    int delay = int(sync->GetTickSampleCount()) - len;
+    // 25 ms con curva suave (la que mejor sonó; 4 ms se oía como "tic"),
+    // sin pasar del tick (a tempos rápidos es más corto que 25 ms)
+    int tick = int(sync->GetTickSampleCount());
+    int len = tick < 1100 ? tick : 1100;
+    int delay = tick - len;
     for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
         QueueingMode q = liveQueueingMode_[i];
         if (q != QM_PHRASESTART && q != QM_PHRASESTOP && q != QM_CHAINSTART && q != QM_CHAINSTOP) continue;
