@@ -13,18 +13,22 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include "Application/Utils/Latin1.h"
 
 // trk2als: piano roll del clip MIDI. Ver ClipView.h
 
 #define NO_NOTE 0xFF
 #define MAX_PITCH 119
 #define ROWS 16           // trk2als: filas de notas a la vista (como los 16 pads del kit)
-#define ROW_H 21
-#define STEP_W 36
-#define GRID_X 56
+#define ROW_H 24          // trk2als: notas más altas (la velocity bajó a 32 px)
+// trk2als: la columna de la izquierda (teclas o pads) y el ancho de cada paso
+// dependen de lo que se edita: un kit necesita leer el nombre de cada pad
+static int g_gridX = 64, g_stepW = 35;
+#define STEP_W g_stepW
+#define GRID_X g_gridX
 #define GRID_Y 54
-#define VEL_Y 398         // carril de velocity
-#define VEL_H 58
+#define VEL_Y 442         // carril de velocity (a la altura de la barra de la Session)
+#define VEL_H 32
 
 static bool byStart(const ClipView::Note &a, const ClipView::Note &b) {
     return a.start < b.start;
@@ -1462,6 +1466,10 @@ void ClipView::DrawView() {
     GUIColor dim = Mix(bg, fg, 55);
     GUIColor play = ColorOf(CD_PLAY);
 
+    // kit: columna ancha con el nombre del pad en grande; teclas: la nota en grande
+    if (kit()) { g_gridX = 136; g_stepW = 31; }
+    else { g_gridX = 64; g_stepW = 35; }
+
     if (curveOn()) {
         drawCurves();
         return;
@@ -1565,17 +1573,22 @@ void ClipView::DrawView() {
             key = hi2;
             FillRect(GRID_X, y, gw, RH, Mix(Mix(bg, fg, GridPct(shade)), hi2, 22));
         }
-        FillRect(8, y + 1, 44, RH - 2, key, 2);
+        FillRect(8, y + 1, GRID_X - 12, RH - 2, key, 2);
         if (kitInstr) {   // cada pad con su sample (los vacíos, apagados)
             std::string pn = kitInstr->PadName(pitch);
             if (pn.empty() && pitch != cursorPitch_) key = Mix(bg, fg, 12);
-            FillRect(8, y + 1, 44, RH - 2, key, 2);
-            if (!pn.empty()) DrawText(10, y + (RH - 12) / 2, pn.substr(0, 5).c_str(), bg, 0);
+            FillRect(8, y + 1, GRID_X - 12, RH - 2, key, 2);
+            if (!pn.empty()) {   // el nombre del pad, grande (completo arriba)
+                std::string sn = ToLatin1(pn);
+                int room = (GRID_X - 18) / 16;
+                if ((int)sn.size() > room) sn = sn.substr(0, room);
+                DrawText(12, y + (RH - 16) / 2, FromLatin1(sn).c_str(), bg, 1);
+            }
         } else {   // cada tecla dice qué nota es (en las negras, en claro)
             bool darkKey = black && pitch != cursorPitch_ && !isRoot;
             GUIColor tc = darkKey ? Mix(bg, fg, 75) : bg;
             if (scale > 0 && !in && pitch != cursorPitch_) tc = darkKey ? Mix(bg, fg, 40) : Mix(bg, fg, 8);
-            DrawText(12, y + (RH - 12) / 2, noteName(pitch).c_str(), tc, 0);
+            DrawText(12, y + (RH - 16) / 2, noteName(pitch).c_str(), tc, 1);
         }
     }
     for (int s = 0; s <= 16; s++) {
@@ -1706,7 +1719,7 @@ void ClipView::DrawView() {
 
     // carril de velocity
     FillRect(GRID_X, VEL_Y, gw, VEL_H, Mix(bg, fg, GridPct(5)), 4);
-    DrawText(12, VEL_Y + VEL_H / 2 - 6, "vel", dim, 0);
+    DrawText(6, VEL_Y + VEL_H / 2 - 8, "vel", dim, 1);
     // en un acorde las barras se apilan: la más alta atrás, la del cursor encima
     for (int pass = 0; pass < 2; pass++) {
         for (int lvl = 127; lvl >= 0; lvl--) {
