@@ -441,7 +441,10 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 	 rp->volume_=rp->baseVolume_=i2fp(volume_->GetInt()) ;
 	 rp->attenuate_=i2fp(attenuate_->GetInt()) ;
 	 // trk2als: clip de audio: la ganancia va en dB (0 dB = el 128 de LGPT)
-	 bool audioClip=(loopMode_->GetInt()==SILM_LOOPSYNC) ;
+	 // (en una pista de audio la voz va en looper sync aunque el loop mode del
+	 // instrumento diga otra cosa: los clips de audio casi siempre dicen "none")
+	 bool audioClip=(loopMode_->GetInt()==SILM_LOOPSYNC) ||
+	                (channel<SONG_CHANNEL_COUNT && syncRequest_[channel]) ;
 	 if (audioClip) {
 		 InitAudioClip() ;
 		 float lin=128.0f*powf(10.0f,GetSimpler(SIP_A_GAIN)/20.0f) ;
@@ -471,7 +474,7 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
      // (salvo instrumentos viejos en looper sync)
      rp->audioClip_=false ;
      rp->declickIn_=-1 ;
-     rp->declickOut_=0 ;
+     rp->declickOut_=rp->declickOutLen_=0 ;   // (si no, la salida de la voz anterior callaba a la nueva)
      if (audioClip && GetSimpler(SIP_A_FADE)) {
          rp->audioClip_=true ;
          rp->declickIn_=0 ;
