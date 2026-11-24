@@ -351,6 +351,7 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data),
 	ampLabelRow_=-1 ;
 	playheadPx_=-1 ;
 	audioMode_=false ;
+	gridMode_=false ;
 	labelCount_=0 ;
 	onInstrumentChange() ;
 }
@@ -443,6 +444,7 @@ void InstrumentView::onInstrumentChange() {
 } ;
 
 void InstrumentView::fillSampleParameters() {
+	gridMode_=false ;
 
 	// trk2als: pantalla dibujada con pinceles: arriba (filas 1-9) la forma de
 	// onda; los campos en dos columnas (x=1 y x=21) por bloques con etiqueta.
@@ -722,6 +724,45 @@ void InstrumentView::fillSampleParameters() {
 	// trk2als: clip de audio, como la vista de clip de Live: CLIP, WARP y GAIN.
 	// Lo de LGPT (crush, filtro, feedback, tabla...) no existe en un clip de
 	// Live; el volumen y el pan son de la pista
+	gridMode_=false ;
+	if (audioMode_ && SupportsShapes()) {
+		// trk2als: la rejilla de 8 (2 x 4, como las perillas del MiniLab): cada
+		// campo en su caja; las posiciones (en letras) son las de las cajas, así
+		// las flechas van de caja en caja. Abajo: el sample, el bpm y el preset
+		instrument->InitAudioClip() ;
+		gridMode_=true ;
+		const int GX[4]={1,11,21,31}, GY[2]={12,20} ;
+		#define GAT(k) (pt=GUIPoint(GX[(k)%4],GY[(k)/4]))
+		// el sample ya está (el primero de la lista): abajo a la izquierda
+		f1->SetPosition(pt=GUIPoint(1,27)) ;
+		v=instrument->FindVariable(SIP_FROMBAR) ;
+		ADD(new UIIntVarField(GAT(0),*v,"desde: %d",1,64,1,4)) ;
+		v=instrument->FindVariable(SIP_LOOPBARS) ;
+		ADD(new UIIntVarField(GAT(1),*v,"loop: %d",1,16,1,4)) ;
+		v=instrument->FindVariable(SIP_CLIPBARS) ;
+		if (v->GetInt()<=0) v->SetInt(instrument->FindVariable(SIP_LOOPBARS)->GetInt()) ;
+		ADD(new UIIntVarField(GAT(2),*v,"largo: %d",1,16,1,4)) ;
+		v=instrument->FindVariable(SIP_WARP) ;
+		ADD(new UIIntVarField(GAT(3),*v,"warp: %s",0,1,1,1)) ;
+		if (instrument->FindVariable(SIP_WARP)->GetInt()==1) {
+			v=instrument->FindVariable(SIP_TRANSPOSE) ;
+			ADD(new UIIntVarField(GAT(4),*v,"transp: %+dst",-24,24,1,12)) ;
+			v=instrument->FindVariable(SIP_A_DET) ;
+			ADD(new UIIntVarField(GAT(5),*v,"detune: %+dct",-50,50,1,10)) ;
+		} else {   // re-pitch: la altura la decide el tempo (como en Live)
+			ADD(new UIStaticField(GAT(4),"transp: --")) ;
+			ADD(new UIStaticField(GAT(5),"detune: --")) ;
+		}
+		v=instrument->FindVariable(SIP_A_GAIN) ;
+		ADD(new UIIntVarField(GAT(6),*v,"gain: %+ddB",-36,6,1,6)) ;
+		v=instrument->FindVariable(SIP_A_FADE) ;
+		ADD(new UIIntVarField(GAT(7),*v,"fade: %s",0,1,1,1)) ;
+		#undef GAT
+		v=instrument->FindVariable(SIP_LOOPBPM) ;
+		ADD(new UIIntVarField(pt=GUIPoint(21,27),*v,"bpm: %d",0,300,1,10)) ;
+		ADD(new UIIntVarField(pt=GUIPoint(31,27),presetSaveVar_,"guardar",0,0,1,1)) ;
+		return ;
+	}
 	if (audioMode_) {
 		instrument->InitAudioClip() ;
 		LABEL("CLIP") ;
@@ -862,6 +903,7 @@ void InstrumentView::fillSampleParameters() {
 } ;
 
 void InstrumentView::fillMidiParameters() {
+	gridMode_=false ;
 
 	int i=viewData_->currentInstrument_ ;
 	InstrumentBank *bank=viewData_->project_->GetInstrumentBank() ;
@@ -1319,7 +1361,10 @@ void InstrumentView::DrawView() {
             autoShown_.push_back(av) ;
         }
     }
-    FieldView::Redraw();
+    if (gridMode_) {
+        if (GetFocus()==0) SetFocus(T_SimpleList<UIField>::GetFirst()) ;
+        drawGrid() ;
+    } else FieldView::Redraw();
     for (size_t k=0;k<tmpVar.size();k++) tmpVar[k]->SetInt(tmpOld[k]) ;
     recShown_=Player::GetInstance()->AutoRecState() ;
     if (recShown_==1) recShown_=(System::GetInstance()->GetClock()/250)%2 ? 1 : 3 ;
@@ -1333,7 +1378,7 @@ void InstrumentView::DrawView() {
         float secs=si->GetLoopSeconds() ;
         bool sync=bpmInfoPos_._x>=0 && (audioMode_ ||
                   si->FindVariable(SIP_LOOPMODE)->GetInt()==SILM_LOOPSYNC) ;
-        if (sync && bpm>0 && secs>0 && bars>0) {
+        if (sync && !gridMode_ && bpm>0 && secs>0 && bars>0) {
             int tempo=viewData_->project_->GetTempo() ;
             float ratio=secs/(bars*240.0f/tempo) ; // >1 = se acelera
             char info[32] ;
@@ -1349,6 +1394,92 @@ void InstrumentView::DrawView() {
     }
     drawWaveform() ; // trk2als
 } ;
+
+/************************************************************
+ trk2als: la rejilla de 8 cajas (fase 1 del refresh: el clip de audio).
+ Cada campo en su caja: nombre arriba, aro con el valor y el valor grande;
+ el que tiene el cursor con marco, y si se está moviendo (A apretada) la caja
+ se tiñe del color de la pista. Abajo, chiquito: el sample, el bpm y guardar
+ ************************************************************/
+
+void InstrumentView::drawArc(int cx,int cy,int r,float from,float to,GUIColor c,int th) {
+	// sin primitiva de arco: puntitos cada ~4 px a lo largo del aro
+	float len=(to-from)*3.14159f/180.0f*r ;
+	int n=int(len/3.0f)+1 ;
+	for (int i=0;i<=n;i++) {
+		float a=(from+(to-from)*i/(n?n:1))*3.14159f/180.0f ;
+		int x=cx+int(cosf(a)*r+0.5f), y=cy+int(sinf(a)*r+0.5f) ;
+		FillRect(x-th/2,y-th/2,th,th,c,th/2) ;
+	}
+}
+
+void InstrumentView::drawGrid() {
+	GUIColor bg=ColorOf(CD_BACKGROUND), fg=ColorOf(CD_NORMAL), cur=ColorOf(CD_CURSOR) ;
+	GUIColor panel=Mix(bg,fg,9), dim=Mix(bg,fg,50), ring=Mix(bg,fg,22) ;
+	GUIColor tc=TrackColor(viewData_->songX_) ;
+	const int X0=10, Y0=176, CW=150, CH=114, GX=4, GY=6 ;
+	bool aHeld=(View::physMask_&EPBM_A)!=0 ;
+	UIField *focus=GetFocus() ;
+	int k=0 ;
+	IteratorPtr<UIField> it(T_SimpleList<UIField>::GetIterator()) ;
+	for (it->Begin();!it->IsDone();it->Next()) {
+		UIField &f=it->CurrentItem() ;
+		GUIPoint p=f.GetPosition() ;
+		char text[96] ;
+		if (f.IsStatic()) snprintf(text,sizeof(text),"%s",((UIStaticField &)f).Text()) ;
+		else ((UIIntVarField &)f).Text(text,sizeof(text)) ;
+		bool here=(&f==focus) ;
+		if (p._y==27) {   // la línea de abajo: chiquito
+			std::string t(text) ;
+			if (t.compare(0,8,"sample: ")==0) t=t.substr(8) ;
+			size_t dot=t.rfind('.') ;
+			if (dot!=std::string::npos && dot+5>=t.size()) t=t.substr(0,dot) ;
+			int x=(p._x==1)?X0+2:(p._x==21?336:496) ;
+			int w=8*int(t.size())+12 ;
+			if (here) FillRect(x-6,432,w,20,cur,4) ;
+			DrawText(x,436,t.c_str(),here?bg:dim,0) ;
+			continue ;
+		}
+		int col=(p._x-1)/10, row=(p._y==12)?0:1 ;
+		int cx=X0+col*(CW+GX), cy=Y0+row*(CH+GY) ;
+		// nombre (antes de ':') y valor (después)
+		std::string all(text), name, value ;
+		size_t c=all.find(": ") ;
+		if (c==std::string::npos) { name=all ; value="" ; }
+		else { name=all.substr(0,c) ; value=all.substr(c+2) ; }
+		for (size_t i=0;i<name.size();i++) if (name[i]>='a' && name[i]<='z') name[i]-=32 ;
+		bool moving=here && aHeld && !f.IsStatic() ;
+		FillRect(cx,cy,CW,CH,moving?Mix(panel,tc,22):panel,6) ;
+		if (here) FrameRect(cx,cy,CW,CH,cur,6,3) ;
+		DrawText(cx+10,cy+8,name.c_str(),moving?fg:dim,0) ;
+		// el aro: de 135 a 405 grados; lleno según el valor (las listas, sin aro lleno)
+		int ax=cx+34, ay=cy+66, r=22 ;
+		bool list=!f.IsStatic() && ((UIIntVarField &)f).GetVariable().GetType()!=Variable::INT ;
+		if (list) {   // palabras (complex, re-pitch, on): la palabra sola, al centro, sin aro
+			GUIColor wc=moving?tc:fg ;
+			if (16*int(value.size())<=CW-16) DrawText(cx+(CW-16*int(value.size()))/2,cy+58,value.c_str(),wc,1) ;
+			else DrawText(cx+(CW-8*int(value.size()))/2,cy+62,value.c_str(),wc,0) ;
+			k++ ;
+			continue ;
+		}
+		drawArc(ax,ay,r,135,405,ring,4) ;
+		if (!f.IsStatic()) {
+			UIIntVarField &vf=(UIIntVarField &)f ;
+			Variable &var=vf.GetVariable() ;
+			if (!list && vf.Max()>vf.Min()) {
+				float fr=float(var.GetInt()-vf.Min())/float(vf.Max()-vf.Min()) ;
+				if (fr<0) fr=0 ;
+				if (fr>1) fr=1 ;
+				if (fr>0) drawArc(ax,ay,r,135,135+270*fr,moving?tc:cur,4) ;
+			}
+		}
+		GUIColor vc=f.IsStatic()?dim:fg ;
+		// valor grande; si no cabe (p. ej. "complex"), en la letra chica
+		if (16*int(value.size())<=CW-68) DrawText(cx+64,cy+58,value.c_str(),vc,1) ;
+		else DrawText(cx+64,cy+62,value.c_str(),vc,0) ;
+		k++ ;
+	}
+}
 
 /************************************************************
  trk2als: forma de onda con los pinceles, a todo lo ancho (filas 1-9).

@@ -24,6 +24,10 @@ public:
 	virtual void OnClick() {} ;
   
   FourCC GetVariableID() ;
+  // trk2als: el texto que dibujaría (para dibujarlo de otra forma) y su rango
+  void Text(char *buffer, int size) ;
+  int Min() { return min_ ; }
+  int Max() { return max_ ; }
 	Variable &GetVariable() ;
 	const char *GetFormat() { return format_ ; }
 	int GetDrawnLength() { return drawnLen_ ; }

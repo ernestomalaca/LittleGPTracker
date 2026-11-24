@@ -59,6 +59,9 @@ private:
 	unsigned char wfPeaks_[WF_BARS] ;
 	int playheadPx_ ;        // dónde se dibujó el cursor de reproducción (-1 = no)
 	bool audioMode_ ;        // loop de pista de audio: pantalla simplificada
+	bool gridMode_ ;         // trk2als: la rejilla de 8 (como las perillas del MiniLab)
+	void drawGrid() ;
+	void drawArc(int cx,int cy,int r,float from,float to,GUIColor c,int th) ;
 	bool simplerView_ ;      // Sampler estilo Simpler (pistas MIDI)
 	int ampLabelRow_ ;       // dónde va el dibujo de la envolvente
 	void drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int H,int size) ;
