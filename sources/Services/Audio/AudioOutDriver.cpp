@@ -9,6 +9,11 @@
 #include "System/Console/Trace.h"
 #include "System/System/System.h"
 #include <math.h>
+#include <stdio.h>
+#undef fopen   // (el stub de TinyXML los redefine)
+#undef fclose
+#undef FILE
+#undef fwrite
 
 AudioOutDriver::AudioOutDriver(AudioDriver &driver) {
     driver_ = &driver;
@@ -112,7 +117,57 @@ void AudioOutDriver::Trigger() {
             g_busy = g_busyCpu = g_span = 0;
         }
     }
+    diagRecord();
     driver_->AddBuffer(mixBuffer_,sampleCount_) ;
+}
+
+// trk2als: diagnóstico (DIAG=YES en config.xml): guarda en memoria los últimos
+// 30 s de lo que sale y lo escribe en chancho6/diag.wav al salir con SALIR.
+// También anota los bloques tarde y cuando la salida se quedó sin audio.
+static short *g_diag = 0;
+static long g_diagLen = 0, g_diagPos = 0, g_diagTotal = 0;
+static unsigned long g_diagClock = 0;
+void AudioOutDriver::diagRecord() {
+    static int on = -1;
+    if (on < 0) {
+        on = getenv("TRK_DIAG") ? 1 : 0;
+        if (on) {
+            g_diagLen = 44100L * 30;
+            g_diag = (short *)calloc(g_diagLen * 2, sizeof(short));
+            if (!g_diag) on = 0;
+        }
+    }
+    if (!on || sampleCount_ <= 0) return;
+    static int lastUnder = 0;
+    if (AudioDriver::underruns_ != lastUnder) {
+        fprintf(stderr, "[DIAG] %lu sin audio (underrun %d)\n", (unsigned long)System::GetInstance()->GetClock(), AudioDriver::underruns_);
+        lastUnder = AudioDriver::underruns_;
+    }
+    for (int i = 0; i < sampleCount_; i++) {
+        g_diag[2 * g_diagPos] = mixBuffer_[2 * i];
+        g_diag[2 * g_diagPos + 1] = mixBuffer_[2 * i + 1];
+        if (++g_diagPos >= g_diagLen) g_diagPos = 0;
+    }
+    g_diagTotal += sampleCount_;
+    g_diagClock = System::GetInstance()->GetClock();
+}
+
+void AudioOutDriver::DiagDump(const char *path) {
+    if (!g_diag || g_diagTotal == 0) return;
+    long n = g_diagTotal < g_diagLen ? g_diagTotal : g_diagLen;
+    long start = g_diagTotal < g_diagLen ? 0 : g_diagPos;
+    FILE *f = fopen(path, "wb");
+    if (!f) return;
+    unsigned int dataBytes = n * 4, v;
+    fwrite("RIFF", 1, 4, f); v = 36 + dataBytes; fwrite(&v, 4, 1, f);
+    fwrite("WAVEfmt ", 1, 8, f); v = 16; fwrite(&v, 4, 1, f);
+    unsigned short fmt[2] = {1, 2}; fwrite(fmt, 2, 2, f);
+    v = 44100; fwrite(&v, 4, 1, f); v = 44100 * 4; fwrite(&v, 4, 1, f);
+    unsigned short ba[2] = {4, 16}; fwrite(ba, 2, 2, f);
+    fwrite("data", 1, 4, f); fwrite(&dataBytes, 4, 1, f);
+    for (long i = 0; i < n; i++) fwrite(&g_diag[2 * ((start + i) % g_diagLen)], 2, 2, f);
+    fclose(f);
+    fprintf(stderr, "[DIAG] diag.wav: %ld muestras, la última generada en el reloj %lu\n", n, g_diagClock);
 }
 
 void AudioOutDriver::Update(Observable &o,I_ObservableData *d) 

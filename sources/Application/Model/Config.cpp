@@ -1,4 +1,5 @@
 #include "Config.h"
+#include <stdlib.h>
 #include "System/FileSystem/FileSystem.h"
 
 int Config::generation_ = 0 ;
@@ -62,6 +63,12 @@ Config::Config()
 		Trace::Log("CONFIG","No (bad?) config.xml") ;
 	}
  	delete(document) ;
+	// trk2als: DIAG=YES: registros de diagnóstico (audio, lanzamientos) y diag.wav
+	Variable *dg = FindVariable("DIAG") ;
+	if (dg && dg->GetString() && !strcmp(dg->GetString(), "YES")) {
+		setenv("TRK_DIAG", "1", 0) ; setenv("TRK_LOADLOG", "1", 0) ;
+		setenv("TRK_LIVELOG", "1", 0) ; setenv("DBGTAIL", "1", 0) ;
+	}
 	// el tema elegido en la consola (Proyecto > TEMA)
 	Variable *t = FindVariable("THEME") ;
 	if (t && t->GetString() && *t->GetString()) ApplyTheme(t->GetString()) ;

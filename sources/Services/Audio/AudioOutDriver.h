@@ -18,6 +18,7 @@ void GetAudioLoad(int &current, int &peak) ;
 
 class AudioOutDriver: public AudioOut,protected I_Observer {
   public:
+	static void DiagDump(const char *path) ;
     AudioOutDriver(AudioDriver &) ;
     virtual ~AudioOutDriver() ;
 
@@ -48,6 +49,7 @@ class AudioOutDriver: public AudioOut,protected I_Observer {
     void clipToMix();
 
   private:
+	void diagRecord() ;
     AudioDriver *driver_;
     bool hasSound_;
 

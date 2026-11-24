@@ -383,6 +383,15 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
      // o completa en trigger) en vez de cortarse; con glide no: se desliza
      // trk2als: clip de audio que sigue sonando: pasa a la voz de cola y se
      // apaga en 4 ms mientras entra el nuevo (sin click)
+     {   // trk2als: diagnóstico (DIAG=YES): cómo estaba la voz al relanzar
+         static int dbg = -1 ;
+         if (dbg < 0) dbg = getenv("DBGTAIL") ? 1 : 0 ;
+         if (dbg && channel<SONG_CHANNEL_COUNT)
+             fprintf(stderr,"[DIAG] %lu start ch%d %s clip=%d fin=%d sale=%d/%d hace=%lums pos=%.0f\n",
+                     System::GetInstance()->GetClock(),channel,GetName(),(int)rp->audioClip_,(int)rp->finished_,
+                     rp->declickOut_,rp->declickOutLen_,voiceClock_[channel]?System::GetInstance()->GetClock()-voiceClock_[channel]:0,
+                     (float)rp->position_) ;
+     }
      if (!kitStarting_ && channel<SONG_CHANNEL_COUNT && rp->audioClip_ && !rp->finished_ &&
          voiceClock_[channel]!=0 &&
          System::GetInstance()->GetClock()-voiceClock_[channel]<200) {

@@ -24,6 +24,7 @@
 #include <utime.h>
 #endif
 #include "Resources/hdfont.h"
+#include "Services/Audio/AudioOutDriver.h"
 #include "Application/Utils/Fonts.h"
 #include "Application/Model/Config.h"
 #include "Application/Utils/ProjectName.h"
@@ -1117,6 +1118,10 @@ void AppWindow::onQuitApp() {
     // trk2als: salir sin desarmar nada (desarmar el audio y Link al final
     // dejaba la consola en negro); el sistema cierra el audio y los archivos
     Trace::Log("SALIR", "saliendo");
+    {   // trk2als: DIAG=YES: los últimos 30 s de audio, a diag.wav
+        Path dp("bin:diag.wav");
+        AudioOutDriver::DiagDump(dp.GetPath().c_str());
+    }
     fflush(stdout);
     fflush(stderr);
     fsync(1);
