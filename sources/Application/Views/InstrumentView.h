@@ -88,7 +88,11 @@ private:
 	// trk2als: slice manual, editar marcas sobre la onda
 	bool waveEdit_ ;
 	int waveZoom_ ;
-	int waveSel_ ;            // 0 nada, 1 la marca del cursor, 2 todas
+	int waveSel_ ;            // 0 nada, 1 la marca agarrada (A), 2 todas, 3 marcando (Select, B)
+	int waveAnchor_ ;         // marcando: desde dónde
+	bool waveAPut_ ;          // A en un lugar vacío: la marca se pone al soltar (o al moverla)
+	void toggleDraw() ;
+	void waveARelease() ;
 	unsigned long lastAPress_ ;
 	bool previewing_ ;
 	int previewPos_ ;
@@ -96,7 +100,7 @@ private:
 	bool songByTap_ ;         // la canción la arrancó la edición
 	void startTapPlay(int from) ;
 	void stopTapPlay() ;
-	void enterWaveEdit() ;
+	void enterWaveEdit(bool play=true) ;
 	void exitWaveEdit() ;
 	bool processWaveEdit(unsigned short mask,bool pressed) ;
 	void startPreview(int from=-1,int end=-1) ;

@@ -333,6 +333,8 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data),
 	waveEdit_=false ;
 	waveZoom_=1 ;
 	waveSel_=0 ;
+	waveAnchor_=0 ;
+	waveAPut_=false ;
 	lastAPress_=0 ;
 	previewing_=false ;
 	previewPos_=-1 ;
@@ -1097,6 +1099,10 @@ void InstrumentView::warpToNext(int offset) {
 static FourCC focusID(FieldView &fv) ;
 
 void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
+	// trk2als: Select tocado solo (sin nada más): de las cajas al dibujo y de
+	// regreso, como notas <-> curva en el clip
+	if (pressed) selTap_=(mask==EPBM_SELECT) ;
+	else if (selTap_ && mask==0) { selTap_=false ; toggleDraw() ; isDirty_=true ; return ; }
 	// trk2als: L o R solos (tocar y soltar, sin nada más): la página de al lado
 	if (gridMode_ && pageCount_>1 && !waveEdit_) {
 		if (pressed) pageTap_=(mask==EPBM_L)?-1:(mask==EPBM_R)?1:0 ;
@@ -1639,7 +1645,7 @@ void InstrumentView::drawGrid() {
 		bool moving=here && aHeld && !f.IsStatic() ;
 		GUIColor box=moving?fg:card, ink=moving?bg:fg, soft=Mix(box,ink,55) ;
 		if (moving) FillRect(cx,cy,cw,ch,box,7) ;
-		if (here && !moving) FrameRect(cx,cy,cw,ch,fg,7,3) ;
+		if (here && !moving && !waveEdit_) FrameRect(cx,cy,cw,ch,fg,7,3) ;   // dibujando: el cursor está arriba
 		DrawText(cx+12,cy+10,name.c_str(),soft,1) ;
 		if (value.empty()) continue ;
 		// el número (con signo y punto) grande; lo que sigue, su unidad
@@ -1749,6 +1755,7 @@ void InstrumentView::drawWaveformBody() {
 	const int X=16, Y=gridMode_?48:(kitMode_?56:34), W=WF_BARS*8,
 	          H=gridMode_?186:(kitMode_?144:(simplerView_?80:112)) ;
 	FillRect(X-8,Y-4,W+16,H+8,Mix(bg,fg,9),8) ;
+	if (gridMode_ && waveEdit_) FrameRect(X-8,Y-4,W+16,H+8,fg,8,3) ;   // dibujando: el marco pasa aquí
 
 	if (kitMode_) {   // trk2als: kit: la rejilla de pads
 		drawPadGrid(si,X,Y,W,H) ;
@@ -2172,7 +2179,8 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 			if (cpos>cb) cpos=cb ;
 			int near=nearMark(m) ;
 			for (size_t i=0;i<m.size();i++) {
-				bool sel=(waveSel_>=2) || (waveSel_==1 && int(i)==near) ;
+				int rlo=waveAnchor_<cpos?waveAnchor_:cpos, rhi=waveAnchor_<cpos?cpos:waveAnchor_ ;
+				bool sel=(waveSel_==2) || (waveSel_==1 && int(i)==near) || (waveSel_==3 && m[i]>=rlo && m[i]<=rhi) ;
 				if (sel) {
 					int mx=FPX(m[i]) ;
 					if (mx>=X && mx<=X+W) FillRect(mx-2,Y-4,4,H+8,hi) ;
@@ -2294,8 +2302,8 @@ void InstrumentView::AnimationUpdate() {
 		int ra,rb ;
 		if (tapPlay_ && (sp==-1 || (sp>=0 && si->SimplerRegion(ra,rb) && sp>=rb))) {
 			stopTapPlay() ;
-			ClearShapes() ;
-			drawWaveform() ;
+			if (gridMode_) DrawView() ;   // la rejilla también es de figuras
+			else { ClearShapes() ; drawWaveform() ; }
 			return ;
 		}
 		if (sp==-1 && !tapPlay_) {
@@ -2309,8 +2317,8 @@ void InstrumentView::AnimationUpdate() {
 		}
 	}
 	if (px!=playheadPx_) {
-		ClearShapes() ;
-		drawWaveform() ;
+		if (gridMode_) DrawView() ;   // la rejilla también es de figuras
+		else { ClearShapes() ; drawWaveform() ; }
 	}
 }
 
@@ -2472,7 +2480,7 @@ void InstrumentView::OnPresetSave(const std::string &shortName) {
    ↓              soltar la marca agarrada / terminar (queda en "slice by")
  ************************************************************/
 
-void InstrumentView::enterWaveEdit() {
+void InstrumentView::enterWaveEdit(bool play) {
 	if (!current_ || current_->GetType()!=IT_SAMPLE) return ;
 	SampleInstrument *si=(SampleInstrument *)current_ ;
 	int a,b ;
@@ -2480,10 +2488,26 @@ void InstrumentView::enterWaveEdit() {
 	waveEdit_=true ;
 	waveZoom_=1 ;
 	waveSel_=0 ;
+	waveAPut_=false ;
 	lastAPress_=0 ;
 	int c=markVar_.GetInt() ;
 	if (c<a || c>b) markVar_.SetInt(a) ;
-	startTapPlay(a) ;
+	if (play) startTapPlay(a) ;
+}
+
+// trk2als: Select: cajas <-> dibujo. Por ahora el dibujo editable son las
+// rebanadas a mano (página SONIDO, modo slice, slice by manual)
+void InstrumentView::toggleDraw() {
+	if (waveEdit_) { exitWaveEdit() ; return ; }
+	if (!current_ || current_->GetType()!=IT_SAMPLE) return ;
+	SampleInstrument *si=(SampleInstrument *)current_ ;
+	if (sfMode_ || kitMode_ || audioMode_) return ;
+	if (si->GetSimpler(SIP_S_MODE)!=SM_SLICE) return ;
+	if (si->GetSimpler(SIP_S_SLICEBY)!=SSB_MANUAL) {
+		View::SetNotification("rebanadas a mano: SLICES en manual") ;
+		return ;
+	}
+	enterWaveEdit(false) ;
 }
 
 // trk2als: toda la región suena desde 'from' (y la canción, si no estaba
@@ -2579,6 +2603,7 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 		return false ;
 	}
 	if (!pressed) {
+		if (!(mask&EPBM_A) && (waveAPut_ || waveSel_==1)) waveARelease() ;
 		if (previewing_ && !tapPlay_ && !slicePlay_ && !(mask&EPBM_A)) stopPreview() ;
 		return true ;
 	}
@@ -2641,117 +2666,126 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 		stopTapPlay() ;
 	}
 
-	if ((mask&(EPBM_SELECT|EPBM_R)) && (mask&EPBM_B) && !(mask&EPBM_A)) {   // Select + B: seleccionar
-		waveSel_=(waveSel_>=2)?2:waveSel_+1 ;
+	// Select, B: marcar desde aquí (las flechas agrandan); otra vez: todas
+	if ((mask&(EPBM_SELECT|EPBM_R)) && (mask&EPBM_B) && !(mask&EPBM_A)) {
+		if (waveSel_==3) { waveSel_=2 ; View::SetNotification("marcadas todas") ; }
+		else { waveSel_=3 ; waveAnchor_=c ; View::SetNotification("marcando: flechas para agrandar") ; }
 		return true ;
 	}
-	if ((mask&EPBM_B) && (mask&EPBM_A)) {     // B + A: borrar
-		if (waveSel_>=2) {
-			m.clear() ;
-			si->SetMarks(m) ;
+	if ((mask&EPBM_B) && (mask&EPBM_A)) {     // B + A: borrar (la del cursor o las marcadas)
+		if (waveSel_==2) m.clear() ;
+		else if (waveSel_==3) {
+			int lo=waveAnchor_<c?waveAnchor_:c, hi=waveAnchor_<c?c:waveAnchor_ ;
+			std::vector<int> keep ;
+			for (size_t i=0;i<m.size();i++) if (m[i]<lo || m[i]>hi) keep.push_back(m[i]) ;
+			m=keep ;
 		} else {
 			int k=nearMark(m) ;
-			if (k>=0) {
-				m.erase(m.begin()+k) ;
-				si->SetMarks(m) ;
-			}
+			if (k>=0) m.erase(m.begin()+k) ;
 		}
+		si->SetMarks(m) ;
 		waveSel_=0 ;
+		waveAPut_=false ;
 		return true ;
 	}
 	if (mask&EPBM_B) {
-		if (mask&EPBM_RIGHT) {                  // B + →: la marca siguiente
-			int next=b ;
-			for (size_t i=0;i<m.size();i++) if (m[i]>c && m[i]<next) next=m[i] ;
-			markVar_.SetInt(next) ;
-			waveSel_=(next<b)?1:0 ;             // la marca queda agarrada: ← → la mueven
-		} else if (mask&EPBM_LEFT) {            // B + ←: la anterior
-			int prev=a ;
-			for (size_t i=0;i<m.size();i++) if (m[i]<c && m[i]>prev) prev=m[i] ;
-			markVar_.SetInt(prev) ;
-			waveSel_=(prev>a)?1:0 ;
-		}
-		return true ;
-	}
-	if (mask&EPBM_A) {
-		if (mask==EPBM_A) {
-			unsigned long now=System::GetInstance()->GetClock() ;
-			if (lastAPress_ && now-lastAPress_<400) {   // doble toque: marca
-				int at=si->AddMark(c) ;
-				if (at>=0) markVar_.SetInt(at) ;
-				else View::SetNotification("muy cerca de otra marca") ;
-				lastAPress_=0 ;
-			} else {
-				lastAPress_=now ;
-			}
-			waveSel_=0 ;
-			int f,t ;                    // del cursor (o su marca) a la siguiente marca
-			sliceAt(c,f,t) ;
-			startPreview(c,t) ;
-			return true ;
-		}
-		if (mask&(EPBM_LEFT|EPBM_RIGHT)) {        // A + ← →: moverse escuchando
-			c+=(mask&EPBM_RIGHT)?step:-step ;
+		if (mask&(EPBM_LEFT|EPBM_RIGHT)) {     // B + ← →: de a saltos grandes
+			c+=((mask&EPBM_RIGHT)?step:-step)*16 ;
 			if (c<a) c=a ;
 			if (c>b) c=b ;
 			markVar_.SetInt(c) ;
-			lastAPress_=0 ;
-			int f,t ;                    // del cursor hasta la siguiente marca
-			sliceAt(c,f,t) ;
-			startPreview(c,t) ;
-		} else if (mask&EPBM_UP) {                // A + ↑ / ↓: zoom
+		} else if (mask&EPBM_UP) {             // B + ↑ / ↓: zoom
 			if (waveZoom_<64) waveZoom_*=2 ;
 		} else if (mask&EPBM_DOWN) {
 			if (waveZoom_>1) waveZoom_/=2 ;
 		}
 		return true ;
 	}
-	if ((mask==EPBM_LEFT || mask==EPBM_RIGHT) && waveSel_==1) {
-		int k=nearMark(m) ;
-		if (k>=0) {
+	if (mask&EPBM_Y) {                         // Y + ← →: de marca en marca
+		if (mask&EPBM_RIGHT) {
+			int next=b ;
+			for (size_t i=0;i<m.size();i++) if (m[i]>c && m[i]<next) next=m[i] ;
+			markVar_.SetInt(next) ;
+		} else if (mask&EPBM_LEFT) {
+			int prev=a ;
+			for (size_t i=0;i<m.size();i++) if (m[i]<c && m[i]>prev) prev=m[i] ;
+			markVar_.SetInt(prev) ;
+		}
+		return true ;
+	}
+	if (mask&EPBM_A) {
+		if (mask==EPBM_A) {                    // A sobre una marca: la agarra; en vacío: pone una al soltar
+			int k=nearMark(m) ;
+			if (k>=0) { waveSel_=1 ; markVar_.SetInt(m[k]) ; waveAPut_=false ; }
+			else { waveSel_=0 ; waveAPut_=true ; }
+			return true ;
+		}
+		if (mask&(EPBM_LEFT|EPBM_RIGHT)) {     // A + ← →: moverla
+			if (waveAPut_) {                     // en vacío y moviendo: se pone y se mueve
+				waveAPut_=false ;
+				int at=si->AddMark(c) ;
+				if (at>=0) { markVar_.SetInt(at) ; m=si->GetMarks() ; waveSel_=1 ; }
+				else View::SetNotification("muy cerca de otra marca") ;
+			}
+			if (waveSel_!=1) return true ;
+			int k=nearMark(m) ;
+			if (k<0) return true ;
 			int gap=si->MinMarkGap() ;           // no se pega a sus vecinas
 			int lo=((k>0)?m[k-1]:a)+gap ;
 			int hi=((k+1<(int)m.size())?m[k+1]:b)-gap ;
 			if (hi<lo) hi=lo ;
-			int p=m[k]+((mask==EPBM_RIGHT)?step:-step) ;
+			int p=m[k]+((mask&EPBM_RIGHT)?step:-step) ;
 			if (p<lo) p=lo ;
 			if (p>hi) p=hi ;
 			m[k]=p ;
 			si->SetMarks(m) ;
 			markVar_.SetInt(p) ;
-			return true ;
 		}
-		waveSel_=0 ;
+		return true ;
 	}
-	if (mask==EPBM_LEFT || mask==EPBM_RIGHT) {
+	if (mask==EPBM_LEFT || mask==EPBM_RIGHT) {   // ← →: el cursor
 		c+=(mask==EPBM_RIGHT)?step:-step ;
 		if (c<a) c=a ;
 		if (c>b) c=b ;
 		markVar_.SetInt(c) ;
 		return true ;
 	}
-	if (mask==EPBM_DOWN) {                       // terminar: queda en "slice by"
-		if (waveSel_==1) {                         // soltar la marca, en el cruce por cero
-			int k=nearMark(m) ;
-			if (k>=0) {
-				int old=m[k] ;
-				m.erase(m.begin()+k) ;
-				si->SetMarks(m) ;
-				int at=si->AddMark(c) ;
-				if (at<0) {                          // no cupo en el cruce: se queda donde estaba
-					m.push_back(old) ;
-					std::sort(m.begin(),m.end()) ;
-					si->SetMarks(m) ;
-					at=old ;
-				}
-				markVar_.SetInt(at) ;
-			}
-			waveSel_=0 ;
-		} else if (waveSel_) waveSel_=0 ;
-		else exitWaveEdit() ;
-		return true ;
-	}
 	return true ;
+}
+
+// trk2als: al soltar A en el dibujo de las rebanadas: la marca nueva (A en
+// vacío) o la agarrada se acomoda en el cruce por cero, y suena su rebanada
+void InstrumentView::waveARelease() {
+	SampleInstrument *si=(SampleInstrument *)current_ ;
+	int c=markVar_.GetInt(), at=-1 ;
+	if (waveAPut_) {
+		waveAPut_=false ;
+		at=si->AddMark(c) ;
+		if (at<0) View::SetNotification("muy cerca de otra marca") ;
+	} else if (waveSel_==1) {
+		std::vector<int> m=si->GetMarks() ;
+		int k=nearMark(m) ;
+		if (k>=0) {
+			int old=m[k] ;
+			m.erase(m.begin()+k) ;
+			si->SetMarks(m) ;
+			at=si->AddMark(c) ;
+			if (at<0) {                          // no cupo en el cruce: se queda donde estaba
+				m.push_back(old) ;
+				std::sort(m.begin(),m.end()) ;
+				si->SetMarks(m) ;
+				at=old ;
+			}
+		}
+		waveSel_=0 ;
+	}
+	if (at>=0) {
+		markVar_.SetInt(at) ;
+		int f,t ;
+		sliceAt(at,f,t) ;
+		startPreview(at,t) ;
+	}
+	isDirty_=true ;
 }
 
 
