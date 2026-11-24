@@ -577,10 +577,11 @@ void InstrumentView::fillSampleParameters() {
 			gridMode_=true ;
 			T_SimpleList<UIField>::Remove(*f1,true) ;   // el sonido: se cambia desde la cabecera
 			pageCount_=0 ;
+			// por lo que más se usa: sonido, amp, filtro y al final warp
 			pageName_[pageCount_++]="SONIDO" ;
-			if (!sfMode_) pageName_[pageCount_++]="WARP" ;
-			pageName_[pageCount_++]="FILTRO" ;
 			pageName_[pageCount_++]="AMP" ;
+			pageName_[pageCount_++]="FILTRO" ;
+			if (!sfMode_) pageName_[pageCount_++]="WARP" ;
 			int &pg=page_[1] ;
 			if (pg<0 || pg>=pageCount_) pg=0 ;
 			const char *pn=pageName_[pg] ;
@@ -2117,8 +2118,8 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 			int nx=nodes[k] ;
 			if (nx<a || nx-a>=int(ys.size())) continue ;
 			int ny=ys[nx-a] ;
-			FillRect(nx-6,ny-6,12,12,cc,6) ;
-			FillRect(nx-3,ny-3,6,6,bg,3) ;
+			FillRect(nx-8,ny-8,16,16,cc,8) ;
+			FillRect(nx-4,ny-4,8,8,bg,4) ;
 		}
 	} else
 	for (int x=a;x<b;x+=3) {
@@ -2218,7 +2219,7 @@ void InstrumentView::drawCurveLine(const std::vector<int> &ys,int x0,GUIColor c,
 	int n=int(ys.size()) ;
 	for (int i=0;i<n;i++) {
 		int x=x0+i ;
-		int th=(x>=hiFrom && x<hiTo)?4:2 ;
+		int th=(x>=hiFrom && x<hiTo)?7:4 ;   // en la consola, 2 px se pierden
 		int y=ys[i], prev=i>0?ys[i-1]:y ;
 		int y0=y<prev?y:prev, y1=y<prev?prev:y ;
 		FillRect(x,y0-th/2,1,y1-y0+th,c) ;
