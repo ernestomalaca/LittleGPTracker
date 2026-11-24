@@ -26,6 +26,10 @@
 #include "System/Console/Trace.h"
 #include <cstring>
 #include <string>
+#include <vector>
+#include <algorithm>
+#include "Application/AppWindow.h"
+#include "System/FileSystem/FileSystem.h"
 
 #define ACTION_PURGE            MAKE_FOURCC('P','U','R','G')
 #define ACTION_SAVE             MAKE_FOURCC('S','A','V','E')
@@ -176,12 +180,13 @@ ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
 
     // las fichas
     struct Chip { FourCC var; int x, y, min, max, xo, yo; };
-    const Chip chips[9] = {
+    const Chip chips[CHIPS] = {
         {VAR_MASTERVOL, 1, 6, 10, 100, 1, 10},  {VAR_PREGAIN, 10, 6, 10, 200, 1, 10},
         {VAR_QUANTIZE, 19, 6, 0, 100, 5, 25},   {VAR_SWING, 28, 6, 50, 75, 1, 5},   // trk2als (el softclip va al mixer)
         {VAR_MIDIDEVICE, 1, 7, 0, 0, 1, 1},     {VAR_METRONOME, 10, 7, 0, 1, 1, 1},
         {VAR_TRANSPOSE, 19, 7, -48, 48, 1, 12}, {VAR_FOLD, 28, 7, 0, 1, 1, 1},
         {VAR_FOLLOW, 1, 8, 0, 1, 1, 1},   // trk2als: la tercera fila (aquí van entrando los ajustes nuevos)
+        {VAR_FOLLOW, 10, 8, 0, 0, 1, 1},  // el tema (su variable es themeVar_)
     };
     // trk2als: la ficha 4 (era la salida MIDI de LGPT, que aquí no hay) es
     // la latencia: baja 256/2, media 512/2, alta 512/4 (bloque / reserva)
@@ -193,10 +198,38 @@ ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
         latLast_ = b <= 256 ? 0 : (p <= 2 ? 1 : 2);
         latVar_ = new Variable("latencia", 0, latNames, 3, latLast_);
     }
+    // trk2als: los temas: lavanda (config.xml) y los de chancho6/temas/*.xml
+    {
+        themeCount_ = 0;
+        themeNames_[themeCount_++] = strdup("lavanda");
+        Path root("bin:temas");
+        I_Dir *dir = FileSystem::GetInstance()->Open(root.GetPath().c_str());
+        if (dir) {
+            dir->GetContent((char *)"*.xml");
+            std::vector<std::string> found;
+            IteratorPtr<Path> it(dir->GetIterator());
+            for (it->Begin(); !it->IsDone(); it->Next()) {
+                std::string n = it->CurrentItem().GetName();
+                if (n.size() > 4 && n.substr(n.size() - 4) == ".xml") {
+                    n = n.substr(0, n.size() - 4);
+                    if (n != "lavanda") found.push_back(n);
+                }
+            }
+            delete dir;
+            std::sort(found.begin(), found.end());
+            for (size_t i = 0; i < found.size() && themeCount_ < 32; i++)
+                themeNames_[themeCount_++] = strdup(found[i].c_str());
+        }
+        const char *cur = Config::GetInstance()->GetValue("THEME");
+        themeLast_ = 0;
+        for (int i = 0; cur && i < themeCount_; i++)
+            if (!strcmp(cur, themeNames_[i])) themeLast_ = i;
+        themeVar_ = new Variable("tema", 0, themeNames_, themeCount_, themeLast_);
+    }
     for (int k = 0; k < CHIPS; k++) {
-        v = (k == 4) ? latVar_ : project_->FindVariable(chips[k].var);
+        v = (k == 4) ? latVar_ : (k == 9) ? themeVar_ : project_->FindVariable(chips[k].var);
         NAssert(v);
-        int mx = k == 4 ? 2 : chips[k].max;
+        int mx = k == 4 ? 2 : k == 9 ? themeCount_ - 1 : chips[k].max;
         position = GUIPoint(chips[k].x, chips[k].y);
         UIIntVarField *cf = new UIIntVarField(position, *v, "%s", chips[k].min, mx, chips[k].xo, chips[k].yo);
         chipField_[k] = cf;
@@ -238,6 +271,17 @@ void ProjectView::ProcessButtonMask(unsigned short mask,bool pressed) {
         bool ok = cfg->SetPersistent("AUDIOBUFFERSIZE", bsz[latLast_]) &&
                   cfg->SetPersistent("AUDIOPREBUFFERCOUNT", pre[latLast_]);
         notify(ok ? "Latencia guardada: reinicia Chancho" : "No se pudo guardar la latencia");
+    }
+
+    // trk2als: el tema cambió: se aplica ya y queda en config.xml
+    if (themeVar_ && themeVar_->GetInt() != themeLast_) {
+        themeLast_ = themeVar_->GetInt();
+        const char *name = themeNames_[themeLast_];
+        Config *cfg = Config::GetInstance();
+        cfg->ApplyTheme(name);
+        cfg->SetPersistent("THEME", name);
+        ((AppWindow &)w_).ReloadTheme();
+        isDirty_ = true;
     }
 
     if (mask & EPBM_R) {
@@ -534,7 +578,7 @@ void ProjectView::drawBoard() {
     if (fO) DrawText(lx + 12, TY + 76, "+ si va atrasado", dim, 0);
 
     // fichas
-    static const char *chipName[CHIPS] = {"VOLUMEN", "DRIVE", "CUANTIZAR", "SWING", "LATENCIA", "METRÓNOMO", "TRANSP", "FOLD", "FOLLOW"};
+    static const char *chipName[CHIPS] = {"VOLUMEN", "DRIVE", "CUANTIZAR", "SWING", "LATENCIA", "METRÓNOMO", "TRANSP", "FOLD", "FOLLOW", "TEMA"};
     for (int k = 0; k < CHIPS; k++) {
         // trk2als: tres filas (más bajitas) para que quepan los ajustes nuevos
         int x = 24 + (k % 4) * 150, y = 176 + (k / 4) * 58;
@@ -554,7 +598,7 @@ void ProjectView::drawBoard() {
         if (val == "off") val = "no";
         if (val == "on") val = "sí";
         if (val.empty() || val == "(null)") val = "--";
-        if (val.size() > 7u) val = val.substr(0, 7);
+        if (val.size() > (k == 9 ? 8u : 7u)) val = val.substr(0, k == 9 ? 8 : 7);
         DrawText(x + 12, y + 24, val.c_str(), fg, 1);
     }
 

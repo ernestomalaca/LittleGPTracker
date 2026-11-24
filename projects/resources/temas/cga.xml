@@ -1,4 +1,6 @@
-<!-- tema cga: copia estas líneas dentro de <CONFIG> en chancho6/config.xml (en lugar de los colores que hay) -->
+<!-- Chancho 6 · tema cga: la paleta CGA de las PC de los 80.
+     Se elige en Proyecto > TEMA. Para hacer el tuyo, copia este archivo con otro nombre. -->
+<TEMA>
     <BACKGROUND value = "000000" />
     <FOREGROUND value = "FFFFFF" />
     <BORDER value = "55FFFF" />
@@ -16,3 +18,4 @@
     <TRACKCOLORS value = "55FFFF,FF55FF,FFFFFF,55FF55,FF5555,FFFF55,5555FF,AAAAAA" />
     <GREENCOLOR value = "55FF55" />
     <ICONCOLORS value = "FF55FF,55FFFF,FFFF55" />
+</TEMA>

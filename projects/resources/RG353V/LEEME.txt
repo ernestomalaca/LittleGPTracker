@@ -226,6 +226,12 @@ Cuantizar y swing
   Latencia (Proyecto > LATENCIA): baja, media o alta. Baja responde más
   rápido al tocar; si con proyectos pesados el audio se corta, sube a
   media. Se guarda en config.xml y toma efecto al reiniciar Chancho.
+  Tema (Proyecto > TEMA, A + izquierda/derecha): cambia los colores al
+  instante y se queda guardado. lavanda (el de siempre), papel, fosforo,
+  ambar, cga, live, macgris, mac1bit (1 bit, como el Mac clásico: los
+  grises son tramas de puntos), negativo y neg1bit. Viven en
+  chancho6/temas: para hacer el tuyo copia uno con otro nombre y cambia
+  los colores (en hex). DITHER = 1 lo deja en 1 bit (2 = puntos gordos).
 
 Loops en complex
   La primera vez que suena un loop en complex (o después de cambiar el

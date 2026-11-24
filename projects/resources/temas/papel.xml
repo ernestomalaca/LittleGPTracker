@@ -1,4 +1,6 @@
-<!-- tema papel: copia estas líneas dentro de <CONFIG> en chancho6/config.xml (en lugar de los colores que hay) -->
+<!-- Chancho 6 · tema papel: blanco y negro, como tinta sobre papel.
+     Se elige en Proyecto > TEMA. Para hacer el tuyo, copia este archivo con otro nombre. -->
+<TEMA>
     <BACKGROUND value = "F4F3EF" />
     <FOREGROUND value = "141414" />
     <BORDER value = "141414" />
@@ -16,3 +18,4 @@
     <TRACKCOLORS value = "1A1A1A,333333,4D4D4D,262626,404040,595959,2B2B2B,474747" />
     <GREENCOLOR value = "141414" />
     <ICONCOLORS value = "3A3A3A,5A5A5A,7A7A7A" />
+</TEMA>

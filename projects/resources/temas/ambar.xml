@@ -1,4 +1,6 @@
-<!-- tema ambar: copia estas líneas dentro de <CONFIG> en chancho6/config.xml (en lugar de los colores que hay) -->
+<!-- Chancho 6 · tema ambar: monitor ámbar de los 80.
+     Se elige en Proyecto > TEMA. Para hacer el tuyo, copia este archivo con otro nombre. -->
+<TEMA>
     <BACKGROUND value = "140C02" />
     <FOREGROUND value = "FFB000" />
     <BORDER value = "FFB000" />
@@ -16,3 +18,4 @@
     <TRACKCOLORS value = "FFB000,E09A00,FFC845,C78800,FFBE2E,F0A500,B07800,FFD060" />
     <GREENCOLOR value = "FFD27A" />
     <ICONCOLORS value = "FFB000,E09A00,FFC845" />
+</TEMA>

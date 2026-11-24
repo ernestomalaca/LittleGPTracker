@@ -8,6 +8,7 @@ make PLATFORM=RG353V -j8
 SDK=/opt/rg35xx-plus-aarch64-SDL2-SDK-0.1.0
 OUT=$(mktemp -d)
 cp -a resources/RG353V/. "$OUT/"
+mkdir -p "$OUT/chancho6/temas" && cp resources/temas/*.xml "$OUT/chancho6/temas/"
 rm -f "$OUT/empaquetar.sh"
 # Python para exportar a Live desde chancho.local (sin internet): Pyodide
 PYO=$(mktemp -d)

@@ -2885,9 +2885,12 @@ static unsigned char trackColors[8][3] = {   // tema Lavanda
 // trk2als: los colores de las pistas se pueden cambiar en config.xml:
 // <TRACKCOLORS value="E0B24A,E8955A,..."/> (hasta 8, en hex)
 static void loadTrackColors() {
-    static bool done = false;
-    if (done) return;
-    done = true;
+    static int gen = -1;   // se vuelven a leer si cambia el tema
+    static unsigned char def[8][3];
+    if (gen == Config::Generation()) return;
+    if (gen < 0) memcpy(def, trackColors, sizeof(def));
+    gen = Config::Generation();
+    memcpy(trackColors, def, sizeof(def));
     const char *v = Config::GetInstance()->GetValue("TRACKCOLORS");
     if (!v) return;
     for (int i = 0; i < 8 && *v; i++) {

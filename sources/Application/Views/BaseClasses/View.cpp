@@ -305,9 +305,13 @@ bool View::ThemeColor(const char *key, GUIColor &out, int idx) {
 }
 
 GUIColor View::LinkGreen() {   // el verde de Link (y de "suena"); el tema lo cambia con GREENCOLOR
-	static int set = -1 ;
+	static int gen = -1 ;
 	static GUIColor c(0x3E, 0xCF, 0xAA) ;
-	if (set < 0) set = ThemeColor("GREENCOLOR", c) ? 1 : 0 ;
+	if (gen != Config::Generation()) {
+		gen = Config::Generation() ;
+		c = GUIColor(0x3E, 0xCF, 0xAA) ;
+		ThemeColor("GREENCOLOR", c) ;
+	}
 	return c ;
 }
 
@@ -628,9 +632,13 @@ GUIColor View::TrackColor(int track) {
 	static unsigned char tc[8][3] = {
 		{0xE6, 0xC0, 0x7A}, {0xE8, 0xA0, 0x7E}, {0x8F, 0xA0, 0xF0}, {0xB7, 0xA4, 0xF0},
 		{0xE2, 0x8D, 0xB8}, {0x7F, 0xC9, 0x8E}, {0x74, 0xC2, 0xC8}, {0xB2, 0xD5, 0x8A}} ;
-	static bool loaded = false ;
-	if (!loaded) {
-		loaded = true ;
+	static const unsigned char def[8][3] = {
+		{0xE6, 0xC0, 0x7A}, {0xE8, 0xA0, 0x7E}, {0x8F, 0xA0, 0xF0}, {0xB7, 0xA4, 0xF0},
+		{0xE2, 0x8D, 0xB8}, {0x7F, 0xC9, 0x8E}, {0x74, 0xC2, 0xC8}, {0xB2, 0xD5, 0x8A}} ;
+	static int gen = -1 ;   // se vuelven a leer si cambia el tema
+	if (gen != Config::Generation()) {
+		gen = Config::Generation() ;
+		memcpy(tc, def, sizeof(tc)) ;
 		const char *v = Config::GetInstance()->GetValue("TRACKCOLORS") ;
 		for (int i = 0; v && i < 8 && *v; i++) {
 			unsigned int c ;

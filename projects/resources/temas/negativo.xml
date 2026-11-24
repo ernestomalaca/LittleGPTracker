@@ -1,5 +1,6 @@
-<!-- tema negativo (fondo negro, lo demás blanco): copia estas líneas dentro de <CONFIG> en chancho6/config.xml.
-     Con <DITHER value = "1" /> queda en 1 bit. El tema mac sin la línea DITHER queda en grises. -->
+<!-- Chancho 6 · tema negativo: fondo negro, lo demás blanco.
+     Se elige en Proyecto > TEMA. Para hacer el tuyo, copia este archivo con otro nombre. -->
+<TEMA>
     <BACKGROUND value = "000000" />
     <FOREGROUND value = "FFFFFF" />
     <BORDER value = "FFFFFF" />
@@ -17,3 +18,4 @@
     <TRACKCOLORS value = "FFFFFF,CFCFCF,FFFFFF,E3E3E3,FFFFFF,CFCFCF,FFFFFF,E3E3E3" />
     <GREENCOLOR value = "FFFFFF" />
     <ICONCOLORS value = "FFFFFF,CFCFCF,E3E3E3" />
+</TEMA>

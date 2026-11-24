@@ -113,7 +113,7 @@ SDLGUIWindowImp::SDLGUIWindowImp(GUICreateWindowParams &p) {
     // tramas de puntos (Bayer 4x4) en píxeles del tamaño del SCREENMULT
     {
         const char *d = Config::GetInstance()->GetValue("DITHER");
-        dither_ = !d ? 0 : !strcmp(d, "YES") ? 1 : atoi(d);   // YES = 1, "2" = puntos gordos
+        dither_ = !d || !*d ? 0 : !strcmp(d, "YES") ? 1 : atoi(d);   // YES = 1, "2" = puntos gordos
         if (dither_ < 0 || dither_ > 4) dither_ = 0;
     }
 
@@ -734,6 +734,15 @@ void SDLGUIWindowImp::ditherRect(const SDL_Rect &r0) {
 }
 
 void SDLGUIWindowImp::Flush() {
+    // el tema cambió: la trama y (si hay caché) las fuentes
+    static int gen = Config::Generation();
+    if (gen != Config::Generation()) {
+        gen = Config::Generation();
+        const char *d = Config::GetInstance()->GetValue("DITHER");
+        dither_ = !d || !*d ? 0 : !strcmp(d, "YES") ? 1 : atoi(d);
+        if (dither_ < 0 || dither_ > 4) dither_ = 0;
+        if (cacheFonts_) prepareFonts();
+    }
     if (dither_) {
         if (SDL_MUSTLOCK(surface_)) SDL_LockSurface(surface_);
         if (framebuffer_ || updateCount_ >= MAX_OVERLAYS) {

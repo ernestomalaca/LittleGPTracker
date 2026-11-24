@@ -1,4 +1,6 @@
-<!-- tema fosforo: copia estas líneas dentro de <CONFIG> en chancho6/config.xml (en lugar de los colores que hay) -->
+<!-- Chancho 6 · tema fosforo: monitor verde de terminal antigua.
+     Se elige en Proyecto > TEMA. Para hacer el tuyo, copia este archivo con otro nombre. -->
+<TEMA>
     <BACKGROUND value = "06120A" />
     <FOREGROUND value = "3CFF6E" />
     <BORDER value = "3CFF6E" />
@@ -16,3 +18,4 @@
     <TRACKCOLORS value = "3CFF6E,2ED65A,7DFFA0,24B84C,52FF84,33E866,1FA045,66FF91" />
     <GREENCOLOR value = "9CFFB4" />
     <ICONCOLORS value = "3CFF6E,2ED65A,7DFFA0" />
+</TEMA>

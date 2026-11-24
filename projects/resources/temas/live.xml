@@ -1,4 +1,6 @@
-<!-- tema live: copia estas líneas dentro de <CONFIG> en chancho6/config.xml (en lugar de los colores que hay) -->
+<!-- Chancho 6 · tema live: gris, naranja y los colores de clip de Ableton Live.
+     Se elige en Proyecto > TEMA. Para hacer el tuyo, copia este archivo con otro nombre. -->
+<TEMA>
     <BACKGROUND value = "1E1E1E" />
     <FOREGROUND value = "CDCDCD" />
     <BORDER value = "FFA22A" />
@@ -16,3 +18,4 @@
     <TRACKCOLORS value = "FF94A6,FFA529,CC9927,F7F47C,BFFB00,1AFF2F,25FFA8,5CFFE8" />
     <GREENCOLOR value = "1DDB6D" />
     <ICONCOLORS value = "FFA529,FF94A6,5CFFE8" />
+</TEMA>

@@ -125,7 +125,7 @@ void AppWindow::defineColor(const char *colorName, GUIColor &color) {
 
     Config *config = Config::GetInstance();
     const char *value = config->GetValue(colorName);
-    if (value) {
+    if (value && strlen(value) >= 6) {
         unsigned char r;
         char2hex(value, &r);
         unsigned char g;
@@ -134,6 +134,42 @@ void AppWindow::defineColor(const char *colorName, GUIColor &color) {
         char2hex(value + 4, &b);
         color = GUIColor(r, g, b);
     }
+}
+
+// trk2als: los colores del tema (config.xml + el tema elegido); la primera vez
+// guarda los de fábrica para volver a ellos si un tema no trae alguno
+void AppWindow::applyThemeColors() {
+    static GUIColor *slot[15] = {&backgroundColor_, &normalColor_, &borderColor_, &songviewfeColor_,
+                                 &songview00Color_, &highlightColor_, &highlight2Color_, &cursorColor_,
+                                 &playColor_, &muteColor_, &rownumberColor_, &rownumber2Color_,
+                                 &majorbeatColor_, &columnTitleColor_, &consoleColor_};
+    static const char *key[15] = {"BACKGROUND", "FOREGROUND", "BORDER", "SONGVIEW_FE", "SONGVIEW_00",
+                                  "HICOLOR1", "HICOLOR2", "CURSORCOLOR", "PLAYCOLOR", "MUTECOLOR",
+                                  "ROWCOLOR1", "ROWCOLOR2", "MAJORBEAT", "COL_TITLE", "CONSOLE"};
+    static int def[15][3];
+    static bool saved = false;
+    if (!saved) {
+        saved = true;
+        for (int i = 0; i < 15; i++) {
+            def[i][0] = slot[i]->_r; def[i][1] = slot[i]->_g; def[i][2] = slot[i]->_b;
+        }
+    }
+    for (int i = 0; i < 15; i++) {
+        *slot[i] = GUIColor(def[i][0], def[i][1], def[i][2]);
+        defineColor(key[i], *slot[i]);
+    }
+}
+
+// cambia el tema y vuelve a dibujar todo
+void AppWindow::ReloadTheme() {
+    applyThemeColors();
+    _shapes.clear();
+    TrimShapeLayers(0);
+    _shapesDirty = true;
+    _isDirty = true;
+    GUIWindow::Clear(backgroundColor_, true);
+    Clear(true);
+    if (_currentView) _currentView->SetDirty(true);
 }
 
 AppWindow::AppWindow(I_GUIWindowImp &imp) : GUIWindow(imp) {
@@ -194,21 +230,7 @@ AppWindow::AppWindow(I_GUIWindowImp &imp) : GUIWindow(imp) {
     // Init midi services
     MidiService::GetInstance()->Init();
 
-    defineColor("BACKGROUND", backgroundColor_);
-    defineColor("FOREGROUND", normalColor_);
-    defineColor("BORDER", borderColor_);
-    defineColor("SONGVIEW_FE", songviewfeColor_);
-    defineColor("SONGVIEW_00", songview00Color_);
-    defineColor("HICOLOR1", highlightColor_);
-    defineColor("HICOLOR2", highlight2Color_);
-    defineColor("CURSORCOLOR", cursorColor_);
-    defineColor("PLAYCOLOR", playColor_);
-    defineColor("MUTECOLOR", muteColor_);
-    defineColor("ROWCOLOR1", rownumberColor_);
-    defineColor("ROWCOLOR2", rownumber2Color_);
-    defineColor("MAJORBEAT", majorbeatColor_);
-    defineColor("COL_TITLE", columnTitleColor_);
-    defineColor("CONSOLE", consoleColor_);
+    applyThemeColors();
 
     GUIWindow::Clear(backgroundColor_);
 

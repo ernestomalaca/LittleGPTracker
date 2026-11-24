@@ -1,8 +1,18 @@
 #include "Config.h"
+#include "System/FileSystem/FileSystem.h"
+
+int Config::generation_ = 0 ;
+
+// lo que un tema puede cambiar
+static const char *themeKeys[] = {
+	"BACKGROUND", "FOREGROUND", "BORDER", "HICOLOR1", "HICOLOR2", "SONGVIEW_FE",
+	"SONGVIEW_00", "CURSORCOLOR", "PLAYCOLOR", "MUTECOLOR", "ROWCOLOR1", "ROWCOLOR2",
+	"MAJORBEAT", "COL_TITLE", "TRACKCOLORS", "GREENCOLOR", "ICONCOLORS", "DITHER", 0} ;
 
 
 Config::Config() 
 {
+	themeBaseTaken_ = false ;
 	Path path("bin:config.xml") ;
 	Trace::Log("CONFIG","Got config path=%s",path.GetPath().c_str()) ;
 	TiXmlDocument *document=new TiXmlDocument(path.GetPath());
@@ -52,6 +62,53 @@ Config::Config()
 		Trace::Log("CONFIG","No (bad?) config.xml") ;
 	}
  	delete(document) ;
+	// el tema elegido en la consola (Proyecto > TEMA)
+	Variable *t = FindVariable("THEME") ;
+	if (t && t->GetString() && *t->GetString()) ApplyTheme(t->GetString()) ;
+}
+
+void Config::Set(const char *key,const char *value)
+{
+	Variable *v=FindVariable(key) ;
+	if (v) v->SetString(value) ;
+	else Insert(new Variable(key,0,value)) ;
+}
+
+bool Config::ApplyTheme(const char *name)
+{
+	if (!themeBaseTaken_) {   // los valores de config.xml: la base (lavanda)
+		themeBaseTaken_ = true ;
+		for (int i = 0; themeKeys[i]; i++) {
+			Variable *v = FindVariable(themeKeys[i]) ;
+			themeBase_[themeKeys[i]] = (v && v->GetString()) ? v->GetString() : "" ;
+		}
+	}
+	std::map<std::string,std::string> vals = themeBase_ ;
+	bool ok = true ;
+	if (name && *name && strcmp(name, "lavanda")) {
+		std::string fn = std::string("bin:temas/") + name + ".xml" ;
+		Path path(fn.c_str()) ;
+		TiXmlDocument doc(path.GetPath()) ;
+		if (doc.LoadFile()) {
+			TiXmlNode *root = doc.FirstChild("TEMA") ;
+			if (!root) root = doc.FirstChild("CONFIG") ;
+			TiXmlElement *e = root ? root->FirstChildElement() : doc.FirstChildElement() ;
+			for (; e; e = e->NextSiblingElement()) {
+				const char *val = e->Attribute("value") ;
+				if (!val) val = e->Attribute("VALUE") ;
+				if (!val) continue ;
+				for (int i = 0; themeKeys[i]; i++)
+					if (!strcmp(themeKeys[i], e->Value())) vals[themeKeys[i]] = val ;
+			}
+		} else {
+			Trace::Log("CONFIG", "no encuentro el tema %s", fn.c_str()) ;
+			ok = false ;
+		}
+	}
+	for (int i = 0; themeKeys[i]; i++) Set(themeKeys[i], vals[themeKeys[i]].c_str()) ;
+	generation_++ ;
+	Trace::Log("CONFIG", "tema %s (%s)", name ? name : "", ok ? "ok" : "base") ;
+	return ok ;
 }
 
 

@@ -1,5 +1,6 @@
-<!-- tema mac (1 bit, como el Mac clásico): copia estas líneas dentro de <CONFIG> en chancho6/config.xml.
-     DITHER: 1 = trama fina, 2 = puntos gordos; sin la línea DITHER queda en grises -->
+<!-- Chancho 6 · tema macgris: los colores del Mac clásico, con grises.
+     Se elige en Proyecto > TEMA. Para hacer el tuyo, copia este archivo con otro nombre. -->
+<TEMA>
     <BACKGROUND value = "FFFFFF" />
     <FOREGROUND value = "000000" />
     <BORDER value = "000000" />
@@ -17,4 +18,4 @@
     <TRACKCOLORS value = "000000,303030,000000,1C1C1C,000000,303030,000000,1C1C1C" />
     <GREENCOLOR value = "000000" />
     <ICONCOLORS value = "000000,303030,1C1C1C" />
-    <DITHER value = "1" />
+</TEMA>

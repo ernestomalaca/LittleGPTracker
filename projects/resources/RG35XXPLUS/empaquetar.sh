@@ -9,6 +9,7 @@ make PLATFORM=RG35XXPLUS -j8
 SDK=/opt/rg35xx-plus-aarch64-SDL2-SDK-0.1.0
 OUT=$(mktemp -d)
 cp -a resources/RG35XXPLUS/. "$OUT/"
+mkdir -p "$OUT/chancho6/temas" && cp resources/temas/*.xml "$OUT/chancho6/temas/"
 rm -f "$OUT/empaquetar.sh"
 PYO=$(mktemp -d)
 (cd "$PYO" && npm pack -q pyodide@0.26.4 >/dev/null && tar xzf pyodide-0.26.4.tgz)

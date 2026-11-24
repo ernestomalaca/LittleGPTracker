@@ -40,6 +40,7 @@ class AppWindow : public GUIWindow, I_Observer, Status {
     virtual void ClearRect(GUIRect &rect);
     virtual void SetColor(ColorDefinition cd);
     void SetDirty();
+    void ReloadTheme();   // trk2als: el tema cambió (Config::ApplyTheme)
 
     // trk2als: capa de figuras (pinceles) sobre la rejilla de caracteres.
     // Coordenadas de 640x480. Las figuras se quedan hasta ClearShapes(); al
@@ -79,6 +80,7 @@ class AppWindow : public GUIWindow, I_Observer, Status {
     virtual void Print(char *);
 
     void defineColor(const char *colorName, GUIColor &color);
+    void applyThemeColors();
 
     void onQuitApp();
 
