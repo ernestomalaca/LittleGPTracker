@@ -994,9 +994,17 @@ void Player::preFadeBar(SyncMaster *sync) {
     int tick = int(sync->GetTickSampleCount());
     int len = tick < 1100 ? tick : 1100;
     int delay = tick - len;
+    // la escena que sigue sola (xN): en el uno, sceneTick la va a lanzar; se
+    // adelanta aquí la misma cuenta para apagar a tiempo lo que va a cambiar
+    bool sceneNext = false;
+    if (sceneRow_ >= 0) {
+        int rep = viewData_->song_->sceneRep_[sceneRow_];
+        sceneNext = rep > 0 && (metroStep_ + 1 - sceneStart_) / 16 >= rep * sceneBars(sceneRow_);
+    }
     for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
         QueueingMode q = liveQueueingMode_[i];
-        if (q != QM_PHRASESTART && q != QM_PHRASESTOP && q != QM_CHAINSTART && q != QM_CHAINSTOP) continue;
+        bool queued = q == QM_PHRASESTART || q == QM_PHRASESTOP || q == QM_CHAINSTART || q == QM_CHAINSTOP;
+        if (!queued && !sceneNext) continue;
         if (!mixer_->IsChannelPlaying(i)) continue;
         mixer_->PreFade(i, delay, len);
     }
