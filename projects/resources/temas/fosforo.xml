@@ -1,0 +1,18 @@
+<!-- tema fosforo: copia estas líneas dentro de <CONFIG> en chancho6/config.xml (en lugar de los colores que hay) -->
+    <BACKGROUND value = "06120A" />
+    <FOREGROUND value = "3CFF6E" />
+    <BORDER value = "3CFF6E" />
+    <HICOLOR1 value = "9CFFB4" />
+    <HICOLOR2 value = "3CFF6E" />
+    <SONGVIEW_FE value = "1E6A34" />
+    <SONGVIEW_00 value = "123D1F" />
+    <CURSORCOLOR value = "3CFF6E" />
+    <PLAYCOLOR value = "3CFF6E" />
+    <MUTECOLOR value = "1B7A38" />
+    <ROWCOLOR1 value = "1E6A34" />
+    <ROWCOLOR2 value = "3CFF6E" />
+    <MAJORBEAT value = "9CFFB4" />
+    <COL_TITLE value = "2A9A4A" />
+    <TRACKCOLORS value = "3CFF6E,2ED65A,7DFFA0,24B84C,52FF84,33E866,1FA045,66FF91" />
+    <GREENCOLOR value = "9CFFB4" />
+    <ICONCOLORS value = "3CFF6E,2ED65A,7DFFA0" />

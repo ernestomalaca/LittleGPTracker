@@ -1,0 +1,18 @@
+<!-- tema ambar: copia estas líneas dentro de <CONFIG> en chancho6/config.xml (en lugar de los colores que hay) -->
+    <BACKGROUND value = "140C02" />
+    <FOREGROUND value = "FFB000" />
+    <BORDER value = "FFB000" />
+    <HICOLOR1 value = "FFD27A" />
+    <HICOLOR2 value = "FFB000" />
+    <SONGVIEW_FE value = "7A5410" />
+    <SONGVIEW_00 value = "3D2A08" />
+    <CURSORCOLOR value = "FFB000" />
+    <PLAYCOLOR value = "FFB000" />
+    <MUTECOLOR value = "8A5A10" />
+    <ROWCOLOR1 value = "7A5410" />
+    <ROWCOLOR2 value = "FFB000" />
+    <MAJORBEAT value = "FFD27A" />
+    <COL_TITLE value = "A87418" />
+    <TRACKCOLORS value = "FFB000,E09A00,FFC845,C78800,FFBE2E,F0A500,B07800,FFD060" />
+    <GREENCOLOR value = "FFD27A" />
+    <ICONCOLORS value = "FFB000,E09A00,FFC845" />

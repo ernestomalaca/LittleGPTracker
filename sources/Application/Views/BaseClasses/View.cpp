@@ -1,6 +1,7 @@
 #include "View.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "System/Console/Trace.h"
 #include "Application/Player/Player.h"
 #include "Application/Utils/char.h"
@@ -290,7 +291,25 @@ void View::FrameRect(int x, int y, int w, int h, GUIColor c, int radius, int thi
 void View::DrawText(int x, int y, const char *txt, GUIColor c, int scale) {
 	((AppWindow &)w_).AddText(x, y, txt, c, scale);
 }
-GUIColor View::LinkGreen() { return GUIColor(0x3E, 0xCF, 0xAA); }   // el verde de Link
+// un color del tema en config.xml ("RRGGBB"; con idx, el n-ésimo de una lista "a,b,c")
+bool View::ThemeColor(const char *key, GUIColor &out, int idx) {
+	const char *v = Config::GetInstance()->GetValue(key) ;
+	if (!v) return false ;
+	while (idx-- > 0) { v = strchr(v, ',') ; if (!v) return false ; v++ ; }
+	while (*v == ' ') v++ ;
+	char *end ;
+	unsigned long c = strtoul(v, &end, 16) ;
+	if (end - v != 6) return false ;
+	out = GUIColor((c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF) ;
+	return true ;
+}
+
+GUIColor View::LinkGreen() {   // el verde de Link (y de "suena"); el tema lo cambia con GREENCOLOR
+	static int set = -1 ;
+	static GUIColor c(0x3E, 0xCF, 0xAA) ;
+	if (set < 0) set = ThemeColor("GREENCOLOR", c) ? 1 : 0 ;
+	return c ;
+}
 
 GUIColor View::ColorOf(ColorDefinition cd) { return ((AppWindow &)w_).GetColor(cd); }
 GUIColor View::Mix(GUIColor a, GUIColor b, int t) {

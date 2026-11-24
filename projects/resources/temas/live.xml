@@ -1,0 +1,18 @@
+<!-- tema live: copia estas líneas dentro de <CONFIG> en chancho6/config.xml (en lugar de los colores que hay) -->
+    <BACKGROUND value = "1E1E1E" />
+    <FOREGROUND value = "CDCDCD" />
+    <BORDER value = "FFA22A" />
+    <HICOLOR1 value = "FFC36A" />
+    <HICOLOR2 value = "FFA22A" />
+    <SONGVIEW_FE value = "5A5A5A" />
+    <SONGVIEW_00 value = "363636" />
+    <CURSORCOLOR value = "FFA22A" />
+    <PLAYCOLOR value = "1DDB6D" />
+    <MUTECOLOR value = "FF5A5A" />
+    <ROWCOLOR1 value = "5A5A5A" />
+    <ROWCOLOR2 value = "FFA22A" />
+    <MAJORBEAT value = "E0E0E0" />
+    <COL_TITLE value = "8C8C8C" />
+    <TRACKCOLORS value = "FF94A6,FFA529,CC9927,F7F47C,BFFB00,1AFF2F,25FFA8,5CFFE8" />
+    <GREENCOLOR value = "1DDB6D" />
+    <ICONCOLORS value = "FFA529,FF94A6,5CFFE8" />

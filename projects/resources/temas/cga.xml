@@ -1,0 +1,18 @@
+<!-- tema cga: copia estas líneas dentro de <CONFIG> en chancho6/config.xml (en lugar de los colores que hay) -->
+    <BACKGROUND value = "000000" />
+    <FOREGROUND value = "FFFFFF" />
+    <BORDER value = "55FFFF" />
+    <HICOLOR1 value = "FFFFFF" />
+    <HICOLOR2 value = "FF55FF" />
+    <SONGVIEW_FE value = "5555AA" />
+    <SONGVIEW_00 value = "222244" />
+    <CURSORCOLOR value = "55FFFF" />
+    <PLAYCOLOR value = "55FF55" />
+    <MUTECOLOR value = "FF5555" />
+    <ROWCOLOR1 value = "5555AA" />
+    <ROWCOLOR2 value = "FF55FF" />
+    <MAJORBEAT value = "FFFFFF" />
+    <COL_TITLE value = "AAAAAA" />
+    <TRACKCOLORS value = "55FFFF,FF55FF,FFFFFF,55FF55,FF5555,FFFF55,5555FF,AAAAAA" />
+    <GREENCOLOR value = "55FF55" />
+    <ICONCOLORS value = "FF55FF,55FFFF,FFFF55" />

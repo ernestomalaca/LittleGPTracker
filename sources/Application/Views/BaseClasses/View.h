@@ -151,7 +151,8 @@ class View : public Observable {
     void DrawText(int x, int y, const char *txt, GUIColor c, int scale = 1); // scale 0 = letra chica 8x12
     GUIColor ColorOf(ColorDefinition cd);
     static GUIColor Mix(GUIColor a,GUIColor b,int amount);
-    static GUIColor LinkGreen(); // amount en % (0 = a, 100 = b)
+    static GUIColor LinkGreen();
+    static bool ThemeColor(const char *key, GUIColor &out, int idx = 0);
 
     virtual void DrawString(int x, int y, const char *txt,
                             GUITextProperties &props);

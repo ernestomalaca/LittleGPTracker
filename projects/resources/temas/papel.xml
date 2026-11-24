@@ -1,0 +1,18 @@
+<!-- tema papel: copia estas líneas dentro de <CONFIG> en chancho6/config.xml (en lugar de los colores que hay) -->
+    <BACKGROUND value = "F4F3EF" />
+    <FOREGROUND value = "141414" />
+    <BORDER value = "141414" />
+    <HICOLOR1 value = "3A3A3A" />
+    <HICOLOR2 value = "141414" />
+    <SONGVIEW_FE value = "9A9994" />
+    <SONGVIEW_00 value = "D6D5CF" />
+    <CURSORCOLOR value = "141414" />
+    <PLAYCOLOR value = "141414" />
+    <MUTECOLOR value = "8A8984" />
+    <ROWCOLOR1 value = "A8A7A2" />
+    <ROWCOLOR2 value = "141414" />
+    <MAJORBEAT value = "3A3A3A" />
+    <COL_TITLE value = "8A8984" />
+    <TRACKCOLORS value = "1A1A1A,333333,4D4D4D,262626,404040,595959,2B2B2B,474747" />
+    <GREENCOLOR value = "141414" />
+    <ICONCOLORS value = "3A3A3A,5A5A5A,7A7A7A" />

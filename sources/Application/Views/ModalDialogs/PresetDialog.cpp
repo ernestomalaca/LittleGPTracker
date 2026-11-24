@@ -641,6 +641,11 @@ void PresetDialog::drawGrid() {
 }
 
 static GUIColor kindColor(int kind, bool dark) {
+	// el tema puede darlos con ICONCOLORS="sample,kit,multicapa" (el oscuro sale solo)
+	GUIColor t(0, 0, 0) ;
+	int ti = kind == InstrumentPresets::PK_KIT ? 1 : kind == InstrumentPresets::PK_MULTI ? 2 : 0 ;
+	if (View::ThemeColor("ICONCOLORS", t, ti))
+		return dark ? GUIColor(t._r * 3 / 4, t._g * 3 / 4, t._b * 3 / 4) : t ;
 	switch (kind) {
 	case InstrumentPresets::PK_KIT: return dark ? GUIColor(0xB9, 0x77, 0x2F) : GUIColor(0xE8, 0xB8, 0x6D) ;
 	case InstrumentPresets::PK_MULTI: return dark ? GUIColor(0x3D, 0x9C, 0x8C) : GUIColor(0x7F, 0xD1, 0xC2) ;
@@ -806,7 +811,7 @@ void PresetDialog::drawShapes() {
 			                           viewData_->project_->GetTempo()) ;
 		if (ready) {
 			int dx = nx + 16 * TextLen(name) + 10 ;
-			GUIColor green(0x5E, 0xC9, 0x72) ;
+			GUIColor green = LinkGreen() ;
 			if (ready == 2) FillRect(dx, y + 15, 9, 9, green, 4) ;
 			else FrameRect(dx, y + 15, 9, 9, green, 4, 2) ;
 		}
