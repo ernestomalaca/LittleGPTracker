@@ -1466,9 +1466,9 @@ void ClipView::DrawView() {
     GUIColor dim = Mix(bg, fg, 55);
     GUIColor play = ColorOf(CD_PLAY);
 
-    // kit: columna ancha con el nombre del pad en grande; teclas: la nota en grande
-    if (kit()) { g_gridX = 136; g_stepW = 31; }
-    else { g_gridX = 64; g_stepW = 35; }
+    // la misma columna para teclas y pads (en un kit, las 3 primeras letras
+    // del pad en grande; el nombre completo va arriba)
+    g_gridX = 64; g_stepW = 35;
 
     if (curveOn()) {
         drawCurves();
@@ -1580,9 +1580,9 @@ void ClipView::DrawView() {
             FillRect(8, y + 1, GRID_X - 12, RH - 2, key, 2);
             if (!pn.empty()) {   // el nombre del pad, grande (completo arriba)
                 std::string sn = ToLatin1(pn);
-                int room = (GRID_X - 18) / 16;
+                int room = (GRID_X - 12) / 16;   // 3 letras
                 if ((int)sn.size() > room) sn = sn.substr(0, room);
-                DrawText(12, y + (RH - 16) / 2, FromLatin1(sn).c_str(), bg, 1);
+                DrawText(10, y + (RH - 16) / 2, FromLatin1(sn).c_str(), bg, 1);
             }
         } else {   // cada tecla dice qué nota es (en las negras, en claro)
             bool darkKey = black && pitch != cursorPitch_ && !isRoot;
