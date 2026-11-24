@@ -215,7 +215,9 @@ protected:
     int topLinks_;      // trk2als: cuántos links se dibujaron (-1 apagado)
     int topTempo_;
     int topCtxRoom_, topCtxLen_, topMarq_;   // trk2als: la marquesina del contexto
-    int marqueeOffset(int len);
+    std::string topCtxIdle_;   // trk2als: lo que sale en vez del contexto al quedarse quieto
+    bool topIdleShown_;
+    int marqueeOffset(int len, int delay = 1500);
 public:
     static unsigned long lastInputMs_;   // trk2als: el último botón (para la marquesina)
 protected:

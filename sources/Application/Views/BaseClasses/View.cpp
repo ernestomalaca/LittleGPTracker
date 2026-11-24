@@ -31,7 +31,8 @@ View::View(GUIWindow &w,ViewData *viewData):
 	topTempo_(0),
 	topCtxRoom_(0),
 	topCtxLen_(0),
-	topMarq_(0)
+	topMarq_(0),
+	topIdleShown_(false)
 {
   for (int k=0;k<12;k++) topHeld_[k]=-1 ;   // trk2als
   if (!initPrivate_) 
@@ -478,16 +479,17 @@ unsigned short View::physMask_=0 ;
 // trk2als: la marquesina: quieto 1.5 s, el texto que no cabe avanza una letra
 // cada 250 ms (y da la vuelta)
 unsigned long View::lastInputMs_=0 ;
-int View::marqueeOffset(int len) {
+int View::marqueeOffset(int len, int delay) {
 	unsigned long now=System::GetInstance()->GetClock() ;
 	unsigned long idle=now-lastInputMs_ ;
-	if (idle<1500) return 0 ;
-	return int(((idle-1500)/250)%(unsigned long)(len+3)) ;
+	if (idle<(unsigned long)delay) return 0 ;
+	return int(((idle-delay)/250)%(unsigned long)(len+3)) ;
 }
 
 void View::refreshTopBar() {
 	if (topTab_<-1) return ;
-	if (topCtxRoom_>0 && topCtxLen_>topCtxRoom_ && marqueeOffset(topCtxLen_)!=topMarq_) {
+	bool idleNow=!topCtxIdle_.empty() && System::GetInstance()->GetClock()-lastInputMs_>=1500 ;
+	if (idleNow!=topIdleShown_ || (topCtxRoom_>0 && topCtxLen_>topCtxRoom_ && marqueeOffset(topCtxLen_,topIdleShown_?3000:1500)!=topMarq_)) {
 		std::string ctx=topCtx_ ;
 		drawTopBar(topTab_,ctx.c_str()) ;
 		return ;
@@ -598,13 +600,15 @@ bool View::drawTopBar(int tab, const char *context) {
 	// cabe, al quedarse quieto pasa como marquesina
 	topMarq_=0 ;
 	topCtxRoom_=0 ;
+	topIdleShown_=!topCtxIdle_.empty() && System::GetInstance()->GetClock()-lastInputMs_>=1500 ;
+	if (topIdleShown_) context=topCtxIdle_.c_str() ;
 	if (context && *context) {
 		int room=(px-8-x)/16 ;
 		std::string c=ToLatin1(context) ;
 		topCtxRoom_=room ;
 		topCtxLen_=(int)c.size() ;
 		if (room>0 && (int)c.size()>room) {
-			topMarq_=marqueeOffset((int)c.size()) ;
+			topMarq_=marqueeOffset((int)c.size(),topIdleShown_?3000:1500) ;
 			std::string loop=c+"   "+c ;
 			c=loop.substr(topMarq_,room) ;
 		}

@@ -1494,6 +1494,9 @@ void ClipView::DrawView() {
     if (viewData_->virtualCell_ >= 0) sprintf(cname, "clip nuevo");   // trk2als: todavía no existe
     std::string ctx = std::string(viewData_->project_->GetTrackName(viewData_->songX_)) + " > " +
                       (cn.empty() ? std::string(cname) : cn);
+    // trk2als: en un kit, al quedarse quieto arriba sale el nombre del sonido
+    // del pad (completo, en marquesina si no cabe)
+    topCtxIdle_ = kitInstr ? kitInstr->PadName(cursorPitch_) : std::string();
     drawTopBar(TAB_CLIP, ctx.c_str());
 
     // encabezado: página, nota del cursor y lo de la nota elegida
