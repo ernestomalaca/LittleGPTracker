@@ -77,6 +77,7 @@ PresetDialog::PresetDialog(View &view, bool forSave, int kind)
 	inClip_ = false ;
 	bAt_ = 0 ;
 	bHint_ = false ;
+	marqLen_ = marqRoom_ = marqShown_ = 0 ;
 	pick_ = PICK_NONE ;
 	pickInstr_ = -1 ;
 	InstrumentPresets::ForgetLibCounts() ;   // por si se agregaron samples (p. ej. desde chancho.local)
@@ -423,6 +424,10 @@ static const unsigned long B_HOLD = 450 ;   // ms con B apretado: cierra (al sol
 static bool bLong(unsigned long at) { return at && SDL_GetTicks() - at >= B_HOLD ; }
 
 bool PresetDialog::Tick() {
+	if (marqLen_ > marqRoom_ && marqRoom_ > 0 && marqueeOffset(marqLen_) != marqShown_) {
+		isDirty_ = true ;   // la marquesina avanza
+		return true ;
+	}
 	if (!bHint_ && bLong(bAt_)) {   // ya cuenta como largo: se avisa
 		bHint_ = true ;
 		isDirty_ = true ;
@@ -670,6 +675,7 @@ void PresetDialog::checkBadge(int bx, int by, GUIColor fg, GUIColor bg) {
 }
 
 void PresetDialog::drawShapes() {
+	marqLen_ = marqRoom_ = 0 ;
 	const int PX = 8, PY = 8, PW = 624, PH = 464 ;
 	DrawPanel(PX, PY, PW, PH) ;
 	GUIColor bg = ColorOf(CD_BACKGROUND), fg = ColorOf(CD_NORMAL) ;
@@ -805,7 +811,16 @@ void PresetDialog::drawShapes() {
 		}
 		int nx = sx + ss + 14 ;
 		int room = (LX + LW - 50 - nx) / 16 ;
-		if (TextLen(name) > room) name = name.substr(0, room - 2) + ".." ;
+		if (TextLen(name) > room) {
+			// trk2als: el elegido, al quedarse quieto, pasa completo en marquesina
+			std::string ln = ToLatin1(name) ;
+			int off = (sel && col_ == 1) ? marqueeOffset((int)ln.size()) : 0 ;
+			if (sel && col_ == 1) { marqLen_ = (int)ln.size() ; marqRoom_ = room ; marqShown_ = off ; }
+			if (off > 0) {
+				std::string loop = ln + "   " + ln ;
+				name = FromLatin1(loop.substr(off, room)) ;
+			} else name = FromLatin1(ln.substr(0, room - 2)) + ".." ;
+		}
 		DrawText(nx, y + 7, name.c_str(), fg, 1) ;
 		// trk2als: un loop ya preparado en la tarjeta para este tempo (como
 		// el .asd de Live): entra sin esperar. Un puntito verde

@@ -7,7 +7,7 @@
 static const int addType[2] = {TT_MIDI, TT_AUDIO} ;
 static const char *addName[2] = {"Pista MIDI", "Pista de audio"} ;
 static const char *addInfo[2] = {"notas", "loops"} ;
-static const char *addWhere[2] = {"notas · abre el navegador de sonidos", "loops · abre la carpeta de samples"} ;
+static const char *addWhere[2] = {"notas · sonidos", "loops · samples"} ;   // trk2als: cortos, en grande
 
 // opciones de una pista MIDI (la de audio solo tiene la última)
 static const int trackCode[4] = {TTD_LOAD, TTD_NEWKIT, TTD_EDIT, TTD_DELETE} ;
@@ -126,7 +126,7 @@ void TrackTypeDialog::drawAdd() {
 			FrameRect(x + 24, ry, W - 48, 56, acc, 8, 2) ;
 		}
 		DrawText(x + 40, ry + 10, addName[t], sel ? fg : dim, 1) ;
-		DrawText(x + 40, ry + 33, addWhere[t], dim, 0) ;
+		DrawText(x + 40, ry + 31, addWhere[t], dim, 1) ;
 	}
-	DrawText(x + 32, y + H - 34, "A elige    B cancela", dim, 0) ;
+	DrawText(x + 32, y + H - 36, "A elige · B cancela", dim, 1) ;
 }

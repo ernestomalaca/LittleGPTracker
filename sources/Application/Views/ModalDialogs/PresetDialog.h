@@ -107,6 +107,7 @@ private:
 	bool inClip_ ;
 	unsigned long bAt_ ;         // cuándo se apretó B (0 = suelto): dejarlo apretado cierra
 	bool bHint_ ;
+	int marqLen_, marqRoom_, marqShown_ ;   // trk2als: la marquesina del elegido
 	std::string bFolder_ ;       // dónde estaba al apretar B (ahí se vuelve a abrir)               // y suena en el clip de la pista (no la muestra)
 	PresetLauncher *launcher_ ;
 	int pick_ ;
