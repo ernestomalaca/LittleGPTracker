@@ -752,12 +752,12 @@ void PresetDialog::drawShapes() {
 			if (isCurrent(e)) checkBadge(sx + ss - 15, sy + ss - 15, fg, bg) ;   // el que tiene la pista
 			char b[32] ;
 			if (e.ptype == InstrumentPresets::PK_KIT) snprintf(b, sizeof(b), "%d pads", e.zones) ;
-			else if (e.ptype == InstrumentPresets::PK_MULTI) snprintf(b, sizeof(b), "multicapa · %d zonas", e.zones) ;
-			else snprintf(b, sizeof(b), "sample") ;
+			else if (e.ptype == InstrumentPresets::PK_MULTI) snprintf(b, sizeof(b), "%d zonas", e.zones) ;
+			else b[0] = 0 ;   // un sample: ya lo dice su apartado
 			sub = b ;
 			if (InstrumentPresets::IsLib(folder_)) {   // un archivo de la samplelib
 				if (name.size() > 4) name = name.substr(0, name.size() - 4) ;
-				sub = e.ptype == InstrumentPresets::PK_MULTI ? "soundfont" : pick_ ? "sample" : "sample · librería" ;
+				sub = e.ptype == InstrumentPresets::PK_MULTI ? "soundfont" : "" ;   // un sample: ya se sabe
 			}
 		} else if (e.kind == K_FOLDER || e.kind == K_NEWDIR) {
 			// una carpetita, del color de su categoría
@@ -790,7 +790,7 @@ void PresetDialog::drawShapes() {
 			if (e.kind == K_HERE) { name = "Guardar aquí" ; sub = folder_.empty() ? "presets" : folder_ ; }
 			if (e.kind == K_EMPTY)
 				sub = e.zones == PD_EMPTY_KIT ? "armarlo pad por pad" :
-				      e.zones == PD_IMPORT_SF2 ? "un soundfont de la samplelib" : "eliges el sample tú" ;
+				      e.zones == PD_IMPORT_SF2 ? "Carga un soundfont" : "eliges el sample tú" ;
 		}
 		// trk2als: lanzado a la pista: cargando / esperando el 1 / sonando
 		int lst = PresetLauncher::LS_NONE, lpm = 0 ;
@@ -821,7 +821,7 @@ void PresetDialog::drawShapes() {
 				name = FromLatin1(loop.substr(off, room)) ;
 			} else name = FromLatin1(ln.substr(0, room - 2)) + ".." ;
 		}
-		DrawText(nx, y + 7, name.c_str(), fg, 1) ;
+		DrawText(nx, sub.empty() ? y + (RH - 6 - 16) / 2 : y + 7, name.c_str(), fg, 1) ;   // sin subtítulo, al centro
 		// trk2als: un loop ya preparado en la tarjeta para este tempo (como
 		// el .asd de Live): entra sin esperar. Un puntito verde
 		// (un aro del mismo verde: preparado, pero para otro tempo)
