@@ -2821,6 +2821,13 @@ bool SongView::queueBlink() {
     return (System::GetInstance()->GetClock() / 250) % 2 == 0;
 }
 
+// trk2als: la escena que sigue sola (xN) parpadea mientras espera; en su
+// último compás, más rápido (para marcar que ya viene)
+static bool followBlink(int barsLeft) {
+    unsigned long t = System::GetInstance()->GetClock();
+    return barsLeft <= 1 ? (t / 110) % 2 == 0 : (t / 250) % 2 == 0;
+}
+
 bool SongView::blockGrid() {
     return !View::miniLayout_ && SupportsShapes();
 }
@@ -2877,6 +2884,11 @@ std::string SongView::blockState() {
     int t = player->IsRunning() ? int(player->GetPlayTime()) : -1;
     snprintf(b, sizeof(b), "%s|%d|%d|%d", lt, t, player->Clipped() ? 1 : 0, noticeOn() ? 1 : 0);
     st += b;
+    int fn, fl;   // la escena que sigue sola: su parpadeo
+    if (player->SceneFollow(fn, fl)) {
+        snprintf(b, sizeof(b), "|f%d,%d,%d", fn, fl, followBlink(fl) ? 1 : 0);
+        st += b;
+    }
     return st;
 }
 
@@ -3014,6 +3026,9 @@ void SongView::drawBlockGrid() {
             FillRect(SX - 4, y - 2, XEND + 4 - (SX - 4), h + 4, Mix(bg, fg, gridPct(lightBg, 5)), 4);
         {   // la escena: ▶ número y sus repeticiones (x2…; ∞ = se queda ahí)
             bool has = false, queued = false, stopAll = rowPlaying[j];
+            int fNext = -1, fLeft = 0;
+            bool following = player->SceneFollow(fNext, fLeft) && fNext == row;
+            if (following) queued = true;   // la que sigue (xN) también espera
             for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
                 if (!project->TrackExists(i)) continue;
                 if (viewData_->song_->data_[i + SONG_CHANNEL_COUNT * row] != 0xFF) has = true;
@@ -3038,10 +3053,11 @@ void SongView::drawBlockGrid() {
             GUIColor green = LinkGreen();
             // compacta, como un clip: el número arriba a la izquierda (a la
             // altura del de los clips), el ▶ en la esquina y las repeticiones abajo
-            if (queued && queueBlink()) FrameRect(SX, y, SW, h, hi1, 3, 3);   // el marco, como el de los clips
-            if (stopAll && !queued && queueBlink()) FrameRect(SX, y, SW, h, fg, 3, 3);   // toda la fila se detiene
+            bool qb = following ? followBlink(fLeft) : queueBlink();
+            if (queued && qb) FrameRect(SX, y, SW, h, hi1, 3, 3);   // el marco, como el de los clips
+            if (stopAll && !queued && qb) FrameRect(SX, y, SW, h, fg, 3, 3);   // toda la fila se detiene
             int ts = 10, tx = SX + SW - 14, ty = y + 6;
-            if (queued && !queueBlink()) {   // en espera del 1: parpadea entre lleno y hueco
+            if (queued && !qb) {   // en espera del 1: parpadea entre lleno y hueco
                 for (int k = 0; k < ts; k++) {
                     int hh = ts - (k / 2) * 2;
                     if (k < 2 || k >= ts - 2) FillRect(tx + k, ty + k / 2, 1, hh, green);
@@ -3049,7 +3065,7 @@ void SongView::drawBlockGrid() {
                 }
             } else {
                 GUIColor tcol = (rowPlaying[j] || queued) ? green : (has ? fg : Mix(bg, fg, gridPct(lightBg, 25)));
-                if (stopAll && !queued) FillRect(tx, ty, ts, ts, queueBlink() ? fg : Mix(bg, fg, 30), 1);   // ■ parpadeando
+                if (stopAll && !queued) FillRect(tx, ty, ts, ts, qb ? fg : Mix(bg, fg, 30), 1);   // ■ parpadeando
                 else for (int k = 0; k < ts; k++) FillRect(tx + k, ty + k / 2, 1, ts - (k / 2) * 2, tcol);
             }
             char rl[4];

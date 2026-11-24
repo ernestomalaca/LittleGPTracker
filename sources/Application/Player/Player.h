@@ -260,6 +260,10 @@ private:
 	void sceneTick() ;
 	void preFadeBar(SyncMaster *sync) ;   // trk2als
 	int sceneBars(int row) ;
+public:
+	// trk2als: la escena que sigue sola (xN): cuál entra y cuántos compases faltan
+	bool SceneFollow(int &next, int &barsLeft) ;
+private:
 	int launched_[SONG_CHANNEL_COUNT] ;   // trk2als: la fila que estaba sonando al parar (-1 nada)
 	bool countIn_ ;          // en la precuenta (no suena nada más)
 	int countStep_ ;

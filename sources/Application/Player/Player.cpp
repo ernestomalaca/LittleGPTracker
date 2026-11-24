@@ -1476,6 +1476,17 @@ void Player::LaunchGroup(int row, int from, int to) {
 }
 
 // trk2als: una vuelta de la escena = lo que dura su clip más largo
+bool Player::SceneFollow(int &next, int &barsLeft) {
+    if (!isRunning_ || sceneRow_ < 0) return false;
+    int rep = viewData_->song_->sceneRep_[sceneRow_];
+    if (rep <= 0) return false;
+    next = sceneRow_ + 1;
+    if (next >= SONG_ROW_COUNT) return false;
+    barsLeft = rep * sceneBars(sceneRow_) - (metroStep_ - sceneStart_) / 16;
+    if (barsLeft < 1) barsLeft = 1;
+    return true;
+}
+
 int Player::sceneBars(int row) {
     int bars = 0;
     for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
