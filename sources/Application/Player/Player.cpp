@@ -693,6 +693,9 @@ void Player::Update(Observable &o,I_ObservableData *d) {
             barSlice_ = (barSlice_ + 1) % 96;   // trk2als: dónde vamos en el compás
             if (sync->MajorSlice()) metroStep_++;   // trk2als: otro paso (1/16)
             if (sync->MajorSlice() && metroStep_ % 16 == 0 && mode_ == PM_LIVE) sceneTick();
+            // trk2als: el último pedazo antes del uno: los clips que van a
+            // cambiar ahí se apagan terminando justo en el compás
+            if (barSlice_ == 95 && mode_ == PM_LIVE) preFadeBar(sync);
             triggerLiveChains_ = false;
             if (retrigAllImmediate_) {
 				for (int i=0;i<SONG_CHANNEL_COUNT;i++) {
@@ -981,6 +984,20 @@ void Player::playCursorPosition(int channel) {
     Atomic routine that triggers the next step for all
     playing channels.
  ********************************************************/
+
+// trk2als: estamos en el último pedazo (tick) antes del uno: cada pista que
+// cambia de clip o se detiene en el compás apaga su clip de audio en 4 ms
+// terminando justo en el uno (la nota que el clip toca ahí ya no alcanza a sonar)
+void Player::preFadeBar(SyncMaster *sync) {
+    const int len = 176;
+    int delay = int(sync->GetTickSampleCount()) - len;
+    for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
+        QueueingMode q = liveQueueingMode_[i];
+        if (q != QM_PHRASESTART && q != QM_PHRASESTOP && q != QM_CHAINSTART && q != QM_CHAINSTOP) continue;
+        if (!mixer_->IsChannelPlaying(i)) continue;
+        mixer_->PreFade(i, delay, len);
+    }
+}
 
 void Player::moveToNextStep() {
     // we'll need to know if any channel is playing
