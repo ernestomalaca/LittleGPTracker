@@ -184,6 +184,7 @@ AppWindow::AppWindow(I_GUIWindowImp &imp) : GUIWindow(imp) {
         _helpIdleMs = hi ? atoi(hi) : 0;   // trk2als: la ayuda va con L2+R2 (HELPIDLE para la de reposo)
         _overlayOn = _overlayDirty = _helpShown = false;
         _lastInput = System::GetInstance()->GetClock();
+        View::lastInputMs_ = _lastInput;
         _swallow = 0;
         _helpMask = 0;
         _r2Solo = false;
@@ -711,6 +712,7 @@ bool AppWindow::onEvent(GUIEvent &event) {
 
     case ET_PADBUTTONDOWN: {
         _lastInput = System::GetInstance()->GetClock();
+        View::lastInputMs_ = _lastInput;
         // trk2als: L2+R2 juntos o el botón del frente prenden y apagan la
         // ayuda; esos botones no llegan a las pantallas
         if (v & ((1 << EPBT_L2) | (1 << EPBT_R2) | (1 << EPBT_HELP))) {
@@ -744,6 +746,7 @@ bool AppWindow::onEvent(GUIEvent &event) {
 
     case ET_PADBUTTONUP:
         _lastInput = System::GetInstance()->GetClock();
+        View::lastInputMs_ = _lastInput;
         if (v & ((1 << EPBT_L2) | (1 << EPBT_R2) | (1 << EPBT_HELP))) {
             _helpMask &= ~v;
             if ((v & (1 << EPBT_R2)) && _r2Solo) {
@@ -896,6 +899,7 @@ void AppWindow::onUpdate() {
             // mismo candado: sin él, los dos pisaban la lista de figuras
             SysMutexLocker locker(drawMutex_);
             _currentView->AnimationUpdate();
+            if (!_overlayOn) _currentView->RefreshTopBar();   // trk2als: la marquesina de la barra
         }
     }
     Flush();

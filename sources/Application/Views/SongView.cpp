@@ -12,6 +12,7 @@
 #include "Application/Model/Song.h"
 #include "System/Console/Trace.h"
 #include "System/System/System.h"
+#include "Application/Utils/Latin1.h"
 #include "Application/Views/ModalDialogs/MessageBox.h"
 #include "Application/Views/ModalDialogs/TrackTypeDialog.h"
 #include "Application/Views/ModalDialogs/PresetDialog.h"
@@ -3057,11 +3058,9 @@ void SongView::drawBlockGrid() {
             int rep = viewData_->song_->sceneRep_[row];
             int cy = y + h - 19, ch = 15;
             if (rep > 0) {
-                char rb[6];
+                char rb[6];   // trk2als: grande y sin recuadro
                 snprintf(rb, sizeof(rb), "x%d", rep);
-                int cw = 8 * int(strlen(rb)) + 8;
-                FillRect(SX + 5, cy, cw, ch, hereRow ? cur : Mix(bg, cur, 30), 3);
-                DrawText(SX + 9, cy + 2, rb, hereRow ? bg : fg, 0);
+                DrawText(SX + 5, cy, rb, hereRow ? cur : fg, 1);
             } else if (hereRow && has) {   // ∞ (se queda ahí): solo al editarla
                 FrameRect(SX + 6, cy + 3, 10, 9, fg, 4, 2);
                 FrameRect(SX + 15, cy + 3, 10, 9, fg, 4, 2);
@@ -3117,10 +3116,10 @@ void SongView::drawBlockGrid() {
                     name = viewData_->song_->GetClipName(d);
                 }
                 DrawText(x + 5, y + 4, id, bg, 1);
-                if (!name.empty() && h >= 34) {
-                    int room = (w - 8) / 8;
-                    if ((int)name.size() > room) name = name.substr(0, room);
-                    DrawText(x + 5, y + h - 20, name.c_str(), bg, 0);
+                if (!name.empty() && h >= 34) {   // trk2als: el nombre también grande (completo arriba, en la barra)
+                    int room = (w - 8) / 16;
+                    if (TextLen(name) > room) name = name.substr(0, room);
+                    DrawText(x + 5, y + h - 19, name.c_str(), bg, 1);
                 }
             }
             // lo que suena: marco blanco; lo que está en cola (Live): marco que parpadea

@@ -36,6 +36,16 @@ inline std::string ToLatin1(const char *s) {
 inline std::string ToLatin1(const std::string &s) { return ToLatin1(s.c_str()); }
 
 // cuántas letras se ven (no cuántos bytes)
+// de vuelta: Latin-1 -> UTF-8 (para cortar un texto por letras y dibujarlo)
+inline std::string FromLatin1(const std::string &s) {
+    std::string o;
+    for (size_t i = 0; i < s.size(); i++) {
+        unsigned char c = (unsigned char)s[i];
+        if (c < 0x80) o += (char)c;
+        else { o += (char)(0xC0 | (c >> 6)); o += (char)(0x80 | (c & 0x3F)); }
+    }
+    return o;
+}
 inline int TextLen(const char *s) { return (int)ToLatin1(s).size(); }
 inline int TextLen(const std::string &s) { return (int)ToLatin1(s).size(); }
 

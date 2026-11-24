@@ -28,7 +28,10 @@ View::View(GUIWindow &w,ViewData *viewData):
 	topTab_(-2),
 	topRunning_(false),
 	topLinks_(-1),
-	topTempo_(0)
+	topTempo_(0),
+	topCtxRoom_(0),
+	topCtxLen_(0),
+	topMarq_(0)
 {
   for (int k=0;k<12;k++) topHeld_[k]=-1 ;   // trk2als
   if (!initPrivate_) 
@@ -472,8 +475,23 @@ std::string View::projectName_ ;
 unsigned short View::pressedButton_=0 ;
 unsigned short View::physMask_=0 ;
 
+// trk2als: la marquesina: quieto 1.5 s, el texto que no cabe avanza una letra
+// cada 250 ms (y da la vuelta)
+unsigned long View::lastInputMs_=0 ;
+int View::marqueeOffset(int len) {
+	unsigned long now=System::GetInstance()->GetClock() ;
+	unsigned long idle=now-lastInputMs_ ;
+	if (idle<1500) return 0 ;
+	return int(((idle-1500)/250)%(unsigned long)(len+3)) ;
+}
+
 void View::refreshTopBar() {
 	if (topTab_<-1) return ;
+	if (topCtxRoom_>0 && topCtxLen_>topCtxRoom_ && marqueeOffset(topCtxLen_)!=topMarq_) {
+		std::string ctx=topCtx_ ;
+		drawTopBar(topTab_,ctx.c_str()) ;
+		return ;
+	}
 	Player *player=Player::GetInstance() ;
 	bool running=player && player->IsRunning() ;
 	int links=(player && player->LinkOn())?player->LinkPeers():-1 ;
@@ -576,12 +594,21 @@ bool View::drawTopBar(int tab, const char *context) {
 			FillRect(bx,ky,ww*2/3+1,PH*3/5,c>=0?TrackColor(c):Mix(bg,fg,14),1) ;
 		}
 	}
-	// el contexto (p. ej. el kit), en letra chica en lo que queda
+	// el contexto (p. ej. el clip), con letra grande en lo que queda; si no
+	// cabe, al quedarse quieto pasa como marquesina
+	topMarq_=0 ;
+	topCtxRoom_=0 ;
 	if (context && *context) {
-		int room=(px-8-x)/8 ;
-		std::string c=context ;
-		if (room>0 && (int)c.size()>room) c=c.substr(0,room) ;
-		if (room>0) DrawText(x,TY+2,c.c_str(),fg,0) ;
+		int room=(px-8-x)/16 ;
+		std::string c=ToLatin1(context) ;
+		topCtxRoom_=room ;
+		topCtxLen_=(int)c.size() ;
+		if (room>0 && (int)c.size()>room) {
+			topMarq_=marqueeOffset((int)c.size()) ;
+			std::string loop=c+"   "+c ;
+			c=loop.substr(topMarq_,room) ;
+		}
+		if (room>0) DrawText(x,TY,FromLatin1(c).c_str(),fg,1) ;
 	}
 	return true ;
 }

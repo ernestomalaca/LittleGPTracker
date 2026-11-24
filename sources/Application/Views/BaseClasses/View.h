@@ -214,6 +214,11 @@ protected:
     bool topRunning_;
     int topLinks_;      // trk2als: cuántos links se dibujaron (-1 apagado)
     int topTempo_;
+    int topCtxRoom_, topCtxLen_, topMarq_;   // trk2als: la marquesina del contexto
+    int marqueeOffset(int len);
+public:
+    static unsigned long lastInputMs_;   // trk2als: el último botón (para la marquesina)
+protected:
     int topHeld_[12];   // trk2als: el pianito como se dibujó
 public:
     void RefreshTopBar() { refreshTopBar(); }   // trk2als: al llegar notas del teclado MIDI
