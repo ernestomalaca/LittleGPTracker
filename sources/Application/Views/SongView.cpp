@@ -2905,6 +2905,9 @@ static void loadTrackColors() {
     }
 }
 
+// trk2als: en fondos claros los grises suaves de la rejilla se pierden: se marcan más
+static int gridPct(bool light, int p) { return light ? (p * 2 < p + 14 ? p * 2 : p + 14) : p; }
+
 void SongView::drawBlockGrid() {
     loadTrackColors();
     Player *player = Player::GetInstance();
@@ -2928,8 +2931,10 @@ void SongView::drawBlockGrid() {
     GUIColor cur = ColorOf(CD_CURSOR);
     GUIColor play = ColorOf(CD_PLAY);
     GUIColor dim = Mix(bg, fg, 50);
-    GUIColor cellBg = Mix(bg, fg, 6);
-    GUIColor panel = Mix(bg, fg, 10);
+    // en fondos claros los grises suaves se pierden: la rejilla se marca más
+    bool lightBg = bg._r * 77 + bg._g * 151 + bg._b * 28 > 150 * 256;
+    GUIColor cellBg = Mix(bg, fg, gridPct(lightBg, 6));
+    GUIColor panel = Mix(bg, fg, gridPct(lightBg, 10));
 
     const int rows = View::songRowCount_;
     // trk2als: las escenas a la izquierda (como en LSDJ), en una columna ancha
@@ -2967,7 +2972,7 @@ void SongView::drawBlockGrid() {
     // para saber siempre dónde estás
     int curCol = rowMode_ ? -1 : viewData_->songX_;
     if (curCol >= 0 && curCol < trackCount)
-        FillRect(X0 + curCol * COLW - 2, HY - 2, COLW - GAP + 4, GBOT - HY + 2, Mix(bg, fg, 5), 4);
+        FillRect(X0 + curCol * COLW - 2, HY - 2, COLW - GAP + 4, GBOT - HY + 2, Mix(bg, fg, gridPct(lightBg, 5)), 4);
 
     // cabeceras
     for (int i = 0; i < SONG_CHANNEL_COUNT && i <= trackCount && (i < trackCount || i < Project::MaxTracks()); i++) {
@@ -2980,7 +2985,7 @@ void SongView::drawBlockGrid() {
         }
         int tci = project->GetTrackColor(i);
         GUIColor tc(trackColors[tci][0], trackColors[tci][1], trackColors[tci][2]);
-        FillRect(x, HY, COLW - GAP, HH, here ? cur : (i == curCol ? Mix(bg, fg, 16) : panel), 3);
+        FillRect(x, HY, COLW - GAP, HH, here ? cur : (i == curCol ? Mix(bg, fg, gridPct(lightBg, 16)) : panel), 3);
         FillRect(x, HY, COLW - GAP, 3, tc);
         GUIColor ncol = here ? bg : (player->IsChannelMuted(i) ? dim : fg);
         DrawText(x + 5, HY + 5, trackKind(project, i), ncol, 1);
@@ -2989,7 +2994,7 @@ void SongView::drawBlockGrid() {
         if (launcher_->Phase() && i == launcher_->PendingTrack()) {   // trk2als: un sonido lanzado: cargando / esperando el 1
             int pm = launcher_->Permille();
             int bw = COLW - GAP - 8;
-            FillRect(x + 4, HY + HH - 2, bw, 2, Mix(bg, fg, 25));
+            FillRect(x + 4, HY + HH - 2, bw, 2, Mix(bg, fg, gridPct(lightBg, 25)));
             if (bw * pm / 1000 > 0) FillRect(x + 4, HY + HH - 2, bw * pm / 1000, 2, hi2);
         }
     }
@@ -3005,7 +3010,7 @@ void SongView::drawBlockGrid() {
         // en la columna de escenas: la fila que se va a lanzar, un pelo más
         // clara de lado a lado (como la pista en vertical)
         if (hereRow && trackCount > 0)
-            FillRect(SX - 4, y - 2, XEND + 4 - (SX - 4), h + 4, Mix(bg, fg, 5), 4);
+            FillRect(SX - 4, y - 2, XEND + 4 - (SX - 4), h + 4, Mix(bg, fg, gridPct(lightBg, 5)), 4);
         {   // la escena: ▶ número y sus repeticiones (x2…; ∞ = se queda ahí)
             bool has = false, queued = false, stopAll = rowPlaying[j];
             for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
@@ -3022,7 +3027,7 @@ void SongView::drawBlockGrid() {
                     ((q != QM_PHRASESTOP && q != QM_CHAINSTOP) || player->StopCell(i) >= 0))
                     stopAll = false;   // solo con Select + Start (sin celda que lo detenga) parpadea la fila que suena
             }
-            FillRect(SX, y, SW, h, has ? Mix(bg, fg, 9) : cellBg, 3);
+            FillRect(SX, y, SW, h, has ? Mix(bg, fg, gridPct(lightBg, 9)) : cellBg, 3);
             if (scnMarking_ && rowMode_) {   // escenas marcadas: toda la fila
                 int top, bot;
                 scnRange(top, bot);
@@ -3042,7 +3047,7 @@ void SongView::drawBlockGrid() {
                     else { FillRect(tx + k, ty + k / 2, 1, 2, green); FillRect(tx + k, ty + k / 2 + hh - 2, 1, 2, green); }
                 }
             } else {
-                GUIColor tcol = (rowPlaying[j] || queued) ? green : (has ? fg : Mix(bg, fg, 25));
+                GUIColor tcol = (rowPlaying[j] || queued) ? green : (has ? fg : Mix(bg, fg, gridPct(lightBg, 25)));
                 if (stopAll && !queued) FillRect(tx, ty, ts, ts, queueBlink() ? fg : Mix(bg, fg, 30), 1);   // ■ parpadeando
                 else for (int k = 0; k < ts; k++) FillRect(tx + k, ty + k / 2, 1, ts - (k / 2) * 2, tcol);
             }
@@ -3092,8 +3097,8 @@ void SongView::drawBlockGrid() {
                 FillRect(x, y, w, h, queueBlink() ? Mix(bg, fg, 88) : Mix(bg, fg, 30), 3);
                 FillRect(x + w / 2 - 4, y + h / 2 - 4, 8, 8, bg, 1);   // el cuadrito de stop
             } else if (empty) {
-                FillRect(x, y, w, h, lit ? Mix(bg, fg, 11) : cellBg, 3);
-                FillRect(x + w / 2 - 2, y + h / 2 - 2, 4, 4, Mix(bg, fg, 18));
+                FillRect(x, y, w, h, lit ? Mix(bg, fg, gridPct(lightBg, 11)) : cellBg, 3);
+                FillRect(x + w / 2 - 2, y + h / 2 - 2, 4, 4, Mix(bg, fg, gridPct(lightBg, 18)));
             } else {
                 FillRect(x, y, w, h, tc, 3);
                 // número grande y nombre chico
