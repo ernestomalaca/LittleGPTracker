@@ -1,5 +1,5 @@
 <!-- tema mac (1 bit, como el Mac clásico): copia estas líneas dentro de <CONFIG> en chancho6/config.xml.
-     DITHER: 1 = trama fina, 2 = puntos gordos -->
+     DITHER: 1 = trama fina, 2 = puntos gordos; sin la línea DITHER queda en grises -->
     <BACKGROUND value = "FFFFFF" />
     <FOREGROUND value = "000000" />
     <BORDER value = "000000" />

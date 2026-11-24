@@ -1,0 +1,19 @@
+<!-- tema negativo (fondo negro, lo demás blanco): copia estas líneas dentro de <CONFIG> en chancho6/config.xml.
+     Con <DITHER value = "1" /> queda en 1 bit. El tema mac sin la línea DITHER queda en grises. -->
+    <BACKGROUND value = "000000" />
+    <FOREGROUND value = "FFFFFF" />
+    <BORDER value = "FFFFFF" />
+    <HICOLOR1 value = "FFFFFF" />
+    <HICOLOR2 value = "FFFFFF" />
+    <SONGVIEW_FE value = "7F7F7F" />
+    <SONGVIEW_00 value = "272727" />
+    <CURSORCOLOR value = "FFFFFF" />
+    <PLAYCOLOR value = "FFFFFF" />
+    <MUTECOLOR value = "7F7F7F" />
+    <ROWCOLOR1 value = "7F7F7F" />
+    <ROWCOLOR2 value = "FFFFFF" />
+    <MAJORBEAT value = "FFFFFF" />
+    <COL_TITLE value = "CFCFCF" />
+    <TRACKCOLORS value = "FFFFFF,CFCFCF,FFFFFF,E3E3E3,FFFFFF,CFCFCF,FFFFFF,E3E3E3" />
+    <GREENCOLOR value = "FFFFFF" />
+    <ICONCOLORS value = "FFFFFF,CFCFCF,E3E3E3" />
