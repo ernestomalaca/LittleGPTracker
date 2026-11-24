@@ -62,6 +62,14 @@ private:
 	bool gridMode_ ;         // trk2als: la rejilla de 8 (como las perillas del MiniLab)
 	void drawGrid() ;
 	void drawArc(int cx,int cy,int r,float from,float to,GUIColor c,int th) ;
+	// trk2als: la rejilla en páginas (L / R): pestañas arriba de las cajas
+	int page_[2] ;           // la página de cada pantalla: 0 clip de audio, 1 Sampler
+	int pageCount_ ;
+	const char *pageName_[5] ;
+	int pageTap_ ;           // L o R tocado solo: al soltar, cambia de página
+	void turnPage(int dir) ;
+	int gridSlot(UIField &f) ;
+	void gridBox(int k,int &x,int &y,int &w,int &h) ;
 	bool simplerView_ ;      // Sampler estilo Simpler (pistas MIDI)
 	int ampLabelRow_ ;       // dónde va el dibujo de la envolvente
 	void drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int H,int size) ;
