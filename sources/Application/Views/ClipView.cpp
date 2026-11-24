@@ -1339,16 +1339,9 @@ void ClipView::handleButton(unsigned short mask, bool pressed) {
         isDirty_ = true;
         return;
     }
-    if (v == EPBM_START) {
+    if (v == EPBM_START) {   // trk2als: como en la Session: para / sigue lo que estaba lanzado
         stopAudition();
-        if (player->IsRunning()) {
-            player->Stop();
-        } else if (pages() > 0) {
-            int ls, le;
-            int from = viewData_->song_->GetClipLoop(viewData_->currentChain_, ls, le) ? ls : 0;
-            viewData_->chainRow_ = from;
-            player->OnStartButton(PM_CHAIN, viewData_->songX_, false, from);
-        }
+        player->EditorStart(viewData_->songX_, viewData_->songY_);
         isDirty_ = true;
         return;
     }

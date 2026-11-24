@@ -1225,10 +1225,9 @@ void InstrumentView::processButtonMask(unsigned short mask,bool pressed) {
                                           viewData_->chainRow_);
                 }
             } else {
-                // No modifier
+                // No modifier: como en la Session (trk2als)
                 if (mask & EPBM_START) {
-                    player->OnStartButton(PM_PHRASE, viewData_->songX_, false,
-                                          viewData_->chainRow_);
+                    player->EditorStart(viewData_->songX_, viewData_->songY_);
                 }
             }
         }
