@@ -1,0 +1,20 @@
+<!-- tema mac (1 bit, como el Mac clásico): copia estas líneas dentro de <CONFIG> en chancho6/config.xml.
+     DITHER: 1 = trama fina, 2 = puntos gordos -->
+    <BACKGROUND value = "FFFFFF" />
+    <FOREGROUND value = "000000" />
+    <BORDER value = "000000" />
+    <HICOLOR1 value = "000000" />
+    <HICOLOR2 value = "000000" />
+    <SONGVIEW_FE value = "808080" />
+    <SONGVIEW_00 value = "D8D8D8" />
+    <CURSORCOLOR value = "000000" />
+    <PLAYCOLOR value = "000000" />
+    <MUTECOLOR value = "808080" />
+    <ROWCOLOR1 value = "808080" />
+    <ROWCOLOR2 value = "000000" />
+    <MAJORBEAT value = "000000" />
+    <COL_TITLE value = "303030" />
+    <TRACKCOLORS value = "000000,303030,000000,1C1C1C,000000,303030,000000,1C1C1C" />
+    <GREENCOLOR value = "000000" />
+    <ICONCOLORS value = "000000,303030,1C1C1C" />
+    <DITHER value = "1" />

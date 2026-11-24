@@ -109,6 +109,13 @@ SDLGUIWindowImp::SDLGUIWindowImp(GUICreateWindowParams &p) {
         hdScale_ = hdFont_ ? mult_ / 2 : 1;
         Trace::Log("DISPLAY", "HD font: %s", hdFont_ ? "on" : "off");
     }
+    // DITHER=YES: pantalla de 1 bit como el Mac clásico; los grises se vuelven
+    // tramas de puntos (Bayer 4x4) en píxeles del tamaño del SCREENMULT
+    {
+        const char *d = Config::GetInstance()->GetValue("DITHER");
+        dither_ = !d ? 0 : !strcmp(d, "YES") ? 1 : atoi(d);   // YES = 1, "2" = puntos gordos
+        if (dither_ < 0 || dither_ > 4) dither_ = 0;
+    }
 
     // Create a window that is the requested size
 
@@ -693,7 +700,50 @@ void SDLGUIWindowImp::Unlock() {
     }
 }
 
+void SDLGUIWindowImp::ditherRect(const SDL_Rect &r0) {
+    static const unsigned char bayer[4][4] = {
+        {0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 9}, {15, 7, 13, 5}};
+    SDL_Rect r = r0;
+    if (r.x < 0) { r.w += r.x; r.x = 0; }
+    if (r.y < 0) { r.h += r.y; r.y = 0; }
+    if (r.x + r.w > surface_->w) r.w = surface_->w - r.x;
+    if (r.y + r.h > surface_->h) r.h = surface_->h - r.y;
+    if (r.w <= 0 || r.h <= 0) return;
+    Uint32 black = SDL_MapRGB(surface_->format, 0, 0, 0);
+    Uint32 white = SDL_MapRGB(surface_->format, 255, 255, 255);
+    int bpp = surface_->format->BytesPerPixel;
+    int px = dither_;
+    for (int y = r.y; y < r.y + r.h; y++) {
+        Uint8 *row = (Uint8 *)surface_->pixels + y * surface_->pitch;
+        const unsigned char *b = bayer[((y - appAnchorY_) / px) & 3];
+        for (int x = r.x; x < r.x + r.w; x++) {
+            Uint32 p;
+            if (bpp == 4) p = ((Uint32 *)row)[x];
+            else if (bpp == 2) p = ((Uint16 *)row)[x];
+            else continue;
+            if (p == black || p == white) continue;
+            Uint8 cr, cg, cb;
+            SDL_GetRGB(p, surface_->format, &cr, &cg, &cb);
+            int l = (cr * 77 + cg * 151 + cb * 28) >> 8;   // 0..255
+            int t = b[((x - appAnchorX_) / px) & 3] * 16 + 8;
+            Uint32 o = l > t ? white : black;
+            if (bpp == 4) ((Uint32 *)row)[x] = o;
+            else ((Uint16 *)row)[x] = (Uint16)o;
+        }
+    }
+}
+
 void SDLGUIWindowImp::Flush() {
+    if (dither_) {
+        if (SDL_MUSTLOCK(surface_)) SDL_LockSurface(surface_);
+        if (framebuffer_ || updateCount_ >= MAX_OVERLAYS) {
+            SDL_Rect all = {0, 0, surface_->w, surface_->h};
+            ditherRect(all);
+        } else {
+            for (int i = 0; i < updateCount_; i++) ditherRect(updateRects_[i]);
+        }
+        if (SDL_MUSTLOCK(surface_)) SDL_UnlockSurface(surface_);
+    }
     // blit partial updates on resource constrained platforms
     if ((!framebuffer_) && (updateCount_ != 0)) {
         if (updateCount_ < MAX_OVERLAYS) {

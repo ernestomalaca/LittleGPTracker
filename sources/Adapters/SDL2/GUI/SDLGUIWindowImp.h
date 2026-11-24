@@ -65,6 +65,8 @@ private:
 	int appAnchorX_ ;
 	int appAnchorY_ ;
 	int mult_ ;
+	int dither_ ;   // >0: 1 bit (blanco y negro, grises en trama) con píxel de dither_
+	void ditherRect(const SDL_Rect &r) ;
 	bool hdFont_ ;   // trk2als: fuente nítida de 16x16 (pantallas de 640x480)
 	int hdScale_ ;
 	void drawHDChar(unsigned char c,int xx,int yy,GUITextProperties &p) ;
