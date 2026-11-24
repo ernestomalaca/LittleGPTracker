@@ -158,6 +158,8 @@ class SongView : public View, public LaunchHost {
     int saveX_;
     int saveY_;
     int saveOffset_;
+    int followSeen_;   // trk2als: la escena que viene (xN), ya seguida
+    bool followScroll();
     std::string songname_;
     bool invertBatt_;
     bool needClear_;

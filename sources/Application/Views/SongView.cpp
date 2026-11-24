@@ -54,6 +54,7 @@ static void loadText(char *out) {
 
 SongView::SongView(GUIWindow &w, ViewData *viewData, const char *song)
     : View(w, viewData) {
+    followSeen_ = -1;
     aOpenPending_ = false;
     bTap_ = false;
 
@@ -2411,8 +2412,34 @@ void SongView::DrawVuBars() {
         Update animation and draw VU meters
  ******************************************************/
 
+// trk2als: con xN andando, la Session sigue a la escena: si la que viene
+// queda fuera de la pantalla, baja la vista (la que suena arriba). Solo
+// cuando cambia la que viene: si luego te mueves tú, no te jala de vuelta
+bool SongView::followScroll() {
+    int fn, fl;
+    if (!Player::GetInstance()->SceneFollow(fn, fl)) { followSeen_ = -1; return false; }
+    if (fn == followSeen_) return false;
+    followSeen_ = fn;
+    const int rows = View::songRowCount_;
+    int off = viewData_->songOffset_;
+    if (fn >= off && fn <= off + rows - 1 && fn - 1 >= off) return false;   // ya se ven las dos
+    int abs = viewData_->songY_ + off;
+    off = fn - 1;
+    if (off > SONG_ROW_COUNT - rows) off = SONG_ROW_COUNT - rows;
+    if (off < 0) off = 0;
+    if (abs < off) abs = off;
+    if (abs > off + rows - 1) abs = off + rows - 1;
+    viewData_->songOffset_ = off;
+    viewData_->songY_ = abs - off;
+    clampRows();
+    isDirty_ = true;
+    return true;
+}
+
 void SongView::AnimationUpdate() {
+    bool scrolled = followScroll();
     if (blockGrid()) {   // trk2als: los medidores por pista, ~12 veces por segundo
+        if (scrolled) blockRedraw();
         unsigned long now = System::GetInstance()->GetClock();
         if (now - lastVuDraw_ < 80) return;
         lastVuDraw_ = now;
