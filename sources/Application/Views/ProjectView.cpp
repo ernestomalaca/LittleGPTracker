@@ -210,7 +210,8 @@ ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
             IteratorPtr<Path> it(dir->GetIterator());
             for (it->Begin(); !it->IsDone(); it->Next()) {
                 std::string n = it->CurrentItem().GetName();
-                if (n.size() > 4 && n.substr(n.size() - 4) == ".xml") {
+                // fuera los ocultos (los "._algo" que deja macOS al copiar)
+                if (n.size() > 4 && n[0] != '.' && n.substr(n.size() - 4) == ".xml") {
                     n = n.substr(0, n.size() - 4);
                     if (n != "lavanda") found.push_back(n);
                 }

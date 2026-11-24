@@ -228,10 +228,10 @@ Cuantizar y swing
   media. Se guarda en config.xml y toma efecto al reiniciar Chancho.
   Tema (Proyecto > TEMA, A + izquierda/derecha): cambia los colores al
   instante y se queda guardado. lavanda (el de siempre), papel, fosforo,
-  ambar, cga, live, macgris, mac1bit (1 bit, como el Mac clásico: los
-  grises son tramas de puntos), negativo y neg1bit. Viven en
-  chancho6/temas: para hacer el tuyo copia uno con otro nombre y cambia
-  los colores (en hex). DITHER = 1 lo deja en 1 bit (2 = puntos gordos).
+  ambar, cga, live, macgris y negativo. Viven en chancho6/temas: para
+  hacer el tuyo copia uno con otro nombre y cambia los colores (en hex).
+  Experimento: DITHER = 1 en un tema lo deja en 1 bit, con los grises en
+  trama de puntos como el Mac clásico (2 = puntos gordos).
 
 Loops en complex
   La primera vez que suena un loop en complex (o después de cambiar el
