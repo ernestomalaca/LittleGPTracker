@@ -1523,6 +1523,15 @@ void Player::sceneTick() {
     }
 }
 
+void Player::EditorStart(int channel, int row) {
+    if (isRunning_) { Transport(); return; }
+    bool any = false;
+    for (int i = 0; i < SONG_CHANNEL_COUNT; i++)
+        if (launched_[i] >= 0 && project_->TrackExists(i) && hasClip(viewData_, i, launched_[i])) any = true;
+    if (any) Transport();
+    else LaunchClip(channel, row);
+}
+
 void Player::Transport() {
     SetSequencerMode(SM_LIVE);
     if (isRunning_) {   // se acuerda de qué sonaba, para volver con Start
