@@ -1648,13 +1648,13 @@ void InstrumentView::drawGrid() {
 		GUIColor vc=f.IsStatic()?soft:ink ;
 		if (number) {
 			std::string num=value.substr(0,n), unit=value.substr(n) ;
-			if (32*int(num.size())+16*int(unit.size())+26>cw) {   // no cabe: todo a 16
+			if (24*int(num.size())+16*int(unit.size())+20>cw) {   // (la letra de 32 avanza 24)   // no cabe: todo a 16
 				DrawText(cx+12,cy+42,value.c_str(),vc,1) ;
 			} else {
 				DrawText(cx+12,cy+32,num.c_str(),vc,2) ;
-				if (!unit.empty()) DrawText(cx+6+32*int(num.size()),cy+48,unit.c_str(),vc,1) ;
+				if (!unit.empty()) DrawText(cx+16+24*int(num.size()),cy+48,unit.c_str(),vc,1) ;
 			}
-		} else if (32*int(value.size())+24<=cw) {   // palabra corta (sí, no, LP, C, --): grande
+		} else if (24*int(value.size())+24<=cw) {   // palabra corta (sí, no, LP, C, --): grande
 			DrawText(cx+12,cy+32,value.c_str(),vc,2) ;
 		} else {
 			DrawText(cx+12,cy+42,value.c_str(),vc,1) ;
@@ -1754,7 +1754,36 @@ void InstrumentView::drawWaveformBody() {
 		return ;
 	}
 	if (sfMode_ && si->IsZoned()) {   // trk2als: soundfont: el mapa de zonas
-		drawZoneMap(si,X,Y,W,H) ;
+		if (!gridMode_) { drawZoneMap(si,X,Y,W,H) ; return ; }
+		// en la rejilla: la onda de la zona que suena (la de la última nota)
+		// con su envolvente, y abajo la tira de zonas
+		const std::vector<ZoneSource::Zone> &zones=si->Zones() ;
+		int last=si->LastNote() ;
+		if (last<0) last=60 ;
+		int cur=-1, best=1000 ;
+		for (size_t i=0;i<zones.size();i++) {
+			int d=(last<zones[i].lo)?zones[i].lo-last:(last>zones[i].hi)?last-zones[i].hi:0 ;
+			if (d<best) { best=d ; cur=int(i) ; }
+		}
+		const int ZH=34 ;
+		drawZoneStrip(si,X,Y+H-ZH,W,ZH,cur) ;
+		if (cur<0 || !zones[cur].src) return ;
+		SoundSource *zs=zones[cur].src ;
+		int size=zs->GetSize(-1) ;
+		short *data=(short *)zs->GetSampleBuffer(-1) ;
+		int channels=zs->GetChannelCount(-1) ;
+		if (size<=0 || !data || channels<1) return ;
+		int key=-1000-cur ;
+		if (key!=wfSample_ || size!=wfSize_ || wfFrom_!=0 || wfTo_!=size) {
+			for (int b=0;b<WF_BARS;b++) {
+				int from=int((long long)size*b/WF_BARS), to=int((long long)size*(b+1)/WF_BARS) ;
+				int step=(to-from)/200+1, peak=0 ;
+				for (int i=from;i<to;i+=step) { int v=data[i*channels] ; if (v<0) v=-v ; if (v>peak) peak=v ; }
+				wfPeaks_[b]=(unsigned char)(peak>>7) ;
+			}
+			wfSample_=key ; wfSize_=size ; wfFrom_=0 ; wfTo_=size ;
+		}
+		drawSimplerWave(si,X,Y,W,H-ZH-8,size,zs) ;
 		return ;
 	}
 
@@ -1904,7 +1933,7 @@ void InstrumentView::drawWaveformBody() {
 
 // trk2als: onda del Sampler: start/end, región del loop (classic), rebanadas
 // (slice), la envolvente junto a la etiqueta AMP y el cursor de reproducción
-void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int H,int size) {
+void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int H,int size,SoundSource *zsrc) {
 	GUIColor bg=ColorOf(CD_BACKGROUND) ;
 	GUIColor fg=ColorOf(CD_NORMAL) ;
 	GUIColor hi=ColorOf(CD_HILITE1) ;
@@ -1927,9 +1956,9 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 		FillRect(X+int((long long)wfFrom_*W/size),sy,int((long long)vLen*W/size)+2,2,dim2) ;
 	}
 
-	SoundSource *src=SamplePool::GetInstance()->GetSource(si->GetSampleIndex()) ;
+	SoundSource *src=zsrc?zsrc:SamplePool::GetInstance()->GetSource(si->GetSampleIndex()) ;
 	int rate=src?src->GetSampleRate(-1):0 ;
-	bool warped=(si->GetSimpler(SIP_S_WARP)!=SW_OFF) ;
+	bool warped=!zsrc && (si->GetSimpler(SIP_S_WARP)!=SW_OFF) ;
 	if (rate>0) {
 		char info[48] ;
 		int cs=int((long long)size*100/rate) ;
@@ -2049,6 +2078,49 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 		if (!gridMode_) DrawText(a+16,Y+1,txt,fg,0) ;
 	}
 	// la curva encima de las barras
+	if (gridMode_) {
+		// trk2als: como las curvas de automatización: un trazo continuo sobre
+		// el sonido, con sus puntos; el tramo que se edita, más grueso
+		GUIColor cc=TrackColor(viewData_->songX_) ;
+		int top=Y+8, hh=H-18 ;
+		std::vector<int> ys ;
+		for (int x=a;x<b;x++) {
+			float g ;
+			ENV_AT(x,g)
+			ys.push_back(top+int((1.0f-g)*hh)) ;
+		}
+		// el release después del final (empieza al soltar la nota)
+		bool tail=(mode==SM_CLASSIC || ftab || zsrc) && rel>=1 && msPerPx>0 && sus>0 ;
+		int tl=0 ;
+		if (tail) {
+			tl=int(rel/msPerPx) ;
+			if (tl>X+W-b) tl=X+W-b ;
+			for (int x=0;x<tl;x++) {
+				float g=sus*(1.0f-float(x)/(rel/msPerPx)) ;
+				ys.push_back(top+int((1.0f-(g<0?0:g))*hh)) ;
+			}
+		}
+		// los quiebres: fin del attack, fin del decay, el final (suelta)
+		int xa=(msPerPx>0)?a+int(atk/msPerPx):a, xd=(msPerPx>0)?xa+int(dec/msPerPx):a ;
+		if (xa>b) xa=b ;
+		if (xd>b) xd=b ;
+		FourCC fid=focusID(*this) ;
+		int h0=-1, h1=-1 ;
+		if (fid==SIP_S_ATK || fid==SIP_S_FATK || fid==SIP_S_FIN) { h0=a ; h1=xa ; }
+		else if (fid==SIP_S_DEC || fid==SIP_S_FDEC) { h0=xa ; h1=xd ; }
+		else if (fid==SIP_S_SUS || fid==SIP_S_FSUS) { h0=xd ; h1=b ; }
+		else if (fid==SIP_S_REL || fid==SIP_S_FREL || fid==SIP_S_FOUT) { h0=oneShot?b-int(msPerPx>0?rel/msPerPx:0):b ; h1=b+tl ; }
+		drawCurveLine(ys,a,cc,h0,h1) ;
+		int nodes[3]={xa,xd,b} ;
+		int nn=oneShot?0:3 ;
+		for (int k=0;k<nn;k++) {
+			int nx=nodes[k] ;
+			if (nx<a || nx-a>=int(ys.size())) continue ;
+			int ny=ys[nx-a] ;
+			FillRect(nx-6,ny-6,12,12,cc,6) ;
+			FillRect(nx-3,ny-3,6,6,bg,3) ;
+		}
+	} else
 	for (int x=a;x<b;x+=3) {
 		float g ;
 		ENV_AT(x,g)
@@ -2056,7 +2128,7 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 	}
 	// classic (o la del filtro): el release después del final (empieza
 	// cuando sueltas la nota)
-	if ((mode==SM_CLASSIC || ftab) && rel>=1 && msPerPx>0 && sus>0) {
+	if (!gridMode_ && (mode==SM_CLASSIC || ftab) && rel>=1 && msPerPx>0 && sus>0) {
 		int len=int(rel/msPerPx) ;
 		if (len>X+W-b) len=X+W-b ;
 		for (int x=0;x<len;x+=4) {
@@ -2127,8 +2199,7 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 			}
 		}
 	} else {
-		FLAG(a,1)
-		FLAG(b,-1)
+		if (!zsrc) { FLAG(a,1) FLAG(b,-1) }   // multicapa: suena el sample entero
 		if (loop) FrameRect(l0,Y-4,b-l0,H+8,hi,8,2) ;
 	}
 	#undef FLAG
@@ -2141,6 +2212,40 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 		FillRect(playheadPx_-1,Y-4,3,H+8,ColorOf(CD_PLAY),1) ;
 	}
 	#undef FPX
+}
+
+void InstrumentView::drawCurveLine(const std::vector<int> &ys,int x0,GUIColor c,int hiFrom,int hiTo) {
+	int n=int(ys.size()) ;
+	for (int i=0;i<n;i++) {
+		int x=x0+i ;
+		int th=(x>=hiFrom && x<hiTo)?4:2 ;
+		int y=ys[i], prev=i>0?ys[i-1]:y ;
+		int y0=y<prev?y:prev, y1=y<prev?prev:y ;
+		FillRect(x,y0-th/2,1,y1-y0+th,c) ;
+	}
+}
+
+// trk2als: multicapa: las zonas en una tira (solo el rango que usan), cada
+// una con su nota; la que suena, en negativo
+void InstrumentView::drawZoneStrip(SampleInstrument *si,int X,int Y,int W,int H,int cur) {
+	GUIColor bg=ColorOf(CD_BACKGROUND), fg=ColorOf(CD_NORMAL) ;
+	const std::vector<ZoneSource::Zone> &zones=si->Zones() ;
+	if (zones.empty()) return ;
+	int lo=127, hi=0 ;
+	for (size_t i=0;i<zones.size();i++) { if (zones[i].lo<lo) lo=zones[i].lo ; if (zones[i].hi>hi) hi=zones[i].hi ; }
+	int span=hi-lo+1 ;
+	if (span<1) span=1 ;
+	for (size_t i=0;i<zones.size();i++) {
+		const ZoneSource::Zone &z=zones[i] ;
+		int x0=X+int((long long)(z.lo-lo)*W/span), x1=X+int((long long)(z.hi-lo+1)*W/span) ;
+		int w=x1-x0-4 ;
+		if (w<2) w=2 ;
+		bool on=(int(i)==cur) ;
+		FillRect(x0+2,Y,w,H,on?fg:Mix(bg,fg,18),6) ;
+		int r=(z.root>=0)?z.root:z.lo ;
+		std::string nm=padNoteName(r) ;
+		if (16*int(nm.size())+8<=w) DrawText(x0+2+(w-16*int(nm.size()))/2,Y+(H-16)/2,nm.c_str(),on?bg:fg,1) ;
+	}
 }
 
 // trk2als: ~25 veces por segundo; si el cursor se movió, redibujar las figuras

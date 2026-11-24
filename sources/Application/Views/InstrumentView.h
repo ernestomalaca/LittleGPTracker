@@ -72,7 +72,11 @@ private:
 	void gridBox(int k,int &x,int &y,int &w,int &h) ;
 	bool simplerView_ ;      // Sampler estilo Simpler (pistas MIDI)
 	int ampLabelRow_ ;       // dónde va el dibujo de la envolvente
-	void drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int H,int size) ;
+	void drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int H,int size,SoundSource *zsrc=0) ;
+	// trk2als: una curva como las de automatización: trazo continuo, columna
+	// por columna; [hiFrom,hiTo) más grueso (el tramo que se está editando)
+	void drawCurveLine(const std::vector<int> &ys,int x0,GUIColor c,int hiFrom,int hiTo) ;
+	void drawZoneStrip(SampleInstrument *si,int X,int Y,int W,int H,int cur) ;
 	int labelCount_ ;        // etiquetas de los bloques de campos
 	int labelRow_[8] ;
 	const char *labelText_[8] ;
