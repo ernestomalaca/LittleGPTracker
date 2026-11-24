@@ -1552,9 +1552,9 @@ void ClipView::DrawView() {
         bool isRoot = scale > 0 && (pitch - root) % 12 == 0;
         // con escala: sus filas claras, las demás casi negras (como Live)
         int shade = scale > 0 ? (in ? 9 : 1) : (black ? 3 : 8);
-        FillRect(GRID_X, y, gw, RH, Mix(bg, fg, shade));
+        FillRect(GRID_X, y, gw, RH, Mix(bg, fg, GridPct(shade)));
         if ((scale > 0 ? isRoot : pitch % 12 == 0))
-            FillRect(GRID_X, y + RH - 1, gw, 1, Mix(bg, fg, 22));
+            FillRect(GRID_X, y + RH - 1, gw, 1, Mix(bg, fg, GridPct(22)));
         // teclado
         GUIColor key = black ? Mix(bg, fg, 22) : Mix(bg, fg, 70);
         if (scale > 0 && !in) key = Mix(bg, fg, black ? 10 : 25);
@@ -1563,7 +1563,7 @@ void ClipView::DrawView() {
         bool held = std::find(held_.begin(), held_.end(), pitch) != held_.end();
         if (held) {   // trk2als: la que estás tocando en el teclado MIDI, prendida (como en Note)
             key = hi2;
-            FillRect(GRID_X, y, gw, RH, Mix(Mix(bg, fg, shade), hi2, 22));
+            FillRect(GRID_X, y, gw, RH, Mix(Mix(bg, fg, GridPct(shade)), hi2, 22));
         }
         FillRect(8, y + 1, 44, RH - 2, key, 2);
         if (kitInstr) {   // cada pad con su sample (los vacíos, apagados)
@@ -1579,7 +1579,7 @@ void ClipView::DrawView() {
         }
     }
     for (int s = 0; s <= 16; s++) {
-        GUIColor c = (s % 4 == 0) ? Mix(bg, fg, 28) : Mix(bg, fg, 13);
+        GUIColor c = (s % 4 == 0) ? Mix(bg, fg, GridPct(28)) : Mix(bg, fg, GridPct(13));
         FillRect(GRID_X + s * STEP_W - (s == 16 ? 1 : 0), GRID_Y, 1, ROWS * ROW_H, c);
     }
     // más allá del final del clip
@@ -1705,7 +1705,7 @@ void ClipView::DrawView() {
     }
 
     // carril de velocity
-    FillRect(GRID_X, VEL_Y, gw, VEL_H, Mix(bg, fg, 5), 4);
+    FillRect(GRID_X, VEL_Y, gw, VEL_H, Mix(bg, fg, GridPct(5)), 4);
     DrawText(12, VEL_Y + VEL_H / 2 - 6, "vel", dim, 0);
     // en un acorde las barras se apilan: la más alta atrás, la del cursor encima
     for (int pass = 0; pass < 2; pass++) {
@@ -2529,7 +2529,7 @@ void ClipView::drawCurves() {
 
     // la rejilla con las notas de fondo
     const int gw = 16 * STEP_W, gh = ROWS * ROW_H;
-    FillRect(GRID_X, GRID_Y, gw, gh, Mix(bg, fg, 4));
+    FillRect(GRID_X, GRID_Y, gw, gh, Mix(bg, fg, GridPct(4)));
     for (int s = 0; s < 16; s++) {
         GUIColor lc = Mix(bg, fg, (s % 4 == 0) ? 16 : 8);
         FillRect(GRID_X + s * STEP_W, GRID_Y, 1, gh, lc);
@@ -2581,7 +2581,7 @@ void ClipView::drawCurves() {
         int lx = GRID_X - 4 - 8 * int(strlen(lb));
         if (lx < 2) lx = 2;
         DrawText(lx, y - 6, lb, dim, 0);
-        FillRect(GRID_X, y, gw, 1, Mix(bg, fg, 10));
+        FillRect(GRID_X, y, gw, 1, Mix(bg, fg, GridPct(10)));
     }
 
     // la curva (o, sin curva, el valor del instrumento punteado). Una columna

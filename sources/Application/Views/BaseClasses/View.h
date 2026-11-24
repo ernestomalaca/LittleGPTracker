@@ -151,6 +151,7 @@ class View : public Observable {
     void DrawText(int x, int y, const char *txt, GUIColor c, int scale = 1); // scale 0 = letra chica 8x12
     GUIColor ColorOf(ColorDefinition cd);
     static GUIColor Mix(GUIColor a,GUIColor b,int amount);
+    int GridPct(int p);   // trk2als: en fondos claros, los grises de rejilla más marcados
     static GUIColor LinkGreen();
     static bool ThemeColor(const char *key, GUIColor &out, int idx = 0);
 

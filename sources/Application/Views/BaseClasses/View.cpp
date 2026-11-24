@@ -315,6 +315,12 @@ GUIColor View::LinkGreen() {   // el verde de Link (y de "suena"); el tema lo ca
 	return c ;
 }
 
+int View::GridPct(int p) {
+	GUIColor bg = ColorOf(CD_BACKGROUND) ;
+	bool light = bg._r * 77 + bg._g * 151 + bg._b * 28 > 150 * 256 ;
+	return light ? (p * 2 < p + 14 ? p * 2 : p + 14) : p ;
+}
+
 GUIColor View::ColorOf(ColorDefinition cd) { return ((AppWindow &)w_).GetColor(cd); }
 GUIColor View::Mix(GUIColor a, GUIColor b, int t) {
 	// t en porcentaje: 0 = a, 100 = b
