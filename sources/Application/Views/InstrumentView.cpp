@@ -1643,6 +1643,7 @@ void InstrumentView::drawGrid() {
 				if (iv==SSB_MANUAL) value="manual" ;
 				else { snprintf(b,sizeof(b),"%d",current_->FindVariable(SIP_S_SLICES)->GetInt()) ; value=b ; }
 			} else if (id==SIP_S_PAN && iv==0) value="C" ;
+			else if (id==SIP_S_GLIDE && current_->FindVariable(SIP_S_VOICES)->GetInt()>1) value="--" ;
 			// un segundo o más: en segundos, así el número cabe grande
 			if (value.size()>2 && value.compare(value.size()-2,2,"ms")==0) {
 				int ms=atoi(value.c_str()) ;
@@ -1663,7 +1664,8 @@ void InstrumentView::drawGrid() {
 		// el número (con signo y punto) grande; lo que sigue, su unidad
 		size_t n=0 ;
 		while (n<value.size() && (isdigit((unsigned char)value[n]) || value[n]=='+' || value[n]=='-' || value[n]=='.')) n++ ;
-		bool number=n>0 && (value[0]!='-' || n>1) ;
+		bool number=false ;   // al menos un dígito ('--' es palabra)
+		for (size_t q=0;q<n;q++) if (isdigit((unsigned char)value[q])) number=true ;
 		GUIColor vc=f.IsStatic()?soft:ink ;
 		if (number) {
 			std::string num=value.substr(0,n), unit=value.substr(n) ;
@@ -1831,6 +1833,7 @@ void InstrumentView::drawWaveformBody() {
 		if (vFrom<0) { vTo-=vFrom ; vFrom=0 ; }
 		if (vTo>size) { vFrom-=vTo-size ; vTo=size ; if (vFrom<0) vFrom=0 ; }
 		if (vTo-vFrom>size*8/10) { vFrom=0 ; vTo=size ; } // casi todo: la onda completa
+		if (waveEdit_) { vFrom=0 ; vTo=size ; }   // dibujando: el sample entero, para elegir inicio y fin
 		// editando marcas: zoom alrededor del cursor
 		if (waveEdit_ && waveZoom_>1) {
 			int len=(vTo-vFrom)/waveZoom_ ;
@@ -2659,8 +2662,10 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 	int step=(wfTo_>wfFrom_)?(wfTo_-wfFrom_)/128:(b-a)/128 ;
 	if (step<1) step=1 ;
 	int c=markVar_.GetInt() ;
-	if (c<a) c=a ;
-	if (c>b) c=b ;
+	SoundSource *wsrc=si->currentSource() ;
+	int size=wsrc?wsrc->GetSize(-1):b ;
+	if (c<0) c=0 ;
+	if (c>size) c=size ;
 	std::vector<int> m=si->GetMarks() ;
 	isDirty_=true ;
 
@@ -2676,7 +2681,7 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 	// Start: tocar / parar la región desde el cursor (y la canción)
 	if (mask==EPBM_START) {
 		if (tapPlay_ || tapPending_>=0) { tapPending_=-1 ; stopTapPlay() ; }
-		else startTapPlay((c>=b-step)?a:c) ;
+		else startTapPlay((c<a || c>=b-step)?a:c) ;
 		return true ;
 	}
 	// mientras suena la región: A marca donde va sonando (lo que se oye va
@@ -2705,6 +2710,20 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 		stopTapPlay() ;
 	}
 
+	// B + L / B + R: el inicio / el final donde está el cursor (como el
+	// inicio y el final del loop en el clip)
+	if ((mask&EPBM_B) && (mask&(EPBM_L|EPBM_R)) && !(mask&(EPBM_SELECT|EPBM_A)) && size>0) {
+		bool st=(mask&EPBM_L)!=0 ;
+		int pc=int(((long long)c*100+size/2)/size) ;
+		int s0=si->GetSimpler(SIP_S_START), e0=si->GetSimpler(SIP_S_END) ;
+		if (st) { if (pc>e0-1) pc=e0-1 ; if (pc<0) pc=0 ; si->FindVariable(SIP_S_START)->SetInt(pc) ; }
+		else { if (pc<s0+1) pc=s0+1 ; if (pc>100) pc=100 ; si->FindVariable(SIP_S_END)->SetInt(pc) ; }
+		si->SimplerRegion(a,b) ;
+		markVar_.SetInt(st?a:b) ;
+		waveFlag_=st?1:2 ;
+		waveARelease() ;   // suena: desde el inicio, o el último segundo
+		return true ;
+	}
 	// Select, B: marcar desde aquí (las flechas agrandan); otra vez: todas
 	if ((mask&(EPBM_SELECT|EPBM_R)) && (mask&EPBM_B) && !(mask&EPBM_A)) {
 		if (!canMark()) return true ;
@@ -2741,8 +2760,8 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 	if (mask&EPBM_B) {
 		if (mask&(EPBM_LEFT|EPBM_RIGHT)) {     // B + ← →: de a saltos grandes
 			c+=((mask&EPBM_RIGHT)?step:-step)*16 ;
-			if (c<a) c=a ;
-			if (c>b) c=b ;
+			if (c<0) c=0 ;
+			if (c>size) c=size ;
 			markVar_.SetInt(c) ;
 		} else if (mask&EPBM_UP) {             // B + ↑ / ↓: zoom
 			if (waveZoom_<64) waveZoom_*=2 ;
@@ -2752,23 +2771,27 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 		return true ;
 	}
 	if (mask&EPBM_Y) {                         // Y + ← →: de marca en marca
+		std::vector<int> pts ;
+		pts.push_back(a) ;
+		if (canMark()) for (size_t i=0;i<m.size();i++) if (m[i]>a && m[i]<b) pts.push_back(m[i]) ;
+		pts.push_back(b) ;
 		if (mask&EPBM_RIGHT) {
-			int next=b ;
-			for (size_t i=0;i<m.size();i++) if (m[i]>c && m[i]<next) next=m[i] ;
-			markVar_.SetInt(next) ;
+			int next=-1 ;
+			for (size_t i=0;i<pts.size();i++) if (pts[i]>c && (next<0 || pts[i]<next)) next=pts[i] ;
+			if (next>=0) markVar_.SetInt(next) ;
 		} else if (mask&EPBM_LEFT) {
-			int prev=a ;
-			for (size_t i=0;i<m.size();i++) if (m[i]<c && m[i]>prev) prev=m[i] ;
-			markVar_.SetInt(prev) ;
+			int prev=-1 ;
+			for (size_t i=0;i<pts.size();i++) if (pts[i]<c && pts[i]>prev) prev=pts[i] ;
+			if (prev>=0) markVar_.SetInt(prev) ;
 		}
 		return true ;
 	}
 	if (mask&EPBM_A) {
 		if (mask==EPBM_A) {                    // A sobre una marca: la agarra; en vacío: pone una al soltar
 			waveFlag_=0 ;
-			if (c<=a+step/2) { waveFlag_=1 ; waveSel_=0 ; waveAPut_=false ; markVar_.SetInt(a) ; return true ; }
-			if (c>=b-step/2) { waveFlag_=2 ; waveSel_=0 ; waveAPut_=false ; markVar_.SetInt(b) ; return true ; }
-			if (!canMark()) { waveSel_=0 ; waveAPut_=false ; return true ; }
+			if (c>=a-step/2 && c<=a+step/2) { waveFlag_=1 ; waveSel_=0 ; waveAPut_=false ; markVar_.SetInt(a) ; return true ; }
+			if (c>=b-step/2 && c<=b+step/2) { waveFlag_=2 ; waveSel_=0 ; waveAPut_=false ; markVar_.SetInt(b) ; return true ; }
+			if (!canMark() || c<=a || c>=b) { waveSel_=0 ; waveAPut_=false ; return true ; }
 			int k=nearMark(m) ;
 			if (k>=0) { waveSel_=1 ; markVar_.SetInt(m[k]) ; waveAPut_=false ; }
 			else { waveSel_=0 ; waveAPut_=true ; }
@@ -2810,10 +2833,10 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 		}
 		return true ;
 	}
-	if (mask==EPBM_LEFT || mask==EPBM_RIGHT) {   // ← →: el cursor
+	if (mask==EPBM_LEFT || mask==EPBM_RIGHT) {   // ← →: el cursor (por todo el sample)
 		c+=(mask==EPBM_RIGHT)?step:-step ;
-		if (c<a) c=a ;
-		if (c>b) c=b ;
+		if (c<0) c=0 ;
+		if (c>size) c=size ;
 		markVar_.SetInt(c) ;
 		return true ;
 	}
