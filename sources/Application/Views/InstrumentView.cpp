@@ -1108,6 +1108,17 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 		if (pressed) pageTap_=(mask==EPBM_L)?-1:(mask==EPBM_R)?1:0 ;
 		else if (pageTap_ && mask==0) { int d=pageTap_ ; pageTap_=0 ; turnPage(d) ; return ; }
 	}
+	// en la onda: L solo va a la bandera del inicio, R solo a la del final
+	if (waveEdit_ && current_ && current_->GetType()==IT_SAMPLE) {
+		if (pressed) pageTap_=(mask==EPBM_L)?-1:(mask==EPBM_R)?1:0 ;
+		else if (pageTap_ && mask==0) {
+			markVar_.SetInt(((SampleInstrument *)current_)->RegionPoint(pageTap_<0)) ;
+			pageTap_=0 ;
+			waveSel_=0 ;
+			isDirty_=true ;
+			return ;
+		}
+	}
 	// trk2als: automatización
 	if (pressed && mask==(EPBM_Y|EPBM_START)) { toggleAutoRec() ; return ; }
 	// A + gatillo L: la curva de este parámetro en el clip (si no se
@@ -1606,13 +1617,14 @@ void InstrumentView::drawGrid() {
 	int tx=10 ;
 	for (int i=0;i<pageCount_;i++) {
 		int w=16*int(strlen(pageName_[i]))+24 ;
-		if (i==page_[kind]) {
+		if (waveEdit_) DrawText(tx+12,GRID_TABS_Y+6,pageName_[i],Mix(bg,fg,i==page_[kind]?40:18),1) ;
+		else if (i==page_[kind]) {
 			FillRect(tx,GRID_TABS_Y,w,28,fg,14) ;
 			DrawText(tx+12,GRID_TABS_Y+6,pageName_[i],bg,1) ;
 		} else DrawText(tx+12,GRID_TABS_Y+6,pageName_[i],dim,1) ;
 		tx+=w+8 ;
 	}
-	if (pageCount_>1) DrawText(640-10-16*3,GRID_TABS_Y+6,"L·R",dim,1) ;
+	if (pageCount_>1 && !waveEdit_) DrawText(640-10-16*3,GRID_TABS_Y+6,"L·R",dim,1) ;
 
 	bool used[8]={false,false,false,false,false,false,false,false} ;
 	IteratorPtr<UIField> it(T_SimpleList<UIField>::GetIterator()) ;
@@ -1660,6 +1672,12 @@ void InstrumentView::drawGrid() {
 		bool here=waveEdit_?flagBox:(&f==focus) ;
 		bool moving=here && aHeld && !f.IsStatic() ;
 		GUIColor box=moving?fg:card, ink=moving?bg:fg, soft=Mix(box,ink,55) ;
+		bool off=false ;
+		if (waveEdit_) {   // en la onda: solo INICIO y FIN siguen vivos
+			FourCC bid=f.IsStatic()?0:((UIIntVarField &)f).GetVariableID() ;
+			off=(bid!=SIP_S_START && bid!=SIP_S_END) ;
+			if (off) { ink=Mix(bg,fg,22) ; soft=Mix(bg,fg,18) ; }
+		}
 		if (moving) FillRect(cx,cy,cw,ch,box,7) ;
 		if (here && !moving) FrameRect(cx,cy,cw,ch,fg,7,3) ;
 		DrawText(cx+12,cy+10,name.c_str(),soft,1) ;
@@ -1693,7 +1711,7 @@ void InstrumentView::drawGrid() {
 				if (fr<0) fr=0 ;
 				if (fr>1) fr=1 ;
 				int bx=cx+12, bw=cw-24, by=cy+ch-12 ;
-				FillRect(bx,by,bw,5,Mix(box,ink,20),2) ;
+				FillRect(bx,by,bw,5,off?Mix(bg,fg,8):Mix(box,ink,20),2) ;
 				if (fr>0) FillRect(bx,by,int(bw*fr)<5?5:int(bw*fr),5,ink,2) ;
 			}
 		}
