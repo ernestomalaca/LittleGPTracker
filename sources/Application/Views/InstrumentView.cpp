@@ -2964,6 +2964,7 @@ void InstrumentView::exitWaveEdit() {
 // suena desde 'from' (o el cursor) hasta 'end' (o el final del sample)
 void InstrumentView::startPreview(int from,int end) {
 	if (!current_ || current_->GetType()!=IT_SAMPLE) return ;
+	if (clipSounding()) return ;   // con el clip sonando se oye el clip, no la prueba
 	SampleInstrument *si=(SampleInstrument *)current_ ;
 	int index=si->GetSampleIndex() ;
 	SoundSource *src=si->currentSource() ;
