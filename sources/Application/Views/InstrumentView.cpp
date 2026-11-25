@@ -342,6 +342,7 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data),
 	envSel_=0 ;
 	envOffAt_=0 ;
 	envCh_=0 ;
+	envNote_=60 ;
 	tapPending_=-1 ;
 	waveGesture_=false ;
 	waveAPut_=false ;
@@ -1152,7 +1153,22 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 	if (pressed && (mask&EPBM_A) && (mask&(EPBM_LEFT|EPBM_RIGHT|EPBM_UP|EPBM_DOWN)) && !(mask&EPBM_B))
 		takeOver() ;
 	if (!pressed && capping_ && !(mask&EPBM_A)) capEnd() ;
+	// trk2als: en las cajas del Sampler, cada cambio de valor suena (la nota,
+	// un segundo), salvo que el clip de la pista ya esté sonando con notas
+	Variable *audV=0 ;
+	int audBefore=0 ;
+	if (pressed && (mask&EPBM_A) && !(mask&EPBM_B) && gridMode_ && simplerView_ && !kitMode_ && !audioMode_ &&
+	    GetFocus() && !GetFocus()->IsStatic() && current_ && current_->GetType()==IT_SAMPLE) {
+		audV=&((UIIntVarField *)GetFocus())->GetVariable() ;
+		audBefore=audV->GetInt() ;
+		if (audV->GetID()==presetSaveVar_.GetID()) audV=0 ;
+	}
+	int audID=audV?audV->GetID():0 ;
 	processButtonMask(mask,pressed) ;
+	if (audID && current_ && current_->GetType()==IT_SAMPLE) {
+		Variable *v=current_->FindVariable(audID) ;   // (la pantalla pudo rearmarse)
+		if (v && v->GetInt()!=audBefore && !waveEdit_) envAudition() ;
+	}
 	// sin grabar: lo que se mueve con A + flechas se anota para la captura
 	if (pressed && (mask&EPBM_A) && (mask&(EPBM_LEFT|EPBM_RIGHT|EPBM_UP|EPBM_DOWN)) && !(mask&EPBM_B) &&
 	    !Player::GetInstance()->IsAutoRec()) {
@@ -2409,10 +2425,9 @@ void InstrumentView::AnimationUpdate() {
 // inicio; el fade out, desde un poco antes de donde empieza a bajar
 void InstrumentView::fadeAudition() {
 	if (!current_ || current_->GetType()!=IT_SAMPLE) return ;
-	Player *player=Player::GetInstance() ;
-	if (player->IsRunning()) return ;   // sonando la canción ya se oye en su clip
+	if (clipSounding()) return ;
 	SampleInstrument *si=(SampleInstrument *)current_ ;
-	if (previewing_) stopPreview() ;
+	int hold=1000 ;
 	if (fadeSel_==1) {
 		int a,b ;
 		SoundSource *src=si->currentSource() ;
@@ -2420,11 +2435,23 @@ void InstrumentView::fadeAudition() {
 			int rate=src->GetSampleRate(-1) ;
 			int from=b-int((si->GetSimpler(SIP_S_FOUT)+600)*(rate/1000.0f)) ;
 			if (from>a) si->AuditionFrom(from) ;
+			hold=si->GetSimpler(SIP_S_FOUT)+800 ;   // que alcance a oírse entero
 		}
 	}
+	envAudition(hold) ;
+}
+
+// la pista ya suena con las notas de su clip: ahí se oye el cambio, no hace
+// falta (ni conviene) tocarle una nota encima
+bool InstrumentView::clipSounding() {
+	Player *player=Player::GetInstance() ;
+	if (!player->IsRunning()) return false ;
 	int ch=viewData_->songX_ ;
-	if (ch<0 || ch>=SONG_CHANNEL_COUNT) ch=0 ;
-	player->PreviewNote(ch,si,60) ;
+	if (ch<0 || ch>=SONG_CHANNEL_COUNT) return false ;
+	if (player->ClipTickPos(ch)<0) return false ;
+	unsigned char c=viewData_->currentPlayChain_[ch] ;
+	if (c>=CLIP_COUNT) return false ;
+	return !viewData_->song_->clips_->Get(c).notes.empty() ;
 }
 
 FourCC InstrumentView::envID(int part) {
@@ -2440,23 +2467,26 @@ void InstrumentView::envNoteOff() {
 	envOffAt_=0 ;
 	MixerService *ms=MixerService::GetInstance() ;
 	ms->Lock() ;
-	Player::GetInstance()->LiveNoteOff(envCh_,60) ;
+	Player::GetInstance()->LiveNoteOff(envCh_,envNote_) ;
 	ms->Unlock() ;
 }
 
 // suena la nota (C3) un segundo y se suelta: se oyen el sustain y el release
-void InstrumentView::envAudition() {
+void InstrumentView::envAudition(int holdMs) {
 	if (!current_ || current_->GetType()!=IT_SAMPLE) return ;
+	if (clipSounding()) return ;
 	if (previewing_) stopPreview() ;
 	envNoteOff() ;
 	int ch=viewData_->songX_ ;
 	if (ch<0 || ch>=SONG_CHANNEL_COUNT) ch=0 ;
 	envCh_=ch ;
+	SampleInstrument *asi=(SampleInstrument *)current_ ;
+	envNote_=(!sfMode_ && asi->GetSimpler(SIP_S_MODE)==SM_SLICE)?36:60 ;
 	MixerService *ms=MixerService::GetInstance() ;
 	ms->Lock() ;
-	Player::GetInstance()->LiveNoteOn(ch,current_,60,100) ;
+	Player::GetInstance()->LiveNoteOn(ch,current_,envNote_,100) ;
 	ms->Unlock() ;
-	envOffAt_=System::GetInstance()->GetClock()+1000 ;
+	envOffAt_=System::GetInstance()->GetClock()+holdMs ;
 }
 
 // true si la tecla se usó aquí
@@ -2543,12 +2573,8 @@ bool InstrumentView::processFadeEdit(unsigned short mask,bool pressed) {
 	pageTap_=(mask==EPBM_L)?-1:(mask==EPBM_R)?1:0 ;
 	isDirty_=true ;
 	if (mask==EPBM_START) { fadeAudition() ; return true ; }
-	// B + L / B + R: ese fade; sin soltar, ← → lo mueven y va sonando.
-	// (A + ← → mueve el elegido, como un punto de una curva)
-	bool bl=(mask&EPBM_B) && (mask&EPBM_L), br=(mask&EPBM_B) && (mask&EPBM_R) && !(mask&EPBM_SELECT) ;
-	if (bl || br || (mask&EPBM_A)) {
-		if (bl) fadeSel_=0 ;
-		else if (br) fadeSel_=1 ;
+	// A + ← → mueve el fade elegido (L / R), y va sonando
+	if ((mask&EPBM_A) && !(mask&EPBM_B)) {
 		if (mask&(EPBM_LEFT|EPBM_RIGHT)) {
 			Variable *v=si->FindVariable(fadeSel_?SIP_S_FOUT:SIP_S_FIN) ;
 			int cur=v->GetInt() ;
@@ -2561,7 +2587,7 @@ bool InstrumentView::processFadeEdit(unsigned short mask,bool pressed) {
 			if (nv>2000) nv=2000 ;
 			v->SetInt(nv) ;
 			fadeAudition() ;
-		} else if (bl || br) fadeAudition() ;
+		}
 		return true ;
 	}
 	return true ;   // lo demás no hace nada hasta salir con Select

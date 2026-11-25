@@ -110,9 +110,11 @@ private:
 	int envSel_ ;             // 0 attack, 1 decay, 2 sustain, 3 release
 	unsigned long envOffAt_ ; // cuándo se suelta la nota de la escucha (0: no suena)
 	int envCh_ ;
+	int envNote_ ;            // C3; en slice, C1 (la primera rebanada)
 	FourCC envID(int part) ;
 	bool processEnvEdit(unsigned short mask,bool pressed) ;
-	void envAudition() ;
+	void envAudition(int holdMs=1000) ;
+	bool clipSounding() ;     // la pista ya suena con las notas de su clip
 	void envNoteOff() ;
 	bool drawEditing() { return waveEdit_ || fadeEdit_ || envEdit_ ; }
 	// deshacer / rehacer en la onda (Select + L / R): inicio, fin y marcas
