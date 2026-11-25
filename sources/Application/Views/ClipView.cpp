@@ -1926,13 +1926,16 @@ void ClipView::curveMoveNode(int dt, int dv, bool big) {
     if (dt) {
         int n = dt * (curveAccel_ < 6 ? curveAccel_ : 6);   // sostenido, de a más pasos
         int ns = cursorStep_ + n;
-        if (ns < 0) ns = 0;
-        if (ns >= c.Steps()) ns = c.Steps() - 1;
-        int np = ns * CLIP_TICKS;   // con A queda en la rejilla
-        for (size_t j = 0; j < l->points.size(); j++)
-            if ((int)j != k && l->points[j].pos == np) return;   // justo ahí ya hay otro
-        p.pos = np;
-        cursorStep_ = ns;
+        // no rebasa a sus vecinos: llega hasta el paso de al lado y ahí se queda
+        int lo = (k > 0) ? l->points[k - 1].pos / CLIP_TICKS + 1 : 0;
+        int hi = (k + 1 < (int)l->points.size()) ? l->points[k + 1].pos / CLIP_TICKS - 1 : c.Steps() - 1;
+        if (hi >= c.Steps()) hi = c.Steps() - 1;
+        if (ns < lo) ns = lo;
+        if (ns > hi) ns = hi;
+        if (lo <= hi && ns != cursorStep_) {
+            p.pos = ns * CLIP_TICKS;   // queda en la rejilla
+            cursorStep_ = ns;
+        }
     }
     if (dv) {   // A + ↑ ↓: de a 1/24 de la altura (sostenido, acelera)
         int r = curveDenorm(curveNorm(p.value) + dv * curveAccel_ / 24.0);
