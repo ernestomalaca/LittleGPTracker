@@ -138,6 +138,29 @@ private:
 	Variable &count_ ;
 } ;
 
+// trk2als: el MODO del Sampler. A + ← → cambia de modo; en slice, A + ↑ ↓
+// elige cómo se rebana ahí mismo: 2, 4, 8 o a mano (lo último hacia arriba)
+class UIModeField : public UIIntVarField {
+public:
+	UIModeField(GUIPoint &p, Variable &mode, Variable &by, Variable &count) :
+		UIIntVarField(p,mode,"MODO: %s",0,2,1,1), by_(by), count_(count) {}
+	virtual void ProcessArrow(unsigned short mask) {
+		if (mask!=EPBM_UP && mask!=EPBM_DOWN) { UIIntVarField::ProcessArrow(mask) ; return ; }
+		if (src_.GetInt()!=SM_SLICE) return ;
+		int n=count_.GetInt() ;
+		int idx=(by_.GetInt()==SSB_MANUAL)?3:(n<=2)?0:(n<=4)?1:2 ;
+		idx+=(mask==EPBM_UP)?1:-1 ;
+		if (idx<0) idx=0 ;
+		if (idx>3) idx=3 ;
+		static const int counts[3]={2,4,8} ;
+		if (idx==3) by_.SetInt(SSB_MANUAL) ;
+		else { by_.SetInt(SSB_REGION) ; count_.SetInt(counts[idx]) ; }
+	}
+private:
+	Variable &by_ ;
+	Variable &count_ ;
+} ;
+
 class UIFreqVarField : public UIIntVarField {
 public:
 	UIFreqVarField(GUIPoint &p, Variable &v) : UIIntVarField(p,v,"freq: %d",30,22000,1,12) {}
@@ -613,7 +636,8 @@ void InstrumentView::fillSampleParameters() {
 				int r2=4 ;
 				if (!sfMode_) {
 					v=instrument->FindVariable(SIP_S_MODE) ;
-					ADD(new UIIntVarField(GAT(0),*v,"MODO: %s",0,2,1,1)) ;
+					ADD(new UIModeField(GAT(0),*v,*instrument->FindVariable(SIP_S_SLICEBY),
+					                    *instrument->FindVariable(SIP_S_SLICES))) ;
 					if (mode==SM_CLASSIC) {   // classic no tiene trigger: ahí va su loop
 						v=instrument->FindVariable(SIP_S_LOOP) ;
 						ADD(new UIIntVarField(GAT(1),*v,"LOOP: %s",0,1,1,1)) ;
@@ -642,6 +666,9 @@ void InstrumentView::fillSampleParameters() {
 					ADD(new UIIntVarField(GAT(7),presetSaveVar_,"PRESET: guardar",0,0,1,1)) ;
 				}
 			} else if (!strcmp(pn,"MÁS")) {
+				// cada cosa siempre en su caja: arriba WARP · BPM · GLIDE · VOCES;
+				// abajo lo del modo (el largo del loop, o los fades de las
+				// rebanadas) y, al final, guardar
 				v=instrument->FindVariable(SIP_S_WARP) ;
 				ADD(new UIIntVarField(GAT(0),*v,"WARP: %s",0,2,1,1)) ;
 				if (warped) {
@@ -650,26 +677,20 @@ void InstrumentView::fillSampleParameters() {
 					v=instrument->FindVariable(SIP_S_BPM) ;
 					ADD(new UIIntVarField(GAT(1),*v,"BPM: %d",40,300,1,10)) ;
 				}   // sin warp no hay bpm: la caja queda vacía (el cursor no se atora)
+				if (mode!=SM_SLICE) {   // slice: una rebanada a la vez, sin glide ni voces
+					v=instrument->FindVariable(SIP_S_GLIDE) ;
+					ADD(new UIIntVarField(GAT(2),*v,"GLIDE: %dms",0,2000,10,100)) ;
+					v=instrument->FindVariable(SIP_S_VOICES) ;
+					ADD(new UIIntVarField(GAT(3),*v,"VOCES: %d",1,2,1,1)) ;
+				}
 				if (mode==SM_CLASSIC && instrument->GetSimpler(SIP_S_LOOP)) {
 					v=instrument->FindVariable(SIP_S_LLEN) ;
-					ADD(new UIIntVarField(GAT(2),*v,"LARGO: %d%%",1,100,1,10)) ;
-				} else if (mode==SM_SLICE) {   // cómo se rebana
-					ADD(new UISlicesField(GAT(2),*instrument->FindVariable(SIP_S_SLICEBY),
-					                      *instrument->FindVariable(SIP_S_SLICES))) ;
-				}
-				if (mode!=SM_SLICE) {   // en slice no hay glide (como en Simpler)
-					v=instrument->FindVariable(SIP_S_GLIDE) ;
-					ADD(new UIIntVarField(GAT(3),*v,"GLIDE: %dms",0,2000,10,100)) ;
-				}
-				if (mode==SM_SLICE) {   // los fades de las rebanadas (los mismos para todas)
+					ADD(new UIIntVarField(GAT(4),*v,"LARGO: %d%%",1,100,1,10)) ;
+				} else if (mode==SM_SLICE) {   // los fades de las rebanadas (los mismos para todas)
 					v=instrument->FindVariable(SIP_S_FIN) ;
 					ADD(new UIIntVarField(GAT(4),*v,"FADE IN: %dms",0,2000,5,50)) ;
 					v=instrument->FindVariable(SIP_S_FOUT) ;
 					ADD(new UIIntVarField(GAT(5),*v,"FADE OUT: %dms",0,2000,5,50)) ;
-				}
-				if (mode!=SM_SLICE) {   // slice: una rebanada a la vez, sin voces que elegir
-					v=instrument->FindVariable(SIP_S_VOICES) ;
-					ADD(new UIIntVarField(GAT(6),*v,"VOCES: %d",1,2,1,1)) ;
 				}
 				ADD(new UIIntVarField(GAT(7),presetSaveVar_,"PRESET: guardar",0,0,1,1)) ;
 			} else if (fpage) {
@@ -1346,6 +1367,7 @@ void InstrumentView::processButtonMask(unsigned short mask,bool pressed) {
 			editedBefore=ff->GetVariable().GetInt() ;
 		}
 	}
+	int sliceByBefore=(current_ && current_->GetType()==IT_SAMPLE)?current_->FindVariable(SIP_S_SLICEBY)->GetInt():-1 ;
 	FieldView::ProcessButtonMask(mask) ;
 	if (audioMode_ && (editedID==SIP_FROMBAR || editedID==SIP_LOOPBARS) &&
 	    current_->FindVariable(editedID)->GetInt()!=editedBefore) {
@@ -1360,8 +1382,10 @@ void InstrumentView::processButtonMask(unsigned short mask,bool pressed) {
 	}
 	// cambiar el warp muestra u oculta 'transpose'
 	// ... y el loop mode (en pistas de tracker) muestra u oculta bars y bpm
-	bool toManual=(editedID==SIP_S_SLICEBY &&
-	     current_->FindVariable(editedID)->GetInt()==SSB_MANUAL && editedBefore!=SSB_MANUAL) ;
+	bool toManual=(sliceByBefore>=0 && sliceByBefore!=SSB_MANUAL && current_ && current_->GetType()==IT_SAMPLE &&
+	     current_->FindVariable(SIP_S_SLICEBY)->GetInt()==SSB_MANUAL &&
+	     current_->FindVariable(SIP_S_MODE)->GetInt()==SM_SLICE) ;
+	if (editedID==SIP_S_MODE) isDirty_=true ;   // (el número de rebanadas se ve en su caja)
 	if ((editedID==SIP_WARP || editedID==SIP_LOOPMODE || editedID==SIP_S_MODE ||
 	     editedID==SIP_S_LOOP || editedID==SIP_S_WARP || editedID==SIP_S_ETAB ||
 	     editedID==SIP_S_SLICEBY) &&
@@ -1729,6 +1753,9 @@ void InstrumentView::drawGrid() {
 				name="SLICES" ;
 				if (iv==SSB_MANUAL) value="manual" ;
 				else { snprintf(b,sizeof(b),"%d",current_->FindVariable(SIP_S_SLICES)->GetInt()) ; value=b ; }
+			} else if (id==SIP_S_MODE && iv==SM_SLICE) {   // cómo se rebana (A + ↑ ↓)
+				if (current_->FindVariable(SIP_S_SLICEBY)->GetInt()==SSB_MANUAL) value="manual" ;   // (slice, a mano: no cabe más)
+				else { snprintf(b,sizeof(b),"slice %d",current_->FindVariable(SIP_S_SLICES)->GetInt()) ; value=b ; }
 			} else if (id==SIP_S_PAN && iv==0) value="C" ;
 			else if (id==SIP_S_GLIDE && current_->FindVariable(SIP_S_VOICES)->GetInt()>1) value="--" ;
 			// un segundo o más: en segundos, así el número cabe grande
