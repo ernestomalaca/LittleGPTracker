@@ -142,11 +142,27 @@ private:
 // elige cómo se rebana ahí mismo: 2, 4, 8 o a mano (lo último hacia arriba)
 class UIModeField : public UIIntVarField {
 public:
-	UIModeField(GUIPoint &p, Variable &mode, Variable &by, Variable &count) :
-		UIIntVarField(p,mode,"MODO: %s",0,2,1,1), by_(by), count_(count) {}
+	UIModeField(GUIPoint &p, Variable &mode, Variable &by, Variable &count, I_Instrument *inst) :
+		UIIntVarField(p,mode,"MODO: %s",0,2,1,1), by_(by), count_(count), inst_(inst) {}
+	static Variable *fresh_ ;   // el modo que acaba de llegar a slice (aún sin rebanar)
 	virtual void ProcessArrow(unsigned short mask) {
-		if (mask!=EPBM_UP && mask!=EPBM_DOWN) { UIIntVarField::ProcessArrow(mask) ; return ; }
+		if (mask!=EPBM_UP && mask!=EPBM_DOWN) {
+			int before=src_.GetInt() ;
+			UIIntVarField::ProcessArrow(mask) ;
+			// recién llegado a slice: solo "slice", todavía no se rebana nada
+			if (src_.GetInt()!=before) fresh_=(src_.GetInt()==SM_SLICE)?&src_:0 ;
+			return ;
+		}
 		if (src_.GetInt()!=SM_SLICE) return ;
+		if (fresh_==&src_) {   // la primera vez: fades de fábrica y a 2 rebanadas
+			fresh_=0 ;
+			Variable *fi=inst_->FindVariable(SIP_S_FIN), *fo=inst_->FindVariable(SIP_S_FOUT) ;
+			if (fi) fi->SetInt(0) ;
+			if (fo) fo->SetInt(0) ;
+			by_.SetInt(SSB_REGION) ;
+			count_.SetInt(2) ;
+			return ;
+		}
 		int n=count_.GetInt() ;
 		int idx=(by_.GetInt()==SSB_MANUAL)?3:(n<=2)?0:(n<=4)?1:2 ;
 		idx+=(mask==EPBM_UP)?1:-1 ;
@@ -159,7 +175,9 @@ public:
 private:
 	Variable &by_ ;
 	Variable &count_ ;
+	I_Instrument *inst_ ;
 } ;
+Variable *UIModeField::fresh_=0 ;
 
 class UIFreqVarField : public UIIntVarField {
 public:
@@ -637,7 +655,7 @@ void InstrumentView::fillSampleParameters() {
 				if (!sfMode_) {
 					v=instrument->FindVariable(SIP_S_MODE) ;
 					ADD(new UIModeField(GAT(0),*v,*instrument->FindVariable(SIP_S_SLICEBY),
-					                    *instrument->FindVariable(SIP_S_SLICES))) ;
+					                    *instrument->FindVariable(SIP_S_SLICES),instrument)) ;
 					if (mode==SM_CLASSIC) {   // classic no tiene trigger: ahí va su loop
 						v=instrument->FindVariable(SIP_S_LOOP) ;
 						ADD(new UIIntVarField(GAT(1),*v,"LOOP: %s",0,1,1,1)) ;
@@ -1754,7 +1772,8 @@ void InstrumentView::drawGrid() {
 				if (iv==SSB_MANUAL) value="manual" ;
 				else { snprintf(b,sizeof(b),"%d",current_->FindVariable(SIP_S_SLICES)->GetInt()) ; value=b ; }
 			} else if (id==SIP_S_MODE && iv==SM_SLICE) {   // cómo se rebana (A + ↑ ↓)
-				if (current_->FindVariable(SIP_S_SLICEBY)->GetInt()==SSB_MANUAL) value="manual" ;   // (slice, a mano: no cabe más)
+				if (UIModeField::fresh_==current_->FindVariable(SIP_S_MODE)) value="slice" ;   // recién llegado: aún no se elige
+				else if (current_->FindVariable(SIP_S_SLICEBY)->GetInt()==SSB_MANUAL) value="manual" ;   // (slice, a mano: no cabe más)
 				else { snprintf(b,sizeof(b),"slice %d",current_->FindVariable(SIP_S_SLICES)->GetInt()) ; value=b ; }
 			} else if (id==SIP_S_PAN && iv==0) value="C" ;
 			else if (id==SIP_S_GLIDE && current_->FindVariable(SIP_S_VOICES)->GetInt()>1) value="--" ;
