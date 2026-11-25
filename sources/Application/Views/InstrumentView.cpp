@@ -2133,12 +2133,12 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 		else if (fid==SIP_S_DEC || fid==SIP_S_FDEC) { h0=xa ; h1=xd ; }
 		else if (fid==SIP_S_SUS || fid==SIP_S_FSUS) { h0=xd ; h1=b ; }
 		else if (fid==SIP_S_REL || fid==SIP_S_FREL || fid==SIP_S_FOUT) { h0=oneShot?b-int(msPerPx>0?rel/msPerPx:0):b ; h1=b+tl ; }
-		drawCurveLine(ys,a,cc,h0,h1) ;
+		drawCurveLine(ys,a,cc,h0,h1,X,X+W) ;
 		int nodes[3]={xa,xd,b} ;
 		int nn=oneShot?0:3 ;
 		for (int k=0;k<nn;k++) {
 			int nx=nodes[k] ;
-			if (nx<a || nx-a>=int(ys.size())) continue ;
+			if (nx<a || nx-a>=int(ys.size()) || nx<X || nx>X+W) continue ;
 			int ny=ys[nx-a] ;
 			FillRect(nx-8,ny-8,16,16,cc,8) ;
 			FillRect(nx-4,ny-4,8,8,bg,4) ;
@@ -2189,9 +2189,7 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 			int ca,cb ;
 			si->SimplerRegion(ca,cb) ;
 			std::vector<int> m=si->GetMarks() ;
-			int cpos=markVar_.GetInt() ;
-			if (cpos<ca) cpos=ca ;
-			if (cpos>cb) cpos=cb ;
+			int cpos=markVar_.GetInt() ;   // (el cursor puede estar fuera de la región)
 			int near=nearMark(m) ;
 			for (size_t i=0;i<m.size();i++) {
 				int rlo=waveAnchor_<cpos?waveAnchor_:cpos, rhi=waveAnchor_<cpos?cpos:waveAnchor_ ;
@@ -2227,6 +2225,22 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 		if (loop) FrameRect(l0,Y-4,b-l0,H+8,hi,8,2) ;
 	}
 	#undef FLAG
+	// dibujando (classic, one-shot o slice por región): el cursor
+	if (waveEdit_ && !zsrc && !(mode==SM_SLICE && si->GetSimpler(SIP_S_SLICEBY)==SSB_MANUAL)) {
+		int cpos=markVar_.GetInt() ;
+		int cx=FPX(cpos) ;
+		if (cx>=X && cx<=X+W) {
+			FillRect(cx-1,Y-4,2,H+8,fg) ;
+			for (int q=0;q<6;q++) FillRect(cx-q,Y+H+4+q,2*q+1,1,fg) ;
+		}
+		char tag[48] ;
+		SoundSource *cs=si->currentSource() ;
+		int size=cs?cs->GetSize(-1):0 ;
+		int pm=size>0?int((long long)cpos*1000/size):0 ;
+		if (waveZoom_>1) sprintf(tag,"%d.%d%%  zoom x%d",pm/10,pm%10,waveZoom_) ;
+		else sprintf(tag,"%d.%d%%",pm/10,pm%10) ;
+		DrawText(X+4,Y+H-22,tag,fg,1) ;
+	}
 
 	// cursor de reproducción
 	playheadPx_=-1 ;
@@ -2238,10 +2252,11 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 	#undef FPX
 }
 
-void InstrumentView::drawCurveLine(const std::vector<int> &ys,int x0,GUIColor c,int hiFrom,int hiTo) {
+void InstrumentView::drawCurveLine(const std::vector<int> &ys,int x0,GUIColor c,int hiFrom,int hiTo,int xmin,int xmax) {
 	int n=int(ys.size()) ;
 	for (int i=0;i<n;i++) {
 		int x=x0+i ;
+		if (x<xmin || x>xmax) continue ;   // con zoom: solo lo que cae en la onda
 		int th=(x>=hiFrom && x<hiTo)?7:4 ;   // en la consola, 2 px se pierden
 		int y=ys[i], prev=i>0?ys[i-1]:y ;
 		int y0=y<prev?y:prev, y1=y<prev?prev:y ;
