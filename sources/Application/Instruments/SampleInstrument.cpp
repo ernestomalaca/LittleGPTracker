@@ -228,6 +228,8 @@ SampleInstrument::SampleInstrument() {
 	 Insert(new Variable("s mode",SIP_S_MODE,simplerModes,3,SM_CLASSIC)) ;
 	 Insert(new Variable("s start",SIP_S_START,0)) ;
 	 Insert(new Variable("s end",SIP_S_END,100)) ;
+	 Insert(new Variable("s startf",SIP_S_STARTF,0)) ;
+	 Insert(new Variable("s endf",SIP_S_ENDF,0)) ;
 	 Insert(new Variable("s loop",SIP_S_LOOP,offOn,2,0)) ;
 	 Insert(new Variable("s loop len",SIP_S_LLEN,100)) ;
 	 Insert(new Variable("s trigger",SIP_S_TRIG,trigModes,2,0)) ;
@@ -2504,13 +2506,35 @@ bool SampleInstrument::SimplerRegion(int &a,int &b) {
 	if (!src) return false ;
 	int size=src->GetSize(-1) ;
 	if (size<=0) return false ;
-	a=int((long long)size*GetSimpler(SIP_S_START)/100) ;
-	b=int((long long)size*GetSimpler(SIP_S_END)/100) ;
+	a=int((long long)size*(GetSimpler(SIP_S_START)*100+GetSimpler(SIP_S_STARTF))/10000) ;
+	b=int((long long)size*(GetSimpler(SIP_S_END)*100+GetSimpler(SIP_S_ENDF))/10000) ;
 	if (b>size) b=size ;
 	a=snapZero(a,0,size,60,src) ;
 	if (b<size) b=snapZero(b,a+1,size,60,src) ;
 	if (b<=a) b=(a+1<size)?a+1:size ;
 	return true ;
+}
+
+int SampleInstrument::RegionPoint(bool start) {
+	SoundSource *src=currentSource() ;
+	int size=src?src->GetSize(-1):0 ;
+	int h=start?GetSimpler(SIP_S_START)*100+GetSimpler(SIP_S_STARTF)
+	           :GetSimpler(SIP_S_END)*100+GetSimpler(SIP_S_ENDF) ;
+	if (h>10000) h=10000 ;
+	return int((long long)size*h/10000) ;
+}
+
+void SampleInstrument::SetRegionPoint(bool start,int pos) {
+	SoundSource *src=currentSource() ;
+	int size=src?src->GetSize(-1):0 ;
+	if (size<=0) return ;
+	int h=int(((long long)pos*10000+size/2)/size) ;   // centésimas de %
+	int sh=GetSimpler(SIP_S_START)*100+GetSimpler(SIP_S_STARTF) ;
+	int eh=GetSimpler(SIP_S_END)*100+GetSimpler(SIP_S_ENDF) ;
+	if (start) { if (h>eh-10) h=eh-10 ; if (h<0) h=0 ; }
+	else { if (h<sh+10) h=sh+10 ; if (h>10000) h=10000 ; }
+	FindVariable(start?SIP_S_START:SIP_S_END)->SetInt(h/100) ;
+	FindVariable(start?SIP_S_STARTF:SIP_S_ENDF)->SetInt(h%100) ;
 }
 
 // Bordes de las rebanadas dentro de la región: partes iguales (region) o las

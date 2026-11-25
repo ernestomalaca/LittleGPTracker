@@ -1593,8 +1593,10 @@ void InstrumentView::drawGrid() {
 		int ra,rb ;
 		if (((SampleInstrument *)current_)->SimplerRegion(ra,rb)) {
 			int c=markVar_.GetInt() ;
-			if (waveFlag_==1 || c==ra) flagID=SIP_S_START ;
-			else if (waveFlag_==2 || c==rb) flagID=SIP_S_END ;
+			SampleInstrument *fsi=(SampleInstrument *)current_ ;
+			(void)ra ; (void)rb ;
+			if (waveFlag_==1 || c==fsi->RegionPoint(true)) flagID=SIP_S_START ;
+			else if (waveFlag_==2 || c==fsi->RegionPoint(false)) flagID=SIP_S_END ;
 		}
 	}
 
@@ -1822,8 +1824,8 @@ void InstrumentView::drawWaveformBody() {
 	// un margen a cada lado) para que se vea lo que suena
 	int vFrom=0, vTo=size ;
 	if (simplerView_) {
-		int a=int((long long)size*si->GetSimpler(SIP_S_START)/100) ;
-		int b=int((long long)size*si->GetSimpler(SIP_S_END)/100) ;
+		int a=si->RegionPoint(true) ;
+		int b=si->RegionPoint(false) ;
 		if (b<=a) b=a+1 ;
 		int margin=(b-a)/10 ;
 		vFrom=a-margin ;
@@ -1969,8 +1971,8 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 	// cuadro del sample -> px, con el zoom de la onda
 	int vLen=(wfTo_>wfFrom_)?wfTo_-wfFrom_:size ;
 	#define FPX(f) (X+int((long long)((f)-wfFrom_)*W/vLen))
-	int a=FPX((long long)size*si->GetSimpler(SIP_S_START)/100) ;
-	int b=FPX((long long)size*si->GetSimpler(SIP_S_END)/100) ;
+	int a=FPX((long long)(zsrc?0:si->RegionPoint(true))) ;
+	int b=FPX((long long)(zsrc?size:si->RegionPoint(false))) ;
 	if (b<=a) b=a+2 ;
 	// con zoom: abajo, una barrita con la parte del sample que se ve
 	if (vLen<size) {
@@ -2728,13 +2730,15 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 	// B + L / B + R: el inicio / el final donde está el cursor (como el
 	// inicio y el final del loop en el clip)
 	if ((mask&EPBM_B) && (mask&(EPBM_L|EPBM_R)) && !(mask&(EPBM_SELECT|EPBM_A)) && size>0) {
+		// sostenidos, ← → lo van moviendo (y va sonando)
 		bool st=(mask&EPBM_L)!=0 ;
-		int pc=int(((long long)c*100+size/2)/size) ;
-		int s0=si->GetSimpler(SIP_S_START), e0=si->GetSimpler(SIP_S_END) ;
-		if (st) { if (pc>e0-1) pc=e0-1 ; if (pc<0) pc=0 ; si->FindVariable(SIP_S_START)->SetInt(pc) ; }
-		else { if (pc<s0+1) pc=s0+1 ; if (pc>100) pc=100 ; si->FindVariable(SIP_S_END)->SetInt(pc) ; }
-		si->SimplerRegion(a,b) ;
-		markVar_.SetInt(st?a:b) ;
+		if (mask&EPBM_RIGHT) c+=step ;
+		else if (mask&EPBM_LEFT) c-=step ;
+		if (c<0) c=0 ;
+		if (c>size) c=size ;
+		si->SetRegionPoint(st,c) ;
+		c=si->RegionPoint(st) ;        // donde quedó (no se cruzan)
+		markVar_.SetInt(c) ;
 		waveFlag_=st?1:2 ;
 		waveARelease() ;   // suena: desde el inicio, o el último segundo
 		return true ;
@@ -2749,7 +2753,7 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 	if ((mask&EPBM_B) && (mask&EPBM_A) && waveSel_<2 && (c<=a+step || c>=b-step)) {
 		// B + A sobre una bandera: el inicio a 0 y el final a 100
 		bool st=(c<=a+step) ;
-		si->FindVariable(st?SIP_S_START:SIP_S_END)->SetInt(st?0:100) ;
+		si->SetRegionPoint(st,st?0:size) ;
 		si->SimplerRegion(a,b) ;
 		markVar_.SetInt(st?a:b) ;
 		waveFlag_=0 ;
@@ -2787,6 +2791,8 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 	}
 	if (mask&EPBM_Y) {                         // Y + ← →: de marca en marca
 		std::vector<int> pts ;
+		a=si->RegionPoint(true) ;      // las banderas, sin acomodar
+		b=si->RegionPoint(false) ;
 		pts.push_back(a) ;
 		if (canMark()) for (size_t i=0;i<m.size();i++) if (m[i]>a && m[i]<b) pts.push_back(m[i]) ;
 		pts.push_back(b) ;
@@ -2804,8 +2810,9 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 	if (mask&EPBM_A) {
 		if (mask==EPBM_A) {                    // A sobre una marca: la agarra; en vacío: pone una al soltar
 			waveFlag_=0 ;
-			if (c>=a-step/2 && c<=a+step/2) { waveFlag_=1 ; waveSel_=0 ; waveAPut_=false ; markVar_.SetInt(a) ; return true ; }
-			if (c>=b-step/2 && c<=b+step/2) { waveFlag_=2 ; waveSel_=0 ; waveAPut_=false ; markVar_.SetInt(b) ; return true ; }
+			int fa=si->RegionPoint(true), fb=si->RegionPoint(false) ;
+			if (c>=fa-step && c<=fa+step) { waveFlag_=1 ; waveSel_=0 ; waveAPut_=false ; markVar_.SetInt(fa) ; return true ; }
+			if (c>=fb-step && c<=fb+step) { waveFlag_=2 ; waveSel_=0 ; waveAPut_=false ; markVar_.SetInt(fb) ; return true ; }
 			if (!canMark() || c<=a || c>=b) { waveSel_=0 ; waveAPut_=false ; return true ; }
 			int k=nearMark(m) ;
 			if (k>=0) { waveSel_=1 ; markVar_.SetInt(m[k]) ; waveAPut_=false ; }
@@ -2813,16 +2820,12 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 			return true ;
 		}
 		if ((mask&(EPBM_LEFT|EPBM_RIGHT)) && waveFlag_) {   // A + ← → sobre una bandera: de 1 en 1 %
-			FourCC id=(waveFlag_==1)?SIP_S_START:SIP_S_END ;
-			Variable *v=si->FindVariable(id) ;
-			int nv=v->GetInt()+((mask&EPBM_RIGHT)?1:-1) ;
-			int lo=(waveFlag_==1)?0:si->GetSimpler(SIP_S_START)+1 ;
-			int hi=(waveFlag_==1)?si->GetSimpler(SIP_S_END)-1:100 ;
-			if (nv<lo) nv=lo ;
-			if (nv>hi) nv=hi ;
-			v->SetInt(nv) ;
-			si->SimplerRegion(a,b) ;
-			markVar_.SetInt((waveFlag_==1)?a:b) ;
+			bool st=(waveFlag_==1) ;   // de a un paso (más fino con zoom)
+			int p=si->RegionPoint(st)+((mask&EPBM_RIGHT)?step:-step) ;
+			if (p<0) p=0 ;
+			if (p>size) p=size ;
+			si->SetRegionPoint(st,p) ;
+			markVar_.SetInt(si->RegionPoint(st)) ;
 			return true ;
 		}
 		if (mask&(EPBM_LEFT|EPBM_RIGHT)) {     // A + ← →: moverla

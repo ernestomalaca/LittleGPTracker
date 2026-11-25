@@ -71,6 +71,10 @@ enum SampleInstrumentLoopMode {
 #define SIP_S_MODE  MAKE_FOURCC('S', 'M', 'O', 'D')
 #define SIP_S_START MAKE_FOURCC('S', 'S', 'T', 'A')
 #define SIP_S_END   MAKE_FOURCC('S', 'E', 'N', 'D')
+// trk2als: la parte fina del inicio y el fin (centésimas de %, 0..99): los
+// pone la edición sobre la onda; las cajas siguen en % enteros
+#define SIP_S_STARTF MAKE_FOURCC('S', 'S', 'T', 'F')
+#define SIP_S_ENDF   MAKE_FOURCC('S', 'E', 'N', 'F')
 #define SIP_S_LOOP  MAKE_FOURCC('S', 'L', 'O', 'N')
 #define SIP_S_LLEN  MAKE_FOURCC('S', 'L', 'L', 'E')
 #define SIP_S_TRIG  MAKE_FOURCC('S', 'T', 'R', 'G')
@@ -239,6 +243,9 @@ public:
        // cero) y los bordes de cada rebanada: a, ..., b (n rebanadas = n+1 bordes)
        SoundSource *currentSource() ;   // el sample elegido (aunque source_ no se haya actualizado)
        bool SimplerRegion(int &a,int &b) ;
+       // el inicio (o el fin) en esta posición del sample, fino; sin cruzarse
+       void SetRegionPoint(bool start,int pos) ;
+       int RegionPoint(bool start) ;   // sin acomodar al cruce por cero
        void SliceBounds(std::vector<int> &bounds) ;
        std::vector<int> GetMarks() ;
        void SetMarks(const std::vector<int> &marks) ;
