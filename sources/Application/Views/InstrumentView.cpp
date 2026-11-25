@@ -2192,8 +2192,8 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 			int nx=nodes[k] ;
 			if (nx<a || nx-a>=int(ys.size()) || nx<X || nx>X+W) continue ;
 			int ny=ys[nx-a] ;
-			FillRect(nx-8,ny-8,16,16,cc,8) ;
-			FillRect(nx-4,ny-4,8,8,bg,4) ;
+			FillRect(nx-10,ny-10,20,20,cc,10) ;
+			FillRect(nx-5,ny-5,10,10,bg,5) ;
 		}
 	} else
 	for (int x=a;x<b;x+=3) {
@@ -2215,9 +2215,21 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 
 	hi2=ColorOf(CD_HILITE2) ;
 	// banderas: start y end apuntan hacia la parte que suena
-	#define FLAG(xx,dir) { FillRect((xx)-1,Y-4,2,H+8,hi2) ; \
-		for (int q=0;q<10;q++) { int w=(q<5)?2*q+3:21-2*q ; \
-			FillRect((dir)>0?(xx):(xx)-w,Y-4+q,w,1,hi2) ; } }
+	// dibujando: la bandera donde está el cursor (L / R) se prende: llena, más
+	// grande y con la línea gruesa; la otra queda hueca
+	int selFlag=0 ;
+	if (waveEdit_ && !zsrc) {
+		int wc=markVar_.GetInt() ;
+		if (waveFlag_==1 || wc==si->RegionPoint(true)) selFlag=1 ;
+		else if (waveFlag_==2 || wc==si->RegionPoint(false)) selFlag=2 ;
+	}
+	GUIColor fpanel=Mix(bg,fg,9) ;
+	#define FLAG(xx,dir) { bool fsel=(selFlag==((dir)>0?1:2)) ; bool hollow=waveEdit_ && !fsel ; \
+		int fh=fsel?28:(gridMode_?20:10), lw=fsel?6:2 ; \
+		FillRect((xx)-lw/2,Y-4,lw,H+8,hi2) ; \
+		for (int q=0;q<fh;q++) { int w=(q<fh/2)?2*q+3:2*(fh-q)+1 ; \
+			FillRect((dir)>0?(xx):(xx)-w,Y-4+q,w,1,hi2) ; \
+			if (hollow && w>8 && q>2 && q<fh-3) FillRect((dir)>0?(xx)+2:(xx)-w+4,Y-4+q,w-6,1,fpanel) ; } }
 	if (mode==SM_SLICE) {
 		int lastName=-1000 ;
 		for (int k=0;k<nSl;k++) {
@@ -2236,6 +2248,8 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 			}
 		}
 		FillRect(b-1,Y-4,2,H+8,hi2) ;
+		if (selFlag==1) FillRect(a-3,Y-4,6,H+8,hi2) ;   // el inicio / el fin elegido (L / R)
+		if (selFlag==2) FillRect(b-3,Y-4,6,H+8,hi2) ;
 		// slice manual, editando: las marcas seleccionadas y el cursor
 		if (waveEdit_ && si->GetSimpler(SIP_S_SLICEBY)==SSB_MANUAL) {
 			int ca,cb ;
@@ -2309,7 +2323,7 @@ void InstrumentView::drawCurveLine(const std::vector<int> &ys,int x0,GUIColor c,
 	for (int i=0;i<n;i++) {
 		int x=x0+i ;
 		if (x<xmin || x>xmax) continue ;   // con zoom: solo lo que cae en la onda
-		int th=(x>=hiFrom && x<hiTo)?7:4 ;   // en la consola, 2 px se pierden
+		int th=(x>=hiFrom && x<hiTo)?11:6 ;   // gruesa: en la consola lo delgado se pierde
 		int y=ys[i], prev=i>0?ys[i-1]:y ;
 		int y0=y<prev?y:prev, y1=y<prev?prev:y ;
 		FillRect(x,y0-th/2,1,y1-y0+th,c) ;
