@@ -418,7 +418,9 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
              bool glide=GetSimpler(SIP_S_GLIDE)>0 && GetSimpler(SIP_S_VOICES)<2 &&
                         (IsZoned() || GetSimpler(SIP_S_MODE)!=SM_SLICE) ;
              startTail(channel) ;
-             if (GetSimpler(SIP_S_VOICES)<2 || glide) {
+             // slice: una rebanada a la vez (la nueva corta a la anterior)
+             bool oneVoice=GetSimpler(SIP_S_VOICES)<2 || (!IsZoned() && GetSimpler(SIP_S_MODE)==SM_SLICE) ;
+             if (oneVoice || glide) {
                  // una voz: la nota anterior no se corta de golpe (click),
                  // se apaga en 4 ms mientras entra la nueva
                  renderParams *tp=renderParams_+channel+SONG_CHANNEL_COUNT ;

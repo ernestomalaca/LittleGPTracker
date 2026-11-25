@@ -667,8 +667,10 @@ void InstrumentView::fillSampleParameters() {
 					v=instrument->FindVariable(SIP_S_FOUT) ;
 					ADD(new UIIntVarField(GAT(5),*v,"FADE OUT: %dms",0,2000,5,50)) ;
 				}
-				v=instrument->FindVariable(SIP_S_VOICES) ;
-				ADD(new UIIntVarField(GAT(6),*v,"VOCES: %d",1,2,1,1)) ;
+				if (mode!=SM_SLICE) {   // slice: una rebanada a la vez, sin voces que elegir
+					v=instrument->FindVariable(SIP_S_VOICES) ;
+					ADD(new UIIntVarField(GAT(6),*v,"VOCES: %d",1,2,1,1)) ;
+				}
 				ADD(new UIIntVarField(GAT(7),presetSaveVar_,"PRESET: guardar",0,0,1,1)) ;
 			} else if (fpage) {
 				v=instrument->FindVariable(SIP_S_FTYPE) ;
