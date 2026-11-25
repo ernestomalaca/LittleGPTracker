@@ -1688,7 +1688,7 @@ void InstrumentView::drawGrid() {
 			FourCC bid=f.IsStatic()?0:((UIIntVarField &)f).GetVariableID() ;
 			if (waveEdit_) off=(bid!=SIP_S_START && bid!=SIP_S_END) ;
 			else if (fadeEdit_) off=(bid!=SIP_S_FIN && bid!=SIP_S_FOUT) ;
-			else off=!(bid==envID(0) || bid==envID(1) || bid==envID(2) || bid==envID(3) || (envFilter_ && bid==SIP_S_FST)) ;
+			else off=!(bid==envID(0) || bid==envID(1) || bid==envID(2) || bid==envID(3)) ;
 			if (off) { ink=Mix(bg,fg,22) ; soft=Mix(bg,fg,18) ; }
 		}
 		if (moving) FillRect(cx,cy,cw,ch,box,7) ;
@@ -2502,7 +2502,7 @@ bool InstrumentView::processEnvEdit(unsigned short mask,bool pressed) {
 			v->SetInt(nv) ;
 			changed=true ;
 		} else if ((mask&(EPBM_UP|EPBM_DOWN)) && (mask&EPBM_A)) {
-			// el nivel: en el sustain, su altura; en lo demás (filtro), cuánto mueve la envolvente
+			// el nivel: solo el sustain tiene altura
 			int d=(mask&EPBM_UP)?1:-1 ;
 			if (envSel_==2) {
 				Variable *v=si->FindVariable(envID(2)) ;
@@ -2511,14 +2511,7 @@ bool InstrumentView::processEnvEdit(unsigned short mask,bool pressed) {
 				if (nv>0) nv=0 ;
 				v->SetInt(nv) ;
 				changed=true ;
-			} else if (envFilter_) {
-				Variable *v=si->FindVariable(SIP_S_FST) ;
-				int nv=v->GetInt()+d ;
-				if (nv<-72) nv=-72 ;
-				if (nv>72) nv=72 ;
-				v->SetInt(nv) ;
-				changed=true ;
-			}
+			}   // (ENV, cuánto mueve la envolvente al filtro, se queda en su caja)
 		}
 		if (changed || ((bl || br) && !(mask&arrows))) envAudition() ;
 		return true ;
