@@ -78,6 +78,7 @@ struct renderParams {
     int startDelay_ ;        // trk2als: muestras de silencio antes de empezar (subdivisiones exactas)
     float svfIc1_[2], svfIc2_[2] ; // trk2als: estado del filtro del Sampler
     float svfG_, svfK_ ;     // coeficientes del bloque
+    float svfHzS_ ;          // el corte suavizado (0: tomar el de la nota)
     float svfHz_, svfSt_ ;   // corte base (con key tracking) y semitonos de la envolvente
     int svfType_ ;
     int svfCur_, svfPrev_ ;  // lo que suena y lo de antes (0 LP, 1 BP, 2 HP, 3 sin filtro; -1 nota nueva)

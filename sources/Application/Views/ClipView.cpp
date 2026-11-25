@@ -1232,8 +1232,12 @@ void ClipView::handleButton(unsigned short mask, bool pressed) {
         // en la curva: sus botones; Start y Select + flechas siguen como siempre
         if (!pressed) {
             if (!(mask & EPBM_A)) {
-                if (curveAPut_) { curveAPut_ = false; curvePutNode(); }   // A sola: un nodo ahí
+                // A (sola o moviéndolo): un nodo ahí, y quedamos enganchados a él
+                // (las flechas lo mueven; B lo suelta)
+                bool hook = (curveAPut_ || curveGrab_) && !curveMarking_ && !curvePasting_;
+                if (curveAPut_) { curveAPut_ = false; curvePutNode(); }
                 curveGrab_ = false;
+                if (hook && curveNodeAt(cursorStep_) >= 0) curveStand_ = true;
                 if (curvePasting_) { curvePasting_ = false; curvePaste(); }   // al soltar A se pega
             }
             if (curveBAPending_ && (!(mask & EPBM_A) || !(mask & EPBM_B))) {   // B + A sola: borra lo marcado o el nodo
@@ -1926,15 +1930,24 @@ void ClipView::curveMoveNode(int dt, int dv, bool big) {
     if (dt) {
         int n = dt * (curveAccel_ < 6 ? curveAccel_ : 6);   // sostenido, de a más pasos
         int ns = cursorStep_ + n;
-        // no rebasa a sus vecinos: llega hasta el paso de al lado y ahí se queda
-        int lo = (k > 0) ? l->points[k - 1].pos / CLIP_TICKS + 1 : 0;
-        int hi = (k + 1 < (int)l->points.size()) ? l->points[k + 1].pos / CLIP_TICKS - 1 : c.Steps() - 1;
-        if (hi >= c.Steps()) hi = c.Steps() - 1;
-        if (ns < lo) ns = lo;
-        if (ns > hi) ns = hi;
-        if (lo <= hi && ns != cursorStep_) {
-            p.pos = ns * CLIP_TICKS;   // queda en la rejilla
-            cursorStep_ = ns;
+        if (ns < 0) ns = 0;
+        if (ns >= c.Steps()) ns = c.Steps() - 1;
+        // si justo ahí ya hay otro, lo brinca: cae en el siguiente paso libre
+        // (y si no hay hacia allá, en el libre más cercano de regreso)
+        int dir = dt > 0 ? 1 : -1;
+        int found = -1;
+        for (int pass = 0; pass < 2 && found < 0; pass++) {
+            int d2 = pass ? -dir : dir;
+            for (int q = ns; q >= 0 && q < c.Steps() && q != cursorStep_; q += d2) {
+                bool busy = false;
+                for (size_t j = 0; j < l->points.size(); j++)
+                    if ((int)j != k && l->points[j].pos / CLIP_TICKS == q) { busy = true; break; }
+                if (!busy) { found = q; break; }
+            }
+        }
+        if (found >= 0) {
+            p.pos = found * CLIP_TICKS;   // queda en la rejilla
+            cursorStep_ = found;
         }
     }
     if (dv) {   // A + ↑ ↓: de a 1/24 de la altura (sostenido, acelera)
@@ -2419,6 +2432,7 @@ bool ClipView::curveButton(unsigned short mask, unsigned short v) {
     if (mask & EPBM_B) {
         if (v == EPBM_B) {   // B: con algo marcado, copia al soltar (si no viene A)
             curveBPending_ = curveMarking_;
+            curveStand_ = false;   // B: suelta el nodo, el punto vuelve a andar solo
             return true;
         }
         if (v == EPBM_A) { curveBPending_ = false; curveBAPending_ = true; curveStand_ = false; return true; }   // B + A: borra al soltar
@@ -2637,23 +2651,23 @@ void ClipView::drawCurves() {
             int run = 1;
             while (x + run < gw && ys[x + run] == y) run++;
             if (run > 1) {   // plano (si llega de un salto, la vertical del salto)
-                FillRect(GRID_X + x, y - 1, run, 2, curveC);
+                FillRect(GRID_X + x, y - 2, run, 5, curveC);
                 if (x > 0 && (ys[x - 1] - y > 1 || y - ys[x - 1] > 1)) {
                     int y0 = std::min(ys[x - 1], y), y1 = std::max(ys[x - 1], y);
-                    FillRect(GRID_X + x, y0 - 1, 2, y1 - y0 + 2, curveC);
+                    FillRect(GRID_X + x - 2, y0 - 2, 5, y1 - y0 + 5, curveC);
                 }
             } else {         // inclinado: une con la columna de al lado
                 int prev = x > 0 ? ys[x - 1] : y;
                 int y0 = std::min(prev, y), y1 = std::max(prev, y);
-                FillRect(GRID_X + x, y0 - 1, 1, y1 - y0 + 3, curveC);
-                FillRect(GRID_X + x, y0 - 2, 1, 1, soft);
-                FillRect(GRID_X + x, y1 + 2, 1, 1, soft);
+                FillRect(GRID_X + x, y0 - 2, 1, y1 - y0 + 5, curveC);
+                FillRect(GRID_X + x, y0 - 3, 1, 1, soft);
+                FillRect(GRID_X + x, y1 + 3, 1, 1, soft);
             }
             // un salto (escalón): la vertical
             if (x + run < gw && ys[x + run] != y && (ys[x + run] - y > 2 || y - ys[x + run] > 2) && run > 1) {
                 int ny = ys[x + run];
                 int y0 = std::min(ny, y), y1 = std::max(ny, y);
-                FillRect(GRID_X + x + run - 1, y0 - 1, 2, y1 - y0 + 2, curveC);
+                FillRect(GRID_X + x + run - 3, y0 - 2, 5, y1 - y0 + 5, curveC);
             }
             x += run;
         }
@@ -2665,7 +2679,7 @@ void ClipView::drawCurves() {
             if (s < 0 || s >= 16) continue;
             int x = GRID_X + (p.pos - p0 * CLIP_TICKS) * STEP_W / CLIP_TICKS;
             int y = top + int((1.0 - curveNorm(p.value)) * h + 0.5);
-            FillRect(x - 4, y - 4, 9, 9, (p.pos / CLIP_TICKS == cursorStep_) ? fg : curveC, 4);
+            FillRect(x - 6, y - 6, 13, 13, (p.pos / CLIP_TICKS == cursorStep_) ? fg : curveC, 6);
         }
     }
     // el punto: donde A pone un nodo
@@ -2673,9 +2687,9 @@ void ClipView::drawCurves() {
         int x = GRID_X + (cursorStep_ - p0) * STEP_W;
         if (nodeK >= 0) x = GRID_X + (lane->points[nodeK].pos - p0 * CLIP_TICKS) * STEP_W / CLIP_TICKS;
         int y = top + int((1.0 - curveNorm(curV)) * h + 0.5);
-        FillRect(x - 10, y, 21, 1, fg);
-        FillRect(x, y - 10, 1, 21, fg);
-        FrameRect(x - 7, y - 7, 15, 15, (curveGrab_ || curveStand_) ? play : fg, 7, (curveGrab_ || curveStand_) ? 3 : 2);
+        FillRect(x - 14, y, 29, 1, fg);
+        FillRect(x, y - 14, 1, 29, fg);
+        FrameRect(x - 10, y - 10, 21, 21, (curveGrab_ || curveStand_) ? play : fg, 10, (curveGrab_ || curveStand_) ? 3 : 2);
     }
 
     // lo que se va a pegar (Select + A sostenido): su forma, donde cae

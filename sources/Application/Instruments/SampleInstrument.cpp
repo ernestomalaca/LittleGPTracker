@@ -738,6 +738,7 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 		if (!wasSounding) {
 			rp->svfIc1_[0]=rp->svfIc1_[1]=rp->svfIc2_[0]=rp->svfIc2_[1]=0 ;
 			rp->svfCur_=-1 ;   // la nota nueva toma el tipo sin fundido
+			rp->svfHzS_=0 ;    // ... y el corte sin deslizar
 			rp->svfXf_=0 ;
 		}
 		for (int k=0;k<5;k++) rp->sLive_[k]=-9999 ;
@@ -2713,7 +2714,17 @@ void SampleInstrument::simplerFilter(renderParams *rp,fixed *buffer,int size) {
 	for (int at=0;at<size;at+=32) {
 		int n=(size-at<32)?size-at:32 ;
 		filterEnvBlock(rp,n) ;
+		// el corte no salta de golpe (un escalón de la curva hacía click): se
+		// acerca en ~4 ms, en octavas
 		float hz=rp->svfHz_ ;
+		if (hz<20) hz=20 ;
+		if (!(rp->svfHzS_>=20 && rp->svfHzS_<=22050)) rp->svfHzS_=hz ;   // nota nueva: sin deslizar
+		else if (rp->svfHzS_!=hz) {
+			float r=hz/rp->svfHzS_ ;
+			if (r>0.995f && r<1.005f) rp->svfHzS_=hz ;
+			else rp->svfHzS_*=powf(r,0.17f*n/32.0f) ;
+		}
+		hz=rp->svfHzS_ ;
 		if (rp->svfSt_!=0) hz*=powf(2.0f,rp->svfSt_*rp->fenvLevel_/12.0f) ;
 		if (hz<20) hz=20 ;
 		if (hz>20000) hz=20000 ;
