@@ -84,6 +84,7 @@ SampleInstrument::SampleInstrument() {
 	 tonalIdx_=-2 ; tonal_=true ;   // trk2als
 	 zonesPoolSize_=-1 ;
 	 lastNote_=-1 ;
+	 auditionFrom_=-1 ;
 	 static bool warpCfg=false ;   // trk2als: WARPQUALITY / WARPSPLIT de config.xml
 	 if (!warpCfg) {
 		 warpCfg=true ;
@@ -2420,6 +2421,7 @@ void SampleInstrument::initSimplerFromLGPT() {
 bool SampleInstrument::startSimpler(renderParams *rp,int channel,unsigned char note,
                                     int &first,bool &sliced,float &offset) {
 	if (zoned_) {
+		rp->auditionTail_=false ;
 		// trk2als: el sample de la tecla entero, en su tono en su raíz, con su
 		// loop si lo trae (sin región, slices ni warp)
 		const ZoneSource::Zone *z=zones_.Find(rp->midiNote_) ;
@@ -2452,6 +2454,7 @@ bool SampleInstrument::startSimpler(renderParams *rp,int channel,unsigned char n
 	int mode=GetSimpler(SIP_S_MODE) ;
 	int a,b ;
 	SimplerRegion(a,b) ;
+	rp->auditionTail_=false ;
 	offset=GetSimpler(SIP_S_TRANSP)+GetSimpler(SIP_S_DETUNE)/100.0f ;
 	rp->simplerLoop_=SILM_ONESHOT ;
 	rp->gate_=true ;
@@ -2476,6 +2479,7 @@ bool SampleInstrument::startSimpler(renderParams *rp,int channel,unsigned char n
 		case SM_ONESHOT:
 			offset+=note-60 ;
 			first=a ;
+			if (auditionFrom_>a && auditionFrom_<b) { first=auditionFrom_ ; rp->auditionTail_=true ; }
 			rp->rendLoopStart_=a ;
 			rp->rendLoopEnd_=b ;
 			rp->gate_=(GetSimpler(SIP_S_TRIG)==1) ;
@@ -2493,6 +2497,7 @@ bool SampleInstrument::startSimpler(renderParams *rp,int channel,unsigned char n
 			break ;
 		}
 	}
+	auditionFrom_=-1 ;
 	sliced=(mode==SM_SLICE) ;
 	return true ;
 }
@@ -2849,7 +2854,7 @@ void SampleInstrument::simplerEnvelope(renderParams *rp,fixed *buffer,int size) 
 	float atk=(oneShot?envMs(SIP_S_FIN):envMs(SIP_S_ATK))*msr ;
 	// el sample casi nunca empieza en silencio (sobre todo con 'start' a media
 	// onda): 1.5 ms de entrada como mínimo, para que no haga click
-	if (atk<1.5f*msr) atk=1.5f*msr ;
+	if (atk<1.5f*msr || rp->auditionTail_) atk=1.5f*msr ;
 	float dec=oneShot?0:envMs(SIP_S_DEC)*msr ;
 	float sus=1.0f ;
 	if (!oneShot) {

@@ -335,6 +335,8 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data),
 	waveSel_=0 ;
 	waveAnchor_=0 ;
 	waveFlag_=0 ;
+	fadeEdit_=false ;
+	fadeSel_=0 ;
 	tapPending_=-1 ;
 	waveGesture_=false ;
 	waveAPut_=false ;
@@ -1104,7 +1106,7 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 	if (pressed) selTap_=(mask==EPBM_SELECT) ;
 	else if (selTap_ && mask==0) { selTap_=false ; toggleDraw() ; isDirty_=true ; return ; }
 	// trk2als: L o R solos (tocar y soltar, sin nada más): la página de al lado
-	if (gridMode_ && pageCount_>1 && !waveEdit_) {
+	if (gridMode_ && pageCount_>1 && !waveEdit_ && !fadeEdit_) {
 		if (pressed) pageTap_=(mask==EPBM_L)?-1:(mask==EPBM_R)?1:0 ;
 		else if (pageTap_ && mask==0) { int d=pageTap_ ; pageTap_=0 ; turnPage(d) ; return ; }
 	}
@@ -1119,6 +1121,7 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 			return ;
 		}
 	}
+	if (fadeEdit_ && processFadeEdit(mask,pressed)) return ;
 	// trk2als: automatización
 	if (pressed && mask==(EPBM_Y|EPBM_START)) { toggleAutoRec() ; return ; }
 	// A + gatillo L: la curva de este parámetro en el clip (si no se
@@ -1617,14 +1620,14 @@ void InstrumentView::drawGrid() {
 	int tx=10 ;
 	for (int i=0;i<pageCount_;i++) {
 		int w=16*int(strlen(pageName_[i]))+24 ;
-		if (waveEdit_) DrawText(tx+12,GRID_TABS_Y+6,pageName_[i],Mix(bg,fg,i==page_[kind]?40:18),1) ;
+		if (waveEdit_ || fadeEdit_) DrawText(tx+12,GRID_TABS_Y+6,pageName_[i],Mix(bg,fg,i==page_[kind]?40:18),1) ;
 		else if (i==page_[kind]) {
 			FillRect(tx,GRID_TABS_Y,w,28,fg,14) ;
 			DrawText(tx+12,GRID_TABS_Y+6,pageName_[i],bg,1) ;
 		} else DrawText(tx+12,GRID_TABS_Y+6,pageName_[i],dim,1) ;
 		tx+=w+8 ;
 	}
-	if (pageCount_>1 && !waveEdit_) DrawText(640-10-16*3,GRID_TABS_Y+6,"L·R",dim,1) ;
+	if (pageCount_>1 && !waveEdit_ && !fadeEdit_) DrawText(640-10-16*3,GRID_TABS_Y+6,"L·R",dim,1) ;
 
 	bool used[8]={false,false,false,false,false,false,false,false} ;
 	IteratorPtr<UIField> it(T_SimpleList<UIField>::GetIterator()) ;
@@ -1669,13 +1672,14 @@ void InstrumentView::drawGrid() {
 			}
 		}
 		bool flagBox=flagID && !f.IsStatic() && ((UIIntVarField &)f).GetVariableID()==flagID ;
-		bool here=waveEdit_?flagBox:(&f==focus) ;
+		if (fadeEdit_) flagBox=!f.IsStatic() && ((UIIntVarField &)f).GetVariableID()==(FourCC)(fadeSel_?SIP_S_FOUT:SIP_S_FIN) ;
+		bool here=(waveEdit_ || fadeEdit_)?flagBox:(&f==focus) ;
 		bool moving=here && aHeld && !f.IsStatic() ;
 		GUIColor box=moving?fg:card, ink=moving?bg:fg, soft=Mix(box,ink,55) ;
 		bool off=false ;
-		if (waveEdit_) {   // en la onda: solo INICIO y FIN siguen vivos
+		if (waveEdit_ || fadeEdit_) {   // en la onda: solo INICIO y FIN (o los fades) siguen vivos
 			FourCC bid=f.IsStatic()?0:((UIIntVarField &)f).GetVariableID() ;
-			off=(bid!=SIP_S_START && bid!=SIP_S_END) ;
+			off=waveEdit_?(bid!=SIP_S_START && bid!=SIP_S_END):(bid!=SIP_S_FIN && bid!=SIP_S_FOUT) ;
 			if (off) { ink=Mix(bg,fg,22) ; soft=Mix(bg,fg,18) ; }
 		}
 		if (moving) FillRect(cx,cy,cw,ch,box,7) ;
@@ -1790,7 +1794,7 @@ void InstrumentView::drawWaveformBody() {
 	const int X=16, Y=gridMode_?48:(kitMode_?56:34), W=WF_BARS*8,
 	          H=gridMode_?186:(kitMode_?144:(simplerView_?80:112)) ;
 	FillRect(X-8,Y-4,W+16,H+8,Mix(bg,fg,9),8) ;
-	if (gridMode_ && waveEdit_) FrameRect(X-8,Y-4,W+16,H+8,fg,8,3) ;   // dibujando: el marco pasa aquí
+	if (gridMode_ && (waveEdit_ || fadeEdit_)) FrameRect(X-8,Y-4,W+16,H+8,fg,8,3) ;   // dibujando: el marco pasa aquí
 
 	if (kitMode_) {   // trk2als: kit: la rejilla de pads
 		drawPadGrid(si,X,Y,W,H) ;
@@ -2149,6 +2153,7 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 		if (xa>b) xa=b ;
 		if (xd>b) xd=b ;
 		FourCC fid=focusID(*this) ;
+		if (fadeEdit_) fid=fadeSel_?SIP_S_FOUT:SIP_S_FIN ;
 		int h0=-1, h1=-1 ;
 		if (fid==SIP_S_ATK || fid==SIP_S_FATK || fid==SIP_S_FIN) { h0=a ; h1=xa ; }
 		else if (fid==SIP_S_DEC || fid==SIP_S_FDEC) { h0=xa ; h1=xd ; }
@@ -2388,7 +2393,77 @@ void InstrumentView::AnimationUpdate() {
 	}
 }
 
+// trk2als: suena la nota (C3) con sus fades, sin clip: el fade in desde el
+// inicio; el fade out, desde un poco antes de donde empieza a bajar
+void InstrumentView::fadeAudition() {
+	if (!current_ || current_->GetType()!=IT_SAMPLE) return ;
+	Player *player=Player::GetInstance() ;
+	if (player->IsRunning()) return ;   // sonando la canción ya se oye en su clip
+	SampleInstrument *si=(SampleInstrument *)current_ ;
+	if (previewing_) stopPreview() ;
+	if (fadeSel_==1) {
+		int a,b ;
+		SoundSource *src=si->currentSource() ;
+		if (src && si->SimplerRegion(a,b)) {
+			int rate=src->GetSampleRate(-1) ;
+			int from=b-int((si->GetSimpler(SIP_S_FOUT)+600)*(rate/1000.0f)) ;
+			if (from>a) si->AuditionFrom(from) ;
+		}
+	}
+	int ch=viewData_->songX_ ;
+	if (ch<0 || ch>=SONG_CHANNEL_COUNT) ch=0 ;
+	player->PreviewNote(ch,si,60) ;
+}
+
+// true si la tecla se usó aquí
+bool InstrumentView::processFadeEdit(unsigned short mask,bool pressed) {
+	if (!current_ || current_->GetType()!=IT_SAMPLE || !gridMode_ ||
+	    ((SampleInstrument *)current_)->GetSimpler(SIP_S_MODE)!=SM_ONESHOT) {
+		fadeEdit_=false ;
+		return false ;
+	}
+	const unsigned short arrows=EPBM_UP|EPBM_DOWN|EPBM_LEFT|EPBM_RIGHT ;
+	if ((mask&(EPBM_SELECT|EPBM_R)) && (mask&arrows) && !(mask&EPBM_B)) {   // cambiar de pantalla: sale
+		fadeEdit_=false ;
+		return false ;
+	}
+	SampleInstrument *si=(SampleInstrument *)current_ ;
+	if (!pressed) {
+		// L o R solos (tocar y soltar): elegir el fade, y suena
+		if (pageTap_ && mask==0) {
+			fadeSel_=(pageTap_<0)?0:1 ;
+			pageTap_=0 ;
+			fadeAudition() ;
+		}
+		isDirty_=true ;
+		return true ;
+	}
+	pageTap_=(mask==EPBM_L)?-1:(mask==EPBM_R)?1:0 ;
+	isDirty_=true ;
+	if (mask==EPBM_START) { fadeAudition() ; return true ; }
+	// B + L / B + R: ese fade; sin soltar, ← → lo mueven y va sonando.
+	// (A + ← → mueve el elegido, como un punto de una curva)
+	bool bl=(mask&EPBM_B) && (mask&EPBM_L), br=(mask&EPBM_B) && (mask&EPBM_R) && !(mask&EPBM_SELECT) ;
+	if (bl || br || (mask&EPBM_A)) {
+		if (bl) fadeSel_=0 ;
+		else if (br) fadeSel_=1 ;
+		if (mask&(EPBM_LEFT|EPBM_RIGHT)) {
+			Variable *v=si->FindVariable(fadeSel_?SIP_S_FOUT:SIP_S_FIN) ;
+			int cur=v->GetInt() ;
+			int step=(cur>=500)?50:(cur>=100)?10:5 ;   // más fino abajo
+			int nv=cur+((mask&EPBM_RIGHT)?step:-step) ;
+			if (nv<0) nv=0 ;
+			if (nv>2000) nv=2000 ;
+			v->SetInt(nv) ;
+			fadeAudition() ;
+		} else if (bl || br) fadeAudition() ;
+		return true ;
+	}
+	return true ;   // lo demás no hace nada hasta salir con Select
+}
+
 void InstrumentView::OnFocus() {
+	fadeEdit_=false ;
 	if (viewData_->curveFocus_) {   // vuelve de su curva: el foco en ese parámetro
 		lastFocusID_=viewData_->curveFocus_ ;
 		viewData_->curveFocus_=0 ;
@@ -2565,10 +2640,16 @@ void InstrumentView::enterWaveEdit(bool play) {
 // rebanadas a mano (página SONIDO, modo slice, slice by manual)
 void InstrumentView::toggleDraw() {
 	if (waveEdit_) { exitWaveEdit() ; return ; }
+	if (fadeEdit_) { fadeEdit_=false ; return ; }
 	if (!current_ || current_->GetType()!=IT_SAMPLE) return ;
 	SampleInstrument *si=(SampleInstrument *)current_ ;
-	(void)si ;
 	if (sfMode_ || kitMode_ || audioMode_ || !simplerView_ || !gridMode_) return ;
+	// AMP en one-shot: los fades
+	if (!strcmp(pageName_[page_[1]],"AMP") && si->GetSimpler(SIP_S_MODE)==SM_ONESHOT) {
+		fadeEdit_=true ;
+		fadeSel_=0 ;
+		return ;
+	}
 	if (strcmp(pageName_[page_[1]],"SAMPLER")) return ;   // la envolvente: siguiente paso
 	enterWaveEdit(false) ;
 }

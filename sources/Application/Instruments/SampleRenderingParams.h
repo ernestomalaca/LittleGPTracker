@@ -63,6 +63,7 @@ struct renderParams {
     float envReleaseFrom_ ;  // nivel al soltar
     int envClock_ ;          // muestras dentro de la etapa
     bool gate_ ;             // false: la nota suena completa aunque se suelte
+    bool auditionTail_ ;     // trk2als: escucha del final (fade out): sin el fade in
     fixed glideFrom_ ;       // velocidad de la nota anterior
     int glideLeft_, glideLen_ ; // muestras de glide que faltan / totales
     int declickIn_ ;         // trk2als: clip de audio: muestras del fade de entrada (-1 = no)

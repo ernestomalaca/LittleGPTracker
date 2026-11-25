@@ -334,6 +334,10 @@ private:
 	   const std::vector<ZoneSource::Zone> &Zones() { ensureZones() ; return zones_.zones_ ; }
 	   std::string ZoneSetName() ;   // "marimba" (de marimba_01.wav)
 	   int LastNote() { return lastNote_ ; }   // la última nota que empezó
+	   // trk2als: la próxima nota (one-shot) empieza aquí y no en el inicio:
+	   // para escuchar el fade out sin esperar todo el sample
+	   void AuditionFrom(int pos) { auditionFrom_=pos ; }
+	   int auditionFrom_ ;
 	   // trk2als: kit de batería. Cada zona es un pad (una tecla) que suena
 	   // completo; los golpes se reparten en las 5 voces del canal
 	   bool IsKit() { return GetSimpler(SIP_S_KIT)!=0 && (IsZoned() || ZoneCount()==0) ; }

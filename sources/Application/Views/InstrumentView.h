@@ -96,6 +96,12 @@ private:
 	bool waveAPut_ ;          // A en un lugar vacío: la marca se pone al soltar (o al moverla)
 	void toggleDraw() ;
 	void waveARelease() ;
+	// trk2als: one-shot, página AMP: Select entra a los fades (L / R los
+	// eligen; B + L / B + R con ← → los mueven y va sonando)
+	bool fadeEdit_ ;
+	int fadeSel_ ;            // 0 el fade in, 1 el fade out
+	bool processFadeEdit(unsigned short mask,bool pressed) ;
+	void fadeAudition() ;
 	// deshacer / rehacer en la onda (Select + L / R): inicio, fin y marcas
 	struct WaveSnap { int s,sf,e,ef ; std::vector<int> marks ;
 		bool operator==(const WaveSnap &o) const { return s==o.s && sf==o.sf && e==o.e && ef==o.ef && marks==o.marks ; } } ;
