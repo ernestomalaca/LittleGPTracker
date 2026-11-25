@@ -2451,7 +2451,10 @@ bool InstrumentView::processFadeEdit(unsigned short mask,bool pressed) {
 			Variable *v=si->FindVariable(fadeSel_?SIP_S_FOUT:SIP_S_FIN) ;
 			int cur=v->GetInt() ;
 			int step=(cur>=500)?50:(cur>=100)?10:5 ;   // más fino abajo
-			int nv=cur+((mask&EPBM_RIGHT)?step:-step) ;
+			// el fade out, al revés: ← lo alarga (su inicio se va a la izquierda,
+			// como se ve en la curva) y → lo acorta
+			bool more=fadeSel_?((mask&EPBM_LEFT)!=0):((mask&EPBM_RIGHT)!=0) ;
+			int nv=cur+(more?step:-step) ;
 			if (nv<0) nv=0 ;
 			if (nv>2000) nv=2000 ;
 			v->SetInt(nv) ;
