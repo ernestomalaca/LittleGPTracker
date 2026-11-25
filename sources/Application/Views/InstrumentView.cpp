@@ -334,6 +334,8 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data),
 	waveZoom_=1 ;
 	waveSel_=0 ;
 	waveAnchor_=0 ;
+	waveFlag_=0 ;
+	tapPending_=-1 ;
 	waveAPut_=false ;
 	lastAPress_=0 ;
 	previewing_=false ;
@@ -580,7 +582,7 @@ void InstrumentView::fillSampleParameters() {
 			T_SimpleList<UIField>::Remove(*f1,true) ;   // el sonido: se cambia desde la cabecera
 			pageCount_=0 ;
 			// por lo que más se usa: sonido, amp, filtro y al final warp
-			pageName_[pageCount_++]="SONIDO" ;
+			pageName_[pageCount_++]="SAMPLER" ;
 			pageName_[pageCount_++]="AMP" ;
 			pageName_[pageCount_++]="FILTRO" ;
 			if (!sfMode_) pageName_[pageCount_++]="WARP" ;
@@ -594,25 +596,22 @@ void InstrumentView::fillSampleParameters() {
 			bool warped=instrument->GetSimpler(SIP_S_WARP)!=SW_OFF ;
 			const int GX[4]={1,11,21,31}, GY[2]={20,26} ;
 			#define GAT(k) (pt=GUIPoint(GX[(k)%4],GY[(k)/4]))
-			if (!strcmp(pn,"SONIDO")) {
+			if (!strcmp(pn,"SAMPLER")) {
 				int r2=4 ;
 				if (!sfMode_) {
 					v=instrument->FindVariable(SIP_S_MODE) ;
 					ADD(new UIIntVarField(GAT(0),*v,"MODO: %s",0,2,1,1)) ;
-					v=instrument->FindVariable(SIP_S_START) ;
-					ADD(new UIIntVarField(GAT(1),*v,"INICIO: %d%%",0,99,1,10)) ;
-					v=instrument->FindVariable(SIP_S_END) ;
-					ADD(new UIIntVarField(GAT(2),*v,"FIN: %d%%",1,100,1,10)) ;
-					if (mode==SM_CLASSIC) {
+					if (mode==SM_CLASSIC) {   // classic no tiene trigger: ahí va su loop
 						v=instrument->FindVariable(SIP_S_LOOP) ;
-						ADD(new UIIntVarField(GAT(3),*v,"LOOP: %s",0,1,1,1)) ;
-					} else if (mode==SM_ONESHOT) {
-						v=instrument->FindVariable(SIP_S_TRIG) ;
-						ADD(new UIIntVarField(GAT(3),*v,"TRIGGER: %s",0,1,1,1)) ;
+						ADD(new UIIntVarField(GAT(1),*v,"LOOP: %s",0,1,1,1)) ;
 					} else {
-						ADD(new UISlicesField(GAT(3),*instrument->FindVariable(SIP_S_SLICEBY),
-						                      *instrument->FindVariable(SIP_S_SLICES))) ;
+						v=instrument->FindVariable(SIP_S_TRIG) ;
+						ADD(new UIIntVarField(GAT(1),*v,"TRIGGER: %s",0,1,1,1)) ;
 					}
+					v=instrument->FindVariable(SIP_S_START) ;
+					ADD(new UIIntVarField(GAT(2),*v,"INICIO: %d%%",0,99,1,10)) ;
+					v=instrument->FindVariable(SIP_S_END) ;
+					ADD(new UIIntVarField(GAT(3),*v,"FIN: %d%%",1,100,1,10)) ;
 				} else r2=0 ;   // multicapa: el tono arriba
 				v=instrument->FindVariable(SIP_S_TRANSP) ;
 				ADD(new UIIntVarField(GAT(r2),*v,"TRANSP: %+dst",-48,48,1,12)) ;
@@ -630,13 +629,13 @@ void InstrumentView::fillSampleParameters() {
 						instrument->FindVariable(SIP_S_BPM)->SetInt(instrument->GuessSimplerBpm()) ;
 					v=instrument->FindVariable(SIP_S_BPM) ;
 					ADD(new UIIntVarField(GAT(1),*v,"BPM: %d",40,300,1,10)) ;
-				} else ADD(new UIStaticField(GAT(1),"BPM: --")) ;
+				}   // sin warp no hay bpm: la caja queda vacía (el cursor no se atora)
 				if (mode==SM_CLASSIC && instrument->GetSimpler(SIP_S_LOOP)) {
 					v=instrument->FindVariable(SIP_S_LLEN) ;
 					ADD(new UIIntVarField(GAT(2),*v,"LARGO: %d%%",1,100,1,10)) ;
-				} else if (mode==SM_SLICE) {
-					v=instrument->FindVariable(SIP_S_TRIG) ;
-					ADD(new UIIntVarField(GAT(2),*v,"TRIGGER: %s",0,1,1,1)) ;
+				} else if (mode==SM_SLICE) {   // cómo se rebana (el trigger va en SAMPLER)
+					ADD(new UISlicesField(GAT(2),*instrument->FindVariable(SIP_S_SLICEBY),
+					                      *instrument->FindVariable(SIP_S_SLICES))) ;
 				}
 			} else if (fpage) {
 				v=instrument->FindVariable(SIP_S_FTYPE) ;
@@ -1292,6 +1291,7 @@ void InstrumentView::processButtonMask(unsigned short mask,bool pressed) {
 	}
 	if (toManual) {
 		markTap_=false ;
+		if (gridMode_ && page_[1]!=0) { page_[1]=0 ; lastFocusID_=0 ; onInstrumentChange() ; }
 		enterWaveEdit() ;
 		isDirty_=true ;
 	}
@@ -1497,6 +1497,7 @@ void InstrumentView::DrawView() {
     } else FieldView::Redraw();
     for (size_t k=0;k<tmpVar.size();k++) tmpVar[k]->SetInt(tmpOld[k]) ;
     recShown_=Player::GetInstance()->AutoRecState() ;
+    if (tapPending_>=0) recShown_=0 ;   // precuenta para rebanar: no graba nada
     if (recShown_==1) recShown_=(System::GetInstance()->GetClock()/250)%2 ? 1 : 3 ;
     drawMap() ;
 
@@ -1586,6 +1587,16 @@ void InstrumentView::drawGrid() {
 	GUIColor card=bg, dim=Mix(bg,fg,50) ;   // sin cajita: del color del fondo
 	bool aHeld=(View::physMask_&EPBM_A)!=0 ;
 	UIField *focus=GetFocus() ;
+	// dibujando: el cursor sobre una bandera enciende su caja (INICIO / FIN)
+	FourCC flagID=0 ;
+	if (waveEdit_ && current_ && current_->GetType()==IT_SAMPLE) {
+		int ra,rb ;
+		if (((SampleInstrument *)current_)->SimplerRegion(ra,rb)) {
+			int c=markVar_.GetInt() ;
+			if (waveFlag_==1 || c==ra) flagID=SIP_S_START ;
+			else if (waveFlag_==2 || c==rb) flagID=SIP_S_END ;
+		}
+	}
 
 	// las pestañas
 	int kind=audioMode_?0:1 ;
@@ -1641,11 +1652,12 @@ void InstrumentView::drawGrid() {
 				}
 			}
 		}
-		bool here=(&f==focus) ;
+		bool flagBox=flagID && !f.IsStatic() && ((UIIntVarField &)f).GetVariableID()==flagID ;
+		bool here=waveEdit_?flagBox:(&f==focus) ;
 		bool moving=here && aHeld && !f.IsStatic() ;
 		GUIColor box=moving?fg:card, ink=moving?bg:fg, soft=Mix(box,ink,55) ;
 		if (moving) FillRect(cx,cy,cw,ch,box,7) ;
-		if (here && !moving && !waveEdit_) FrameRect(cx,cy,cw,ch,fg,7,3) ;   // dibujando: el cursor está arriba
+		if (here && !moving) FrameRect(cx,cy,cw,ch,fg,7,3) ;
 		DrawText(cx+12,cy+10,name.c_str(),soft,1) ;
 		if (value.empty()) continue ;
 		// el número (con signo y punto) grande; lo que sigue, su unidad
@@ -2285,10 +2297,25 @@ void InstrumentView::AnimationUpdate() {
 			}
 		}
 		int rs=Player::GetInstance()->AutoRecState() ;
+		if (tapPending_>=0) rs=0 ;
 		if (rs==1) rs=(System::GetInstance()->GetClock()/250)%2 ? 1 : 3 ;   // parpadea
 		if (now!=autoShown_ || recShown_!=rs) {
 			DrawView() ;
 			return ;
+		}
+	}
+	if (tapPending_>=0) {
+		Player *player=Player::GetInstance() ;
+		if (!player->IsRunning()) { tapPending_=-1 ; songByTap_=false ; }
+		else if (player->AutoRecState()==0) {   // ya pasó la precuenta: el uno
+			int from=tapPending_ ;
+			tapPending_=-1 ;
+			int ra,rb ;
+			si->SimplerRegion(ra,rb) ;
+			markVar_.SetInt(from) ;
+			startPreview(from,rb) ;
+			slicePlay_=false ;
+			tapPlay_=previewing_ ;
 		}
 	}
 	int pos=si->GetPlayPosition() ;
@@ -2501,21 +2528,33 @@ void InstrumentView::toggleDraw() {
 	if (waveEdit_) { exitWaveEdit() ; return ; }
 	if (!current_ || current_->GetType()!=IT_SAMPLE) return ;
 	SampleInstrument *si=(SampleInstrument *)current_ ;
-	if (sfMode_ || kitMode_ || audioMode_) return ;
-	if (si->GetSimpler(SIP_S_MODE)!=SM_SLICE) return ;
-	if (si->GetSimpler(SIP_S_SLICEBY)!=SSB_MANUAL) {
-		View::SetNotification("rebanadas a mano: SLICES en manual") ;
-		return ;
-	}
+	(void)si ;
+	if (sfMode_ || kitMode_ || audioMode_ || !simplerView_ || !gridMode_) return ;
+	if (strcmp(pageName_[page_[1]],"SAMPLER")) return ;   // la envolvente: siguiente paso
 	enterWaveEdit(false) ;
+}
+
+bool InstrumentView::canMark() {
+	SampleInstrument *si=(SampleInstrument *)current_ ;
+	return si->GetSimpler(SIP_S_MODE)==SM_SLICE && si->GetSimpler(SIP_S_SLICEBY)==SSB_MANUAL ;
 }
 
 // trk2als: toda la región suena desde 'from' (y la canción, si no estaba
 // sonando): con A se marca donde va sonando
-void InstrumentView::startTapPlay(int from) {
+void InstrumentView::startTapPlay(int from,bool countIn) {
 	markVar_.SetInt(from) ;
 	int ra,rb ;
 	((SampleInstrument *)current_)->SimplerRegion(ra,rb) ;
+	// rebanando: si no suena nada, una precuenta (como la captura) para
+	// estar listo; la región empieza a sonar en el uno
+	if (countIn && canMark() && !Player::GetInstance()->IsRunning()) {
+		Player *player=Player::GetInstance() ;
+		player->RequestCountIn(false) ;
+		player->OnSongStartButton(0,7,false,false) ;
+		songByTap_=true ;
+		tapPending_=from ;
+		return ;
+	}
 	startPreview(from,rb) ;
 	slicePlay_=false ;
 	tapPlay_=previewing_ ;
@@ -2527,6 +2566,7 @@ void InstrumentView::startTapPlay(int from) {
 }
 
 void InstrumentView::stopTapPlay() {
+	tapPending_=-1 ;
 	stopPreview() ;
 	if (songByTap_) {
 		Player *player=Player::GetInstance() ;
@@ -2596,14 +2636,13 @@ int InstrumentView::nearMark(const std::vector<int> &m) {
 
 // true si la tecla se usó aquí
 bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
-	if (!current_ || current_->GetType()!=IT_SAMPLE ||
-	    ((SampleInstrument *)current_)->GetSimpler(SIP_S_SLICEBY)!=SSB_MANUAL ||
-	    ((SampleInstrument *)current_)->GetSimpler(SIP_S_MODE)!=SM_SLICE) {
+	if (!current_ || current_->GetType()!=IT_SAMPLE || sfMode_ || kitMode_ || audioMode_) {
 		exitWaveEdit() ;
 		return false ;
 	}
 	if (!pressed) {
-		if (!(mask&EPBM_A) && (waveAPut_ || waveSel_==1)) waveARelease() ;
+		if (!(mask&EPBM_A) && (waveAPut_ || waveSel_==1 || waveFlag_)) waveARelease() ;
+		isDirty_=true ;   // soltó: la caja deja de verse en negativo
 		if (previewing_ && !tapPlay_ && !slicePlay_ && !(mask&EPBM_A)) stopPreview() ;
 		return true ;
 	}
@@ -2636,13 +2675,13 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 	}
 	// Start: tocar / parar la región desde el cursor (y la canción)
 	if (mask==EPBM_START) {
-		if (tapPlay_) stopTapPlay() ;
+		if (tapPlay_ || tapPending_>=0) { tapPending_=-1 ; stopTapPlay() ; }
 		else startTapPlay((c>=b-step)?a:c) ;
 		return true ;
 	}
 	// mientras suena la región: A marca donde va sonando (lo que se oye va
 	// un poco atrás de lo que se lee: se compensa la latencia del audio)
-	if (tapPlay_) {
+	if (tapPlay_ && canMark()) {
 		if (mask==EPBM_A) {
 			int sp=Player::GetInstance()->GetStreamPosition() ;
 			SoundSource *src=si->currentSource() ;
@@ -2668,11 +2707,22 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 
 	// Select, B: marcar desde aquí (las flechas agrandan); otra vez: todas
 	if ((mask&(EPBM_SELECT|EPBM_R)) && (mask&EPBM_B) && !(mask&EPBM_A)) {
+		if (!canMark()) return true ;
 		if (waveSel_==3) { waveSel_=2 ; View::SetNotification("marcadas todas") ; }
 		else { waveSel_=3 ; waveAnchor_=c ; View::SetNotification("marcando: flechas para agrandar") ; }
 		return true ;
 	}
+	if ((mask&EPBM_B) && (mask&EPBM_A) && waveSel_<2 && (c<=a+step || c>=b-step)) {
+		// B + A sobre una bandera: el inicio a 0 y el final a 100
+		bool st=(c<=a+step) ;
+		si->FindVariable(st?SIP_S_START:SIP_S_END)->SetInt(st?0:100) ;
+		si->SimplerRegion(a,b) ;
+		markVar_.SetInt(st?a:b) ;
+		waveFlag_=0 ;
+		return true ;
+	}
 	if ((mask&EPBM_B) && (mask&EPBM_A)) {     // B + A: borrar (la del cursor o las marcadas)
+		if (!canMark()) return true ;
 		if (waveSel_==2) m.clear() ;
 		else if (waveSel_==3) {
 			int lo=waveAnchor_<c?waveAnchor_:c, hi=waveAnchor_<c?c:waveAnchor_ ;
@@ -2715,9 +2765,26 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 	}
 	if (mask&EPBM_A) {
 		if (mask==EPBM_A) {                    // A sobre una marca: la agarra; en vacío: pone una al soltar
+			waveFlag_=0 ;
+			if (c<=a+step/2) { waveFlag_=1 ; waveSel_=0 ; waveAPut_=false ; markVar_.SetInt(a) ; return true ; }
+			if (c>=b-step/2) { waveFlag_=2 ; waveSel_=0 ; waveAPut_=false ; markVar_.SetInt(b) ; return true ; }
+			if (!canMark()) { waveSel_=0 ; waveAPut_=false ; return true ; }
 			int k=nearMark(m) ;
 			if (k>=0) { waveSel_=1 ; markVar_.SetInt(m[k]) ; waveAPut_=false ; }
 			else { waveSel_=0 ; waveAPut_=true ; }
+			return true ;
+		}
+		if ((mask&(EPBM_LEFT|EPBM_RIGHT)) && waveFlag_) {   // A + ← → sobre una bandera: de 1 en 1 %
+			FourCC id=(waveFlag_==1)?SIP_S_START:SIP_S_END ;
+			Variable *v=si->FindVariable(id) ;
+			int nv=v->GetInt()+((mask&EPBM_RIGHT)?1:-1) ;
+			int lo=(waveFlag_==1)?0:si->GetSimpler(SIP_S_START)+1 ;
+			int hi=(waveFlag_==1)?si->GetSimpler(SIP_S_END)-1:100 ;
+			if (nv<lo) nv=lo ;
+			if (nv>hi) nv=hi ;
+			v->SetInt(nv) ;
+			si->SimplerRegion(a,b) ;
+			markVar_.SetInt((waveFlag_==1)?a:b) ;
 			return true ;
 		}
 		if (mask&(EPBM_LEFT|EPBM_RIGHT)) {     // A + ← →: moverla
@@ -2758,6 +2825,17 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 void InstrumentView::waveARelease() {
 	SampleInstrument *si=(SampleInstrument *)current_ ;
 	int c=markVar_.GetInt(), at=-1 ;
+	if (waveFlag_) {   // soltó una bandera: suena desde el inicio, o el último segundo hasta el final
+		int ra,rb ;
+		si->SimplerRegion(ra,rb) ;
+		SoundSource *src=si->currentSource() ;
+		int sec=src?src->GetSampleRate(-1):44100 ;
+		if (waveFlag_==1) startPreview(ra,rb) ;
+		else startPreview((rb-sec>ra)?rb-sec:ra,rb) ;
+		waveFlag_=0 ;
+		isDirty_=true ;
+		return ;
+	}
 	if (waveAPut_) {
 		waveAPut_=false ;
 		at=si->AddMark(c) ;
@@ -3788,6 +3866,7 @@ void InstrumentView::drawAutoMarks() {
 	if (!SupportsShapes()) return ;
 	GUIColor hi=ColorOf(CD_HILITE2) ;
 	int rs=Player::GetInstance()->AutoRecState() ;
+	if (tapPending_>=0) rs=0 ;   // precuenta para rebanar: no graba
 	if (rs==2 || (rs==1 && recShown_==1)) {   // esperando: parpadea
 		FillRect(640-64,2,58,16,GUIColor(0xD0,0x30,0x30),6) ;
 		DrawText(640-56,4,"REC",GUIColor(0xFF,0xFF,0xFF),0) ;

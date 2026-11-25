@@ -90,6 +90,9 @@ private:
 	int waveZoom_ ;
 	int waveSel_ ;            // 0 nada, 1 la marca agarrada (A), 2 todas, 3 marcando (Select, B)
 	int waveAnchor_ ;         // marcando: desde dónde
+	int waveFlag_ ;           // A sobre una bandera: 1 el inicio, 2 el final
+	int tapPending_ ;         // Start en slice: tras la precuenta suena desde aquí
+	bool canMark() ;          // slice a mano: se pueden poner marcas
 	bool waveAPut_ ;          // A en un lugar vacío: la marca se pone al soltar (o al moverla)
 	void toggleDraw() ;
 	void waveARelease() ;
@@ -98,7 +101,7 @@ private:
 	int previewPos_ ;
 	bool tapPlay_ ;           // suena toda la región: A marca
 	bool songByTap_ ;         // la canción la arrancó la edición
-	void startTapPlay(int from) ;
+	void startTapPlay(int from,bool countIn=true) ;
 	void stopTapPlay() ;
 	void enterWaveEdit(bool play=true) ;
 	void exitWaveEdit() ;
