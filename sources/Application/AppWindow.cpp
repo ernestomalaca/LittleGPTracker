@@ -1033,8 +1033,9 @@ void AppWindow::Update(Observable &o, I_ObservableData *d) {
         if (_currentView) {
             _currentView->LooseFocus();
         }
-        // trk2als: el clip vacío que no se usó no queda
-        if (*vt != VT_CLIP && _viewData && _viewData->virtualCell_ >= 0) {
+        // trk2als: el clip vacío que no se usó no queda (del clip al instrumento
+        // y de regreso sigue ahí: si no, al volver el clip ya no tenía rejilla)
+        if (*vt != VT_CLIP && *vt != VT_INSTRUMENT && _viewData && _viewData->virtualCell_ >= 0) {
             _viewData->song_->clips_->Get(_viewData->currentChain_).Clear();
             _viewData->virtualCell_ = -1;
         }
