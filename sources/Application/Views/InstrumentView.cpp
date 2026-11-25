@@ -657,8 +657,10 @@ void InstrumentView::fillSampleParameters() {
 					ADD(new UISlicesField(GAT(2),*instrument->FindVariable(SIP_S_SLICEBY),
 					                      *instrument->FindVariable(SIP_S_SLICES))) ;
 				}
-				v=instrument->FindVariable(SIP_S_GLIDE) ;
-				ADD(new UIIntVarField(GAT(3),*v,"GLIDE: %dms",0,2000,10,100)) ;
+				if (mode!=SM_SLICE) {   // en slice no hay glide (como en Simpler)
+					v=instrument->FindVariable(SIP_S_GLIDE) ;
+					ADD(new UIIntVarField(GAT(3),*v,"GLIDE: %dms",0,2000,10,100)) ;
+				}
 				if (mode==SM_SLICE) {   // los fades de las rebanadas (los mismos para todas)
 					v=instrument->FindVariable(SIP_S_FIN) ;
 					ADD(new UIIntVarField(GAT(4),*v,"FADE IN: %dms",0,2000,5,50)) ;
