@@ -147,6 +147,8 @@ class ClipView : public View {
     int curveVal_;                  // el punto: su valor (su paso es cursorStep_)
     unsigned int curveShownID_;     // la curva que se estaba viendo
     bool curveGrab_;                // A agarró un nodo
+    bool curveStand_;               // parado en un nodo (se llegó con L / R): las flechas lo mueven
+    void curveJump(int dt);         // de nodo en nodo
     bool curveMarking_;
     int curveAnchor_;
     std::vector<AutoPoint> curveClip_;   // nodos copiados (desde el paso 0)

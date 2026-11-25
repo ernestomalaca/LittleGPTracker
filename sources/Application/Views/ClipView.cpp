@@ -67,7 +67,7 @@ ClipView::ClipView(GUIWindow &w, ViewData *viewData) : View(w, viewData) {
     prevS_ = prevE_ = 0;
     curveVal_ = 0;
     curveShownID_ = 0;
-    curveGrab_ = curveMarking_ = false;
+    curveGrab_ = curveMarking_ = curveStand_ = false;
     curveAnchor_ = 0;
     curveClipLen_ = 0;
     selTapC_ = false;
@@ -2315,6 +2315,35 @@ void ClipView::curveToggle() {
     View::SetNotification((std::string("Curva: ") + d->curveName_).c_str());
 }
 
+// de nodo en nodo, uno por uno (también los que están en el mismo paso)
+void ClipView::curveJump(int dt) {
+    AutoLane *l = clip().FindLane(viewData_->curveID_, -1);
+    if (!dt || !l || l->points.empty()) return;
+    int n = (int)l->points.size();
+    int best = -1;
+    int here = curveNodeAt(cursorStep_);
+    if (here >= 0)
+        best = here + dt;
+    else if (dt > 0) {
+        for (int k = 0; k < n && best < 0; k++)
+            if (l->points[k].pos / CLIP_TICKS >= cursorStep_) best = k;
+    } else {
+        for (int k = n - 1; k >= 0 && best < 0; k--)
+            if (l->points[k].pos / CLIP_TICKS <= cursorStep_) best = k;
+    }
+    if (best < 0 || best >= n) {   // ya no hay más: se queda en el de la orilla
+        if (here < 0) return;
+        best = here;
+    }
+    curveSel_ = best;
+    cursorStep_ = l->points[best].pos / CLIP_TICKS;
+    curveVal_ = l->points[best].value;
+    curveStand_ = true;
+    char vb[24];
+    curveText(curveVal_, vb, sizeof(vb), false);
+    message(vb);
+}
+
 bool ClipView::curveButton(unsigned short mask, unsigned short v) {
     ViewData *d = viewData_;
     if (v != EPBM_Y) curveYPending_ = false;   // Y + otra cosa ya no es "Y sola"
@@ -2331,6 +2360,7 @@ bool ClipView::curveButton(unsigned short mask, unsigned short v) {
     int dv = (v == EPBM_UP) ? 1 : (v == EPBM_DOWN) ? -1 : 0;
     if (curveShownID_ != d->curveID_) {   // recién entrado: el punto donde suena
         curveShownID_ = d->curveID_;
+        curveStand_ = false;
         curveSyncCursor();
     }
     if (v == EPBM_L && (mask & EPBM_A)) {   // A + L: de vuelta a la perilla (ida y vuelta con el mismo atajo)
@@ -2340,7 +2370,7 @@ bool ClipView::curveButton(unsigned short mask, unsigned short v) {
         d->currentInstrument_ = d->curveInstr_;
         d->instrumentFromSong_ = false;
         d->curveID_ = 0;
-        curveGrab_ = curveMarking_ = false;
+        curveGrab_ = curveMarking_ = curveStand_ = false;
         switchView(VT_INSTRUMENT);   // (cuando la mixer tenga curvas: a la mixer si se vino de ahí)
         return true;
     }
@@ -2361,6 +2391,7 @@ bool ClipView::curveButton(unsigned short mask, unsigned short v) {
                 return true;
             }
             curveMarking_ = true;
+            curveStand_ = false;
             curveAnchor_ = cursorStep_;
             message("Marcando: flechas para agrandar");
             return true;
@@ -2371,7 +2402,7 @@ bool ClipView::curveButton(unsigned short mask, unsigned short v) {
         }
         if (v == EPBM_RIGHT) {   // al instrumento (lo de siempre), parado en este parámetro
             d->curveFocus_ = d->curveID_;
-            curveGrab_ = curveMarking_ = false;
+            curveGrab_ = curveMarking_ = curveStand_ = false;
             return false;
         }
         if (v == EPBM_A) {   // mantén A: se ve dónde cae; al soltar, se pega
@@ -2387,12 +2418,13 @@ bool ClipView::curveButton(unsigned short mask, unsigned short v) {
             curveBPending_ = curveMarking_;
             return true;
         }
-        if (v == EPBM_A) { curveBPending_ = false; curveBAPending_ = true; return true; }   // B + A: borra al soltar
+        if (v == EPBM_A) { curveBPending_ = false; curveBAPending_ = true; curveStand_ = false; return true; }   // B + A: borra al soltar
         if ((mask & EPBM_A) && v == EPBM_UP) { curveBAPending_ = false; askDeletePage(); return true; }   // B + A + ↑: borrar compás
         if ((mask & EPBM_A) && v == EPBM_DOWN) { curveBAPending_ = false; askCrop(); return true; }      // B + A + ↓: recortar
         if (v == EPBM_L) { curveBPending_ = false; loopButton(true); return true; }    // B + L / R: el loop, como en las notas
         if (v == EPBM_R) { curveBPending_ = false; loopButton(false); return true; }
-        if (dt) {   // de compás en compás
+        if (dt) {   // de compás en compás (y suelta el nodo)
+            curveStand_ = false;
             int t = pages() * 16;
             int s = cursorStep_ + dt * 16;
             if (s >= 0 && s < t) cursorStep_ = s;
@@ -2447,28 +2479,17 @@ bool ClipView::curveButton(unsigned short mask, unsigned short v) {
         else if (dv) curveMoveNode(0, dv, false);
         return true;
     }
-    if (mask & EPBM_Y) {   // Y + ← →: de nodo en nodo (el punto se va a él)
-        AutoLane *l = clip().FindLane(d->curveID_, -1);
-        if (dt && l && !l->points.empty()) {
-            // uno por uno, en orden (también los que están en el mismo paso)
-            int n = (int)l->points.size();
-            int best = -1;
-            int here = curveNodeAt(cursorStep_);
-            if (here >= 0)
-                best = here + dt;
-            else if (dt > 0) {
-                for (int k = 0; k < n && best < 0; k++)
-                    if (l->points[k].pos / CLIP_TICKS >= cursorStep_) best = k;
-            } else {
-                for (int k = n - 1; k >= 0 && best < 0; k--)
-                    if (l->points[k].pos / CLIP_TICKS <= cursorStep_) best = k;
-            }
-            if (best >= 0 && best < n) {
-                curveSel_ = best;
-                cursorStep_ = l->points[best].pos / CLIP_TICKS;
-                curveVal_ = l->points[best].value;
-            }
-        }
+    if (mask & EPBM_Y) {   // Y + ← →: también de nodo en nodo
+        if (dt) curveJump(dt);
+        return true;
+    }
+    // L / R: de nodo en nodo; parado en uno, las flechas lo mueven (como las
+    // banderas del Sampler)
+    if (v == EPBM_L) { curveJump(-1); return true; }
+    if (v == EPBM_R) { curveJump(1); return true; }
+    if (curveStand_ && curveNodeAt(cursorStep_) < 0) curveStand_ = false;
+    if (curveStand_ && !curveMarking_ && (dt || dv)) {
+        curveMoveNode(dt, dv, false);
         return true;
     }
     // sin nada: el punto se mueve por el plano (su valor no cambia)
@@ -2480,8 +2501,6 @@ bool ClipView::curveButton(unsigned short mask, unsigned short v) {
         return true;
     }
     if (dv) { curveVal_ = curveNudge(curveVal_, dv, false); return true; }
-    if (v == EPBM_L) { curveVal_ = curveNudge(curveVal_, -1, true); return true; }
-    if (v == EPBM_R) { curveVal_ = curveNudge(curveVal_, 1, true); return true; }
     return true;
 }
 
@@ -2498,6 +2517,7 @@ void ClipView::drawCurves() {
 
     if (curveShownID_ != d->curveID_) {   // recién entrado: el punto donde suena
         curveShownID_ = d->curveID_;
+        curveStand_ = false;
         curveSyncCursor();
     }
     Clip &c = clip();
@@ -2652,7 +2672,7 @@ void ClipView::drawCurves() {
         int y = top + int((1.0 - curveNorm(curV)) * h + 0.5);
         FillRect(x - 10, y, 21, 1, fg);
         FillRect(x, y - 10, 1, 21, fg);
-        FrameRect(x - 7, y - 7, 15, 15, curveGrab_ ? play : fg, 7, 2);
+        FrameRect(x - 7, y - 7, 15, 15, (curveGrab_ || curveStand_) ? play : fg, 7, (curveGrab_ || curveStand_) ? 3 : 2);
     }
 
     // lo que se va a pegar (Select + A sostenido): su forma, donde cae
