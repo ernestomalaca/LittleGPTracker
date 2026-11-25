@@ -2486,10 +2486,8 @@ bool InstrumentView::processEnvEdit(unsigned short mask,bool pressed) {
 	pageTap_=(mask==EPBM_L)?-1:(mask==EPBM_R)?1:0 ;
 	isDirty_=true ;
 	if (mask==EPBM_START) { envAudition() ; return true ; }
-	bool bl=(mask&EPBM_B) && (mask&EPBM_L), br=(mask&EPBM_B) && (mask&EPBM_R) && !(mask&EPBM_SELECT) ;
-	if (bl || br || (mask&EPBM_A)) {
-		if (bl) envSel_=0 ;            // B + L: directo al attack
-		else if (br) envSel_=3 ;       // B + R: directo al release
+	// (aquí no hay B + L / B + R: L y R ya eligen la parte y A la mueve)
+	if ((mask&EPBM_A) && !(mask&EPBM_B)) {
 		bool changed=false ;
 		if ((mask&(EPBM_LEFT|EPBM_RIGHT)) && envSel_!=2) {   // el tiempo de esa parte
 			Variable *v=si->FindVariable(envID(envSel_)) ;
@@ -2513,7 +2511,7 @@ bool InstrumentView::processEnvEdit(unsigned short mask,bool pressed) {
 				changed=true ;
 			}   // (ENV, cuánto mueve la envolvente al filtro, se queda en su caja)
 		}
-		if (changed || ((bl || br) && !(mask&arrows))) envAudition() ;
+		if (changed) envAudition() ;
 		return true ;
 	}
 	return true ;   // lo demás no hace nada hasta salir con Select
