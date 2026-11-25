@@ -334,6 +334,8 @@ private:
 	   const std::vector<ZoneSource::Zone> &Zones() { ensureZones() ; return zones_.zones_ ; }
 	   std::string ZoneSetName() ;   // "marimba" (de marimba_01.wav)
 	   int LastNote() { return lastNote_ ; }   // la última nota que empezó
+	   // trk2als: Sampler en slice: una rebanada a la vez (la nueva roba la voz)
+	   bool IsSliceMono() { return !IsKit() && !IsZoned() && GetSimpler(SIP_S_INIT) && GetSimpler(SIP_S_MODE)==SM_SLICE ; }
 	   // trk2als: la próxima nota (one-shot) empieza aquí y no en el inicio:
 	   // para escuchar el fade out sin esperar todo el sample
 	   void AuditionFrom(int pos) { auditionFrom_=pos ; }

@@ -1292,8 +1292,11 @@ void Player::LiveNoteOn(int channel, I_Instrument *instr, int note, int vel) {
     if (vel > 127) vel = 127;
     bool kit = instr->GetType() == IT_SAMPLE && ((SampleInstrument *)instr)->IsKit();
     int v = 0;
+    // trk2als: un Sampler en slice es mono, como en Live: la rebanada nueva le
+    // quita la voz a la que sonaba (siempre la voz 0)
+    bool slice = !kit && instr->GetType() == IT_SAMPLE && ((SampleInstrument *)instr)->IsSliceMono();
     if (!kit) {
-        v = -1;
+        v = slice ? 0 : -1;
         for (int i = 0; i < VOICE_COUNT && v < 0; i++) if (liveNote_[channel][i] == note) v = i;
         for (int i = 0; i < VOICE_COUNT && v < 0; i++) if (liveNote_[channel][i] < 0) v = i;
         if (v < 0) {
@@ -1609,6 +1612,9 @@ void Player::playClipStep(int channel) {
             for (int i = 1; i < VOICE_COUNT; i++)
                 if (voiceEnd_[channel][i] < voiceEnd_[channel][v]) v = i;
         }
+        // trk2als: slice es mono (como en Live): siempre la voz 0, la nueva
+        // rebanada le quita la voz a la anterior (también en el mismo paso)
+        if (instrument->GetType() == IT_SAMPLE && ((SampleInstrument *)instrument)->IsSliceMono()) v = 0;
         // lo pendiente de esa voz desde aquí ya no va
         for (size_t j = 0; j < q.size();) {
             if (q[j].voice == v && q[j].at >= startSlice) q.erase(q.begin() + j);
