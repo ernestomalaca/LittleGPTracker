@@ -102,6 +102,19 @@ private:
 	int fadeSel_ ;            // 0 el fade in, 1 el fade out
 	bool processFadeEdit(unsigned short mask,bool pressed) ;
 	void fadeAudition() ;
+	// trk2als: la envolvente (FILTRO, o AMP en classic / slice): Select entra;
+	// L / R solos caminan por attack, decay, sustain y release; A + ← → el
+	// tiempo, A + ↑ ↓ el nivel; B + L / B + R: directo al attack / release
+	bool envEdit_ ;
+	bool envFilter_ ;         // la del filtro (si no, la de volumen)
+	int envSel_ ;             // 0 attack, 1 decay, 2 sustain, 3 release
+	unsigned long envOffAt_ ; // cuándo se suelta la nota de la escucha (0: no suena)
+	int envCh_ ;
+	FourCC envID(int part) ;
+	bool processEnvEdit(unsigned short mask,bool pressed) ;
+	void envAudition() ;
+	void envNoteOff() ;
+	bool drawEditing() { return waveEdit_ || fadeEdit_ || envEdit_ ; }
 	// deshacer / rehacer en la onda (Select + L / R): inicio, fin y marcas
 	struct WaveSnap { int s,sf,e,ef ; std::vector<int> marks ;
 		bool operator==(const WaveSnap &o) const { return s==o.s && sf==o.sf && e==o.e && ef==o.ef && marks==o.marks ; } } ;
