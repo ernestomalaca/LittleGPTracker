@@ -91,6 +91,10 @@ private:
 	int waveSel_ ;            // 0 nada, 1 la marca agarrada (A), 2 todas, 3 marcando (Select, B)
 	int waveAnchor_ ;         // marcando: desde dónde
 	int waveFlag_ ;           // A sobre una bandera: 1 el inicio, 2 el final
+	// la parada elegida en la onda (L / R): 0 el inicio, 3 el final; en
+	// classic también 1 el decay y 2 el sustain
+	int waveStop_ ;
+	FourCC waveStopID() ;     // el parámetro de 'cómo' de esa parada (0: ninguno)
 	int tapPending_ ;         // Start en slice: tras la precuenta suena desde aquí
 	bool canMark() ;          // slice a mano: se pueden poner marcas
 	bool waveAPut_ ;          // A en un lugar vacío: la marca se pone al soltar (o al moverla)
@@ -118,8 +122,9 @@ private:
 	void envNoteOff() ;
 	bool drawEditing() { return waveEdit_ || fadeEdit_ || envEdit_ ; }
 	// deshacer / rehacer en la onda (Select + L / R): inicio, fin y marcas
-	struct WaveSnap { int s,sf,e,ef,fi,fo ; std::vector<int> marks ;
-		bool operator==(const WaveSnap &o) const { return s==o.s && sf==o.sf && e==o.e && ef==o.ef && fi==o.fi && fo==o.fo && marks==o.marks ; } } ;
+	struct WaveSnap { int s,sf,e,ef,fi,fo,ak,dc,su,rl ; std::vector<int> marks ;
+		bool operator==(const WaveSnap &o) const { return s==o.s && sf==o.sf && e==o.e && ef==o.ef && fi==o.fi && fo==o.fo &&
+			ak==o.ak && dc==o.dc && su==o.su && rl==o.rl && marks==o.marks ; } } ;
 	std::vector<WaveSnap> waveUndo_, waveRedo_ ;
 	bool waveGesture_ ;       // ya se guardó la foto de este gesto
 	WaveSnap waveNow() ;

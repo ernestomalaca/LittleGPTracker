@@ -2365,8 +2365,16 @@ void SampleInstrument::InitSimpler() {
 	}
 	// trk2als: antes el corte seguía la envolvente de volumen; la del filtro
 	// arranca como copia para que suene igual
+	// trk2als: slice pasó de ADSR a fades: su attack de antes es su fade in
+	if (GetSimpler(SIP_S_FEVER)==1) {
+		FindVariable(SIP_S_FEVER)->SetInt(2) ;
+		if (GetSimpler(SIP_S_MODE)==SM_SLICE && GetSimpler(SIP_S_FIN)==0 && GetSimpler(SIP_S_ATK)>0) {
+			int a=GetSimpler(SIP_S_ATK) ;
+			FindVariable(SIP_S_FIN)->SetInt(a>2000?2000:a) ;
+		}
+	}
 	if (!GetSimpler(SIP_S_FEVER)) {
-		FindVariable(SIP_S_FEVER)->SetInt(1) ;
+		FindVariable(SIP_S_FEVER)->SetInt(2) ;
 		if (GetSimpler(SIP_S_MODE)==SM_ONESHOT) {
 			FindVariable(SIP_S_FATK)->SetInt(GetSimpler(SIP_S_FIN)) ;
 			FindVariable(SIP_S_FDEC)->SetInt(0) ;
@@ -2850,7 +2858,9 @@ void SampleInstrument::simplerBlock(renderParams *rp,int size) {
 // one-shot: fade in y fade out (al soltar, en modo gate)
 void SampleInstrument::simplerEnvelope(renderParams *rp,fixed *buffer,int size) {
 	const float msr=44.1f ;   // muestras por milisegundo
-	bool oneShot=(GetSimpler(SIP_S_MODE)==SM_ONESHOT) ;
+	// one-shot y slice: fade in / fade out (como Simpler); classic y multicapa: ADSR
+	int emode=GetSimpler(SIP_S_MODE) ;
+	bool oneShot=!IsZoned() && (emode==SM_ONESHOT || emode==SM_SLICE) ;
 	float atk=(oneShot?envMs(SIP_S_FIN):envMs(SIP_S_ATK))*msr ;
 	// el sample casi nunca empieza en silencio (sobre todo con 'start' a media
 	// onda): 1.5 ms de entrada como mínimo, para que no haga click

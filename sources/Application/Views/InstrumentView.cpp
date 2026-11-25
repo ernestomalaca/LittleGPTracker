@@ -335,6 +335,7 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data),
 	waveSel_=0 ;
 	waveAnchor_=0 ;
 	waveFlag_=0 ;
+	waveStop_=0 ;
 	fadeEdit_=false ;
 	fadeSel_=0 ;
 	envEdit_=false ;
@@ -590,11 +591,14 @@ void InstrumentView::fillSampleParameters() {
 			gridMode_=true ;
 			T_SimpleList<UIField>::Remove(*f1,true) ;   // el sonido: se cambia desde la cabecera
 			pageCount_=0 ;
-			// por lo que más se usa: sonido, amp, filtro y al final warp
+			// SAMPLER (la región, el tono, volumen y pan), FILTRO (con su
+			// envolvente) y MÁS (warp, rebanadas, glide, voces, guardar). La
+			// envolvente de volumen se edita sobre la onda (Select); solo un
+			// multicapa, que no tiene onda editable, conserva AMP
 			pageName_[pageCount_++]="SAMPLER" ;
-			pageName_[pageCount_++]="AMP" ;
+			if (sfMode_) pageName_[pageCount_++]="AMP" ;
 			pageName_[pageCount_++]="FILTRO" ;
-			if (!sfMode_) pageName_[pageCount_++]="WARP" ;
+			if (!sfMode_) pageName_[pageCount_++]="MÁS" ;
 			int &pg=page_[1] ;
 			if (pg<0 || pg>=pageCount_) pg=0 ;
 			const char *pn=pageName_[pg] ;
@@ -626,11 +630,18 @@ void InstrumentView::fillSampleParameters() {
 				ADD(new UIIntVarField(GAT(r2),*v,"TRANSP: %+dst",-48,48,1,12)) ;
 				v=instrument->FindVariable(SIP_S_DETUNE) ;
 				ADD(new UIIntVarField(GAT(r2+1),*v,"DETUNE: %+dct",-50,50,1,10)) ;
-				v=instrument->FindVariable(SIP_S_GLIDE) ;
-				ADD(new UIIntVarField(GAT(r2+2),*v,"GLIDE: %dms",0,2000,10,100)) ;
-				v=instrument->FindVariable(SIP_S_VOICES) ;
-				ADD(new UIIntVarField(GAT(r2+3),*v,"VOCES: %d",1,2,1,1)) ;
-			} else if (!strcmp(pn,"WARP")) {
+				v=instrument->FindVariable(SIP_S_VOL) ;
+				ADD(new UIIntVarField(GAT(r2+2),*v,"VOLUMEN: %+ddB",-36,6,1,6)) ;
+				v=instrument->FindVariable(SIP_S_PAN) ;
+				ADD(new UIIntVarField(GAT(r2+3),*v,"PAN: %+d",-50,50,1,10)) ;
+				if (sfMode_) {
+					v=instrument->FindVariable(SIP_S_GLIDE) ;
+					ADD(new UIIntVarField(GAT(4),*v,"GLIDE: %dms",0,2000,10,100)) ;
+					v=instrument->FindVariable(SIP_S_VOICES) ;
+					ADD(new UIIntVarField(GAT(5),*v,"VOCES: %d",1,2,1,1)) ;
+					ADD(new UIIntVarField(GAT(7),presetSaveVar_,"PRESET: guardar",0,0,1,1)) ;
+				}
+			} else if (!strcmp(pn,"MÁS")) {
 				v=instrument->FindVariable(SIP_S_WARP) ;
 				ADD(new UIIntVarField(GAT(0),*v,"WARP: %s",0,2,1,1)) ;
 				if (warped) {
@@ -642,10 +653,21 @@ void InstrumentView::fillSampleParameters() {
 				if (mode==SM_CLASSIC && instrument->GetSimpler(SIP_S_LOOP)) {
 					v=instrument->FindVariable(SIP_S_LLEN) ;
 					ADD(new UIIntVarField(GAT(2),*v,"LARGO: %d%%",1,100,1,10)) ;
-				} else if (mode==SM_SLICE) {   // cómo se rebana (el trigger va en SAMPLER)
+				} else if (mode==SM_SLICE) {   // cómo se rebana
 					ADD(new UISlicesField(GAT(2),*instrument->FindVariable(SIP_S_SLICEBY),
 					                      *instrument->FindVariable(SIP_S_SLICES))) ;
 				}
+				v=instrument->FindVariable(SIP_S_GLIDE) ;
+				ADD(new UIIntVarField(GAT(3),*v,"GLIDE: %dms",0,2000,10,100)) ;
+				if (mode==SM_SLICE) {   // los fades de las rebanadas (los mismos para todas)
+					v=instrument->FindVariable(SIP_S_FIN) ;
+					ADD(new UIIntVarField(GAT(4),*v,"FADE IN: %dms",0,2000,5,50)) ;
+					v=instrument->FindVariable(SIP_S_FOUT) ;
+					ADD(new UIIntVarField(GAT(5),*v,"FADE OUT: %dms",0,2000,5,50)) ;
+				}
+				v=instrument->FindVariable(SIP_S_VOICES) ;
+				ADD(new UIIntVarField(GAT(6),*v,"VOCES: %d",1,2,1,1)) ;
+				ADD(new UIIntVarField(GAT(7),presetSaveVar_,"PRESET: guardar",0,0,1,1)) ;
 			} else if (fpage) {
 				v=instrument->FindVariable(SIP_S_FTYPE) ;
 				ADD(new UIIntVarField(GAT(0),*v,"FILTRO: %s",0,2,1,1)) ;
@@ -663,27 +685,15 @@ void InstrumentView::fillSampleParameters() {
 				ADD(new UIIntVarField(GAT(6),*v,"SUSTAIN: %ddB",-60,0,1,6)) ;
 				v=instrument->FindVariable(SIP_S_FREL) ;
 				ADD(new UIIntVarField(GAT(7),*v,"RELEASE: %dms",0,10000,10,100)) ;
-			} else {   // AMP
-				if (mode==SM_ONESHOT && !sfMode_) {
-					v=instrument->FindVariable(SIP_S_FIN) ;
-					ADD(new UIIntVarField(GAT(0),*v,"FADE IN: %dms",0,2000,5,50)) ;
-					v=instrument->FindVariable(SIP_S_FOUT) ;
-					ADD(new UIIntVarField(GAT(1),*v,"FADE OUT: %dms",0,2000,5,50)) ;
-				} else {
-					v=instrument->FindVariable(SIP_S_ATK) ;
-					ADD(new UIIntVarField(GAT(0),*v,"ATTACK: %dms",0,5000,5,100)) ;
-					v=instrument->FindVariable(SIP_S_DEC) ;
-					ADD(new UIIntVarField(GAT(1),*v,"DECAY: %dms",0,10000,10,100)) ;
-					v=instrument->FindVariable(SIP_S_SUS) ;
-					ADD(new UIIntVarField(GAT(2),*v,"SUSTAIN: %ddB",-60,0,1,6)) ;
-					v=instrument->FindVariable(SIP_S_REL) ;
-					ADD(new UIIntVarField(GAT(3),*v,"RELEASE: %dms",0,10000,10,100)) ;
-				}
-				v=instrument->FindVariable(SIP_S_VOL) ;
-				ADD(new UIIntVarField(GAT(4),*v,"VOLUMEN: %+ddB",-36,6,1,6)) ;
-				v=instrument->FindVariable(SIP_S_PAN) ;
-				ADD(new UIIntVarField(GAT(5),*v,"PAN: %+d",-50,50,1,10)) ;
-				ADD(new UIIntVarField(GAT(7),presetSaveVar_,"PRESET: guardar",0,0,1,1)) ;
+			} else {   // AMP (solo multicapa)
+				v=instrument->FindVariable(SIP_S_ATK) ;
+				ADD(new UIIntVarField(GAT(0),*v,"ATTACK: %dms",0,5000,5,100)) ;
+				v=instrument->FindVariable(SIP_S_DEC) ;
+				ADD(new UIIntVarField(GAT(1),*v,"DECAY: %dms",0,10000,10,100)) ;
+				v=instrument->FindVariable(SIP_S_SUS) ;
+				ADD(new UIIntVarField(GAT(2),*v,"SUSTAIN: %ddB",-60,0,1,6)) ;
+				v=instrument->FindVariable(SIP_S_REL) ;
+				ADD(new UIIntVarField(GAT(3),*v,"RELEASE: %dms",0,10000,10,100)) ;
 			}
 			#undef GAT
 			return ;
@@ -1116,23 +1126,44 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 		if (pressed) pageTap_=(mask==EPBM_L)?-1:(mask==EPBM_R)?1:0 ;
 		else if (pageTap_ && mask==0) { int d=pageTap_ ; pageTap_=0 ; turnPage(d) ; return ; }
 	}
-	// en la onda: L solo va a la bandera del inicio, R solo a la del final
+	// en la onda, L / R solos (tocar y soltar): la parada de al lado.
+	// One-shot y slice por región: el inicio / el final. Classic: inicio,
+	// decay, sustain, final. Slice a mano: de rebanada en rebanada
 	if (waveEdit_ && current_ && current_->GetType()==IT_SAMPLE) {
 		if (pressed) pageTap_=(mask==EPBM_L)?-1:(mask==EPBM_R)?1:0 ;
 		else if (pageTap_ && mask==0) {
-			markVar_.SetInt(((SampleInstrument *)current_)->RegionPoint(pageTap_<0)) ;
+			SampleInstrument *si=(SampleInstrument *)current_ ;
+			int dir=pageTap_ ;
+			pageTap_=0 ;
 			waveSel_=0 ;
-			if (!canMark() && ((SampleInstrument *)current_)->GetSimpler(SIP_S_MODE)==SM_ONESHOT) {
-				fadeSel_=(pageTap_<0)?0:1 ;   // one-shot: la nota, con sus fades
-				pageTap_=0 ;
-				fadeAudition() ;
-				isDirty_=true ;
+			isDirty_=true ;
+			int smode=si->GetSimpler(SIP_S_MODE) ;
+			if (canMark()) {
+				int fs=si->RegionPoint(true), fe=si->RegionPoint(false), c=markVar_.GetInt() ;
+				std::vector<int> pts, m=si->GetMarks() ;
+				pts.push_back(fs) ;
+				for (size_t i=0;i<m.size();i++) if (m[i]>fs && m[i]<fe) pts.push_back(m[i]) ;
+				pts.push_back(fe) ;
+				int to=-1 ;
+				for (size_t i=0;i<pts.size();i++) {
+					if (dir>0 && pts[i]>c && (to<0 || pts[i]<to)) to=pts[i] ;
+					if (dir<0 && pts[i]<c && pts[i]>to) to=pts[i] ;
+				}
+				if (to>=0) {
+					markVar_.SetInt(to) ;
+					if (to<fe) { int f,t ; sliceAt(to,f,t) ; startPreview(to,t) ; }   // suena esa rebanada
+				}
 				return ;
 			}
-			waveFlag_=(pageTap_<0)?1:2 ;
-			pageTap_=0 ;
-			waveARelease() ;   // suena: desde el inicio, o el último segundo
-			isDirty_=true ;
+			if (smode==SM_CLASSIC) {
+				waveStop_+=dir ;
+				if (waveStop_<0) waveStop_=0 ;
+				if (waveStop_>3) waveStop_=3 ;
+			} else waveStop_=(dir<0)?0:3 ;
+			markVar_.SetInt(si->RegionPoint(waveStop_!=3)) ;
+			if (smode==SM_ONESHOT) { fadeSel_=(waveStop_==3)?1:0 ; fadeAudition() ; }   // la nota, con sus fades
+			else if (smode==SM_CLASSIC && (waveStop_==1 || waveStop_==2)) envAudition() ;
+			else { waveFlag_=(waveStop_==3)?2:1 ; waveARelease() ; }   // el sample: desde el inicio, o el último segundo
 			return ;
 		}
 	}
@@ -1641,7 +1672,8 @@ void InstrumentView::drawGrid() {
 			int c=markVar_.GetInt() ;
 			SampleInstrument *fsi=(SampleInstrument *)current_ ;
 			(void)ra ; (void)rb ;
-			if (waveFlag_==1 || c==fsi->RegionPoint(true)) flagID=SIP_S_START ;
+			if (!canMark()) flagID=(waveStop_==0)?SIP_S_START:(waveStop_==3)?(FourCC)SIP_S_END:0 ;
+			else if (waveFlag_==1 || c==fsi->RegionPoint(true)) flagID=SIP_S_START ;
 			else if (waveFlag_==2 || c==fsi->RegionPoint(false)) flagID=SIP_S_END ;
 		}
 	}
@@ -1650,7 +1682,9 @@ void InstrumentView::drawGrid() {
 	int kind=audioMode_?0:1 ;
 	int tx=10 ;
 	for (int i=0;i<pageCount_;i++) {
-		int w=16*int(strlen(pageName_[i]))+24 ;
+		int nl=0 ;
+		for (const char *q=pageName_[i];*q;q++) if ((*q&0xC0)!=0x80) nl++ ;
+		int w=16*nl+24 ;
 		if (drawEditing()) DrawText(tx+12,GRID_TABS_Y+6,pageName_[i],Mix(bg,fg,i==page_[kind]?40:18),1) ;
 		else if (i==page_[kind]) {
 			FillRect(tx,GRID_TABS_Y,w,28,fg,14) ;
@@ -2098,7 +2132,7 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 		if (bpm>0 && tick>0) framesPerMs=(rate*60.0f/bpm/(24.0f*tick))*44.1f ;
 	}
 	float msPerPx=(framesPerMs>0)?float(vLen)/W/framesPerMs:0 ;
-	bool oneShot=(mode==SM_ONESHOT) ;
+	bool oneShot=!zsrc && (mode==SM_ONESHOT || mode==SM_SLICE) ;   // fades (como Simpler)
 	float atk=float(oneShot?si->GetSimpler(SIP_S_FIN):si->GetSimpler(SIP_S_ATK)) ;
 	float dec=oneShot?0:float(si->GetSimpler(SIP_S_DEC)) ;
 	float rel=float(si->GetSimpler(oneShot?SIP_S_FOUT:SIP_S_REL)) ;
@@ -2188,8 +2222,7 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 		if (xd>b) xd=b ;
 		FourCC fid=focusID(*this) ;
 		if (fadeEdit_) fid=fadeSel_?SIP_S_FOUT:SIP_S_FIN ;
-		if (waveEdit_ && oneShot && !zsrc)   // en la onda: el fade de la bandera elegida
-			fid=(markVar_.GetInt()==si->RegionPoint(false))?SIP_S_FOUT:SIP_S_FIN ;
+		if (waveEdit_ && !zsrc && !ftab) fid=canMark()?0:waveStopID() ;   // en la onda: el tramo de la parada
 		if (envEdit_) fid=envID(envSel_) ;
 		int h0=-1, h1=-1 ;
 		if (fid==SIP_S_ATK || fid==SIP_S_FATK || fid==SIP_S_FIN) { h0=a ; h1=xa ; }
@@ -2231,7 +2264,8 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 	int selFlag=0 ;
 	if (waveEdit_ && !zsrc) {
 		int wc=markVar_.GetInt() ;
-		if (waveFlag_==1 || wc==si->RegionPoint(true)) selFlag=1 ;
+		if (!canMark()) selFlag=(waveStop_==0)?1:(waveStop_==3)?2:0 ;   // la parada elegida
+		else if (waveFlag_==1 || wc==si->RegionPoint(true)) selFlag=1 ;
 		else if (waveFlag_==2 || wc==si->RegionPoint(false)) selFlag=2 ;
 	}
 	GUIColor fpanel=Mix(bg,fg,9) ;
@@ -2310,14 +2344,19 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 			FillRect(cx-1,Y-4,2,H+8,fg) ;
 			for (int q=0;q<6;q++) FillRect(cx-q,Y+H+4+q,2*q+1,1,fg) ;
 		}
-		char tag[48] ;
+		char tag[96] ;
 		SoundSource *cs=si->currentSource() ;
 		int size=cs?cs->GetSize(-1):0 ;
 		int pm=size>0?int((long long)cpos*1000/size):0 ;
-		char fz[32]="" ;
-		if (mode==SM_ONESHOT) {   // el fade de esta bandera (A + ← →)
-			bool endSel=(cpos==si->RegionPoint(false)) ;
-			sprintf(fz,"  fade %s %dms",endSel?"out":"in",si->GetSimpler(endSel?SIP_S_FOUT:SIP_S_FIN)) ;
+		char fz[40]="" ;
+		FourCC sid=waveStopID() ;   // el 'cómo' de esta parada (A + flechas)
+		if (sid) {
+			int sv=si->GetSimpler(sid) ;
+			const char *sn=(sid==SIP_S_FIN)?"fade in":(sid==SIP_S_FOUT)?"fade out":(sid==SIP_S_ATK)?"attack":
+			               (sid==SIP_S_DEC)?"decay":(sid==SIP_S_SUS)?"sustain":"release" ;
+			if (sid==SIP_S_SUS) sprintf(fz,"  %s %ddB",sn,sv) ;
+			else if (sv>=1000) sprintf(fz,"  %s %d.%ds",sn,sv/1000,(sv%1000)/100) ;
+			else sprintf(fz,"  %s %dms",sn,sv) ;
 		}
 		if (waveZoom_>1) sprintf(tag,"%d.%d%%%s  zoom x%d",pm/10,pm%10,fz,waveZoom_) ;
 		else sprintf(tag,"%d.%d%%%s",pm/10,pm%10,fz) ;
@@ -2796,6 +2835,7 @@ void InstrumentView::enterWaveEdit(bool play) {
 	lastAPress_=0 ;
 	int c=markVar_.GetInt() ;
 	if (c<a || c>b) markVar_.SetInt(a) ;
+	waveStop_=0 ;
 	if (!canMark()) markVar_.SetInt(si->RegionPoint(true)) ;   // sin cursor libre: en la bandera del inicio
 	if (play) startTapPlay(a) ;
 }
@@ -2810,10 +2850,7 @@ void InstrumentView::toggleDraw() {
 	SampleInstrument *si=(SampleInstrument *)current_ ;
 	if (kitMode_ || audioMode_ || !simplerView_ || !gridMode_) return ;
 	// AMP en one-shot: los fades (un multicapa siempre lleva su envolvente)
-	if (!sfMode_ && !strcmp(pageName_[page_[1]],"AMP") && si->GetSimpler(SIP_S_MODE)==SM_ONESHOT) {
-		View::SetNotification("los fades: en SAMPLER, con Select") ;   // van con el inicio y el final
-		return ;
-	}
+	(void)si ;
 	// FILTRO: su envolvente; AMP (classic / slice): la de volumen
 	bool fpage=!strcmp(pageName_[page_[1]],"FILTRO"), apage=!strcmp(pageName_[page_[1]],"AMP") ;
 	if (fpage || apage) {
@@ -3009,12 +3046,17 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 	// en el inicio, el fade out en el final. B + ↑ ↓ zoom; B + A: a su valor
 	if (!canMark()) {
 		int fs=si->RegionPoint(true), fe=si->RegionPoint(false) ;
-		bool st=(c!=fe) ;
-		if (c!=fs && c!=fe) markVar_.SetInt(fs) ;
+		int smode=si->GetSimpler(SIP_S_MODE) ;
+		bool oneShot=(smode==SM_ONESHOT), classic=(smode==SM_CLASSIC) ;
+		if (!classic && waveStop_!=0 && waveStop_!=3) waveStop_=0 ;
+		bool st=(waveStop_==0), en=(waveStop_==3) ;
+		markVar_.SetInt(en?fe:fs) ;
 		if ((mask&EPBM_B) && (mask&EPBM_A)) {
-			wavePush() ;
-			si->SetRegionPoint(st,st?0:size) ;
-			markVar_.SetInt(si->RegionPoint(st)) ;
+			if (st || en) {
+				wavePush() ;
+				si->SetRegionPoint(st,st?0:size) ;
+				markVar_.SetInt(si->RegionPoint(st)) ;
+			}
 			return true ;
 		}
 		if ((mask&EPBM_B) && (mask&(EPBM_UP|EPBM_DOWN))) {
@@ -3022,24 +3064,37 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 			else if (waveZoom_>1) waveZoom_/=2 ;
 			return true ;
 		}
-		bool oneShot=(si->GetSimpler(SIP_S_MODE)==SM_ONESHOT) ;
-		if ((mask&EPBM_A) && (mask&(EPBM_LEFT|EPBM_RIGHT)) && !(mask&(EPBM_B|EPBM_SELECT|EPBM_L|EPBM_R))) {
-			if (!oneShot) return true ;   // la envolvente (classic / slice) va en AMP
+		// A + flechas: CÓMO. One-shot: el fade de esa bandera. Classic: el
+		// attack (inicio), el decay, el sustain (↑ ↓) y el release (final)
+		if ((mask&EPBM_A) && (mask&(EPBM_LEFT|EPBM_RIGHT|EPBM_UP|EPBM_DOWN)) && !(mask&(EPBM_B|EPBM_SELECT|EPBM_L|EPBM_R))) {
+			FourCC id=waveStopID() ;
+			if (!id) return true ;
+			Variable *v=si->FindVariable(id) ;
+			int cur=v->GetInt(), nv=cur ;
+			if (id==SIP_S_SUS) {
+				if (!(mask&(EPBM_UP|EPBM_DOWN))) return true ;
+				nv=cur+((mask&EPBM_UP)?1:-1) ;
+				if (nv<-60) nv=-60 ;
+				if (nv>0) nv=0 ;
+			} else {
+				if (!(mask&(EPBM_LEFT|EPBM_RIGHT))) return true ;
+				int fstep=(cur>=2000)?100:(cur>=500)?50:(cur>=100)?10:5 ;
+				// el fade out crece hacia adentro del sample (con ←); lo demás, con →
+				bool more=(id==SIP_S_FOUT)?((mask&EPBM_LEFT)!=0):((mask&EPBM_RIGHT)!=0) ;
+				nv=cur+(more?fstep:-fstep) ;
+				int max=oneShot?2000:(id==SIP_S_ATK?5000:10000) ;
+				if (nv<0) nv=0 ;
+				if (nv>max) nv=max ;
+			}
+			if (nv==cur) return true ;
 			wavePush() ;
-			Variable *v=si->FindVariable(st?SIP_S_FIN:SIP_S_FOUT) ;
-			int cur=v->GetInt() ;
-			int fstep=(cur>=500)?50:(cur>=100)?10:5 ;
-			// el fade crece hacia adentro del sample: en el inicio con →, en el final con ←
-			bool more=st?((mask&EPBM_RIGHT)!=0):((mask&EPBM_LEFT)!=0) ;
-			int nv=cur+(more?fstep:-fstep) ;
-			if (nv<0) nv=0 ;
-			if (nv>2000) nv=2000 ;
 			v->SetInt(nv) ;
-			fadeSel_=st?0:1 ;
-			fadeAudition() ;
+			if (oneShot) { fadeSel_=en?1:0 ; fadeAudition() ; }
+			else envAudition() ;
 			return true ;
 		}
-		if ((mask&(EPBM_LEFT|EPBM_RIGHT)) && !(mask&(EPBM_A|EPBM_SELECT|EPBM_L|EPBM_R))) {
+		// ← → (B: a saltos): DÓNDE, solo en las banderas
+		if ((mask&(EPBM_LEFT|EPBM_RIGHT)) && !(mask&(EPBM_A|EPBM_SELECT|EPBM_L|EPBM_R)) && (st || en)) {
 			wavePush() ;
 			int jump=step*((mask&EPBM_B)?16:1) ;
 			int p=(st?fs:fe)+((mask&EPBM_RIGHT)?jump:-jump) ;
@@ -3051,7 +3106,6 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 			else { waveFlag_=st?1:2 ; waveARelease() ; }           // el sample: desde el inicio, o el último segundo
 			return true ;
 		}
-		if (mask==EPBM_A) wavePush() ;
 		return true ;
 	}
 	// (slice a mano) B + L / B + R: el inicio / el final donde está el cursor
@@ -3189,6 +3243,18 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 		return true ;
 	}
 	return true ;
+}
+
+// el parámetro de 'cómo' de la parada elegida en la onda
+FourCC InstrumentView::waveStopID() {
+	if (!current_ || current_->GetType()!=IT_SAMPLE) return 0 ;
+	int smode=((SampleInstrument *)current_)->GetSimpler(SIP_S_MODE) ;
+	if (smode==SM_ONESHOT) return (waveStop_==3)?SIP_S_FOUT:(waveStop_==0?SIP_S_FIN:0) ;
+	if (smode==SM_CLASSIC) {
+		static const FourCC ids[4]={SIP_S_ATK,SIP_S_DEC,SIP_S_SUS,SIP_S_REL} ;
+		return ids[(waveStop_<0 || waveStop_>3)?0:waveStop_] ;
+	}
+	return 0 ;
 }
 
 // trk2als: al soltar A en el dibujo de las rebanadas: la marca nueva (A en
@@ -4191,6 +4257,8 @@ InstrumentView::WaveSnap InstrumentView::waveNow() {
 	w.s=si->GetSimpler(SIP_S_START) ; w.sf=si->GetSimpler(SIP_S_STARTF) ;
 	w.e=si->GetSimpler(SIP_S_END) ; w.ef=si->GetSimpler(SIP_S_ENDF) ;
 	w.fi=si->GetSimpler(SIP_S_FIN) ; w.fo=si->GetSimpler(SIP_S_FOUT) ;
+	w.ak=si->GetSimpler(SIP_S_ATK) ; w.dc=si->GetSimpler(SIP_S_DEC) ;
+	w.su=si->GetSimpler(SIP_S_SUS) ; w.rl=si->GetSimpler(SIP_S_REL) ;
 	w.marks=si->GetMarks() ;
 	return w ;
 }
@@ -4225,13 +4293,11 @@ bool InstrumentView::Undo(bool redo) {
 		si->FindVariable(SIP_S_START)->SetInt(w.s) ; si->FindVariable(SIP_S_STARTF)->SetInt(w.sf) ;
 		si->FindVariable(SIP_S_END)->SetInt(w.e) ; si->FindVariable(SIP_S_ENDF)->SetInt(w.ef) ;
 		si->FindVariable(SIP_S_FIN)->SetInt(w.fi) ; si->FindVariable(SIP_S_FOUT)->SetInt(w.fo) ;
+		si->FindVariable(SIP_S_ATK)->SetInt(w.ak) ; si->FindVariable(SIP_S_DEC)->SetInt(w.dc) ;
+		si->FindVariable(SIP_S_SUS)->SetInt(w.su) ; si->FindVariable(SIP_S_REL)->SetInt(w.rl) ;
 		si->SetMarks(w.marks) ;
 		waveSel_=0 ; waveFlag_=0 ; waveAPut_=false ;
-		if (!canMark()) {   // sin cursor libre: se queda en la bandera en la que estaba (la más cercana)
-			int c=markVar_.GetInt(), fs=si->RegionPoint(true), fe=si->RegionPoint(false) ;
-			int ds=c>fs?c-fs:fs-c, de=c>fe?c-fe:fe-c ;
-			markVar_.SetInt(de<ds?fe:fs) ;
-		}
+		if (!canMark()) markVar_.SetInt(si->RegionPoint(waveStop_!=3)) ;   // sin cursor libre: en su parada
 		View::SetNotification(redo?"rehecho":"deshecho") ;
 		isDirty_=true ;
 		return true ;
