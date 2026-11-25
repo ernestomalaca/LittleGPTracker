@@ -96,6 +96,13 @@ private:
 	bool waveAPut_ ;          // A en un lugar vacío: la marca se pone al soltar (o al moverla)
 	void toggleDraw() ;
 	void waveARelease() ;
+	// deshacer / rehacer en la onda (Select + L / R): inicio, fin y marcas
+	struct WaveSnap { int s,sf,e,ef ; std::vector<int> marks ;
+		bool operator==(const WaveSnap &o) const { return s==o.s && sf==o.sf && e==o.e && ef==o.ef && marks==o.marks ; } } ;
+	std::vector<WaveSnap> waveUndo_, waveRedo_ ;
+	bool waveGesture_ ;       // ya se guardó la foto de este gesto
+	WaveSnap waveNow() ;
+	void wavePush() ;
 	unsigned long lastAPress_ ;
 	bool previewing_ ;
 	int previewPos_ ;

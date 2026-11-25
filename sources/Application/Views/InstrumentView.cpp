@@ -336,6 +336,7 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data),
 	waveAnchor_=0 ;
 	waveFlag_=0 ;
 	tapPending_=-1 ;
+	waveGesture_=false ;
 	waveAPut_=false ;
 	lastAPress_=0 ;
 	previewing_=false ;
@@ -2662,6 +2663,7 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 	}
 	if (!pressed) {
 		if (!(mask&EPBM_A) && (waveAPut_ || waveSel_==1 || waveFlag_)) waveARelease() ;
+		if (mask==0) waveGesture_=false ;   // el siguiente gesto, otra foto
 		isDirty_=true ;   // soltó: la caja deja de verse en negativo
 		if (previewing_ && !tapPlay_ && !slicePlay_ && !(mask&EPBM_A)) stopPreview() ;
 		return true ;
@@ -2688,6 +2690,7 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 
 	// L + Start (o ← + Start): rebanar de nuevo, sin marcas, desde el inicio
 	if ((mask&EPBM_START) && (mask&EPBM_L)) {
+		wavePush() ;
 		stopTapPlay() ;
 		m.clear() ;
 		si->SetMarks(m) ;
@@ -2708,6 +2711,8 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 			int sp=Player::GetInstance()->GetStreamPosition() ;
 			SoundSource *src=si->currentSource() ;
 			if (sp>=0 && src) {
+				waveGesture_=false ;   // cada marca al vuelo se deshace sola
+				wavePush() ;
 				// config.xml: <SLICETAPLATENCY value="40"/> en ms (si no, ~2 bloques de audio)
 				static int latMs=-2 ;
 				if (latMs==-2) {
@@ -2731,6 +2736,7 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 	// inicio y el final del loop en el clip)
 	if ((mask&EPBM_B) && (mask&(EPBM_L|EPBM_R)) && !(mask&(EPBM_SELECT|EPBM_A)) && size>0) {
 		// sostenidos, ← → lo van moviendo (y va sonando)
+		wavePush() ;
 		bool st=(mask&EPBM_L)!=0 ;
 		if (mask&EPBM_RIGHT) c+=step ;
 		else if (mask&EPBM_LEFT) c-=step ;
@@ -2752,6 +2758,7 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 	}
 	if ((mask&EPBM_B) && (mask&EPBM_A) && waveSel_<2 && (c<=a+step || c>=b-step)) {
 		// B + A sobre una bandera: el inicio a 0 y el final a 100
+		wavePush() ;
 		bool st=(c<=a+step) ;
 		si->SetRegionPoint(st,st?0:size) ;
 		si->SimplerRegion(a,b) ;
@@ -2761,6 +2768,7 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 	}
 	if ((mask&EPBM_B) && (mask&EPBM_A)) {     // B + A: borrar (la del cursor o las marcadas)
 		if (!canMark()) return true ;
+		wavePush() ;
 		if (waveSel_==2) m.clear() ;
 		else if (waveSel_==3) {
 			int lo=waveAnchor_<c?waveAnchor_:c, hi=waveAnchor_<c?c:waveAnchor_ ;
@@ -2809,6 +2817,7 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 	}
 	if (mask&EPBM_A) {
 		if (mask==EPBM_A) {                    // A sobre una marca: la agarra; en vacío: pone una al soltar
+			wavePush() ;
 			waveFlag_=0 ;
 			int fa=si->RegionPoint(true), fb=si->RegionPoint(false) ;
 			if (c>=fa-step && c<=fa+step) { waveFlag_=1 ; waveSel_=0 ; waveAPut_=false ; markVar_.SetInt(fa) ; return true ; }
@@ -3855,8 +3864,50 @@ void InstrumentView::pushLaneSnap(int clip) {
 	autoRedo_.clear() ;
 }
 
+InstrumentView::WaveSnap InstrumentView::waveNow() {
+	SampleInstrument *si=(SampleInstrument *)current_ ;
+	WaveSnap w ;
+	w.s=si->GetSimpler(SIP_S_START) ; w.sf=si->GetSimpler(SIP_S_STARTF) ;
+	w.e=si->GetSimpler(SIP_S_END) ; w.ef=si->GetSimpler(SIP_S_ENDF) ;
+	w.marks=si->GetMarks() ;
+	return w ;
+}
+
+// la foto de antes de un gesto en la onda (una por gesto)
+void InstrumentView::wavePush() {
+	if (waveGesture_ || !current_ || current_->GetType()!=IT_SAMPLE) return ;
+	waveGesture_=true ;
+	WaveSnap w=waveNow() ;
+	if (!waveUndo_.empty() && waveUndo_.back()==w) return ;
+	waveUndo_.push_back(w) ;
+	if (waveUndo_.size()>48) waveUndo_.erase(waveUndo_.begin()) ;
+	waveRedo_.clear() ;
+}
+
 bool InstrumentView::Undo(bool redo) {
+	selTap_=false ;   // Select + L / R no es un toque de Select: no cambia cajas <-> dibujo
 	if (kitMode_) { kitUndo(!redo) ; return true ; }   // en un kit: los pads
+	if (waveEdit_ && current_ && current_->GetType()==IT_SAMPLE) {   // en la onda: inicio, fin y marcas
+		std::vector<WaveSnap> &from=redo?waveRedo_:waveUndo_ ;
+		std::vector<WaveSnap> &to=redo?waveUndo_:waveRedo_ ;
+		WaveSnap now=waveNow() ;
+		while (!from.empty() && from.back()==now) from.pop_back() ;   // fotos sin cambio
+		if (from.empty()) {
+			View::SetNotification(redo?"nada que rehacer":"nada que deshacer") ;
+			return true ;
+		}
+		WaveSnap w=from.back() ;
+		from.pop_back() ;
+		to.push_back(now) ;
+		SampleInstrument *si=(SampleInstrument *)current_ ;
+		si->FindVariable(SIP_S_START)->SetInt(w.s) ; si->FindVariable(SIP_S_STARTF)->SetInt(w.sf) ;
+		si->FindVariable(SIP_S_END)->SetInt(w.e) ; si->FindVariable(SIP_S_ENDF)->SetInt(w.ef) ;
+		si->SetMarks(w.marks) ;
+		waveSel_=0 ; waveFlag_=0 ; waveAPut_=false ;
+		View::SetNotification(redo?"rehecho":"deshecho") ;
+		isDirty_=true ;
+		return true ;
+	}
 	std::vector<LaneSnap> &from=redo?autoRedo_:autoUndo_ ;
 	std::vector<LaneSnap> &to=redo?autoUndo_:autoRedo_ ;
 	if (touching_) endTouch() ;
