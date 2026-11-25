@@ -1121,8 +1121,10 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 		if (pressed) pageTap_=(mask==EPBM_L)?-1:(mask==EPBM_R)?1:0 ;
 		else if (pageTap_ && mask==0) {
 			markVar_.SetInt(((SampleInstrument *)current_)->RegionPoint(pageTap_<0)) ;
-			pageTap_=0 ;
 			waveSel_=0 ;
+			waveFlag_=(pageTap_<0)?1:2 ;
+			pageTap_=0 ;
+			waveARelease() ;   // suena: desde el inicio, o el último segundo
 			isDirty_=true ;
 			return ;
 		}
@@ -2780,6 +2782,7 @@ void InstrumentView::enterWaveEdit(bool play) {
 	lastAPress_=0 ;
 	int c=markVar_.GetInt() ;
 	if (c<a || c>b) markVar_.SetInt(a) ;
+	if (!canMark()) markVar_.SetInt(si->RegionPoint(true)) ;   // sin cursor libre: en la bandera del inicio
 	if (play) startTapPlay(a) ;
 }
 
@@ -2987,8 +2990,40 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 		stopTapPlay() ;
 	}
 
-	// B + L / B + R: el inicio / el final donde está el cursor (como el
-	// inicio y el final del loop en el clip)
+	// classic, one-shot y slice por región: no hay cursor libre. L / R eligen
+	// la bandera (el cursor vive en ella) y A + ← → la mueve, sonando;
+	// B + ← → a saltos grandes; B + ↑ ↓ zoom; B + A: a su valor de siempre
+	if (!canMark()) {
+		int fs=si->RegionPoint(true), fe=si->RegionPoint(false) ;
+		bool st=(c!=fe) ;
+		if (c!=fs && c!=fe) markVar_.SetInt(fs) ;
+		if ((mask&EPBM_B) && (mask&EPBM_A)) {
+			wavePush() ;
+			si->SetRegionPoint(st,st?0:size) ;
+			markVar_.SetInt(si->RegionPoint(st)) ;
+			return true ;
+		}
+		if ((mask&EPBM_B) && (mask&(EPBM_UP|EPBM_DOWN))) {
+			if (mask&EPBM_UP) { if (waveZoom_<64) waveZoom_*=2 ; }
+			else if (waveZoom_>1) waveZoom_/=2 ;
+			return true ;
+		}
+		if ((mask&(EPBM_A|EPBM_B)) && (mask&(EPBM_LEFT|EPBM_RIGHT)) && !(mask&(EPBM_SELECT|EPBM_L|EPBM_R))) {
+			wavePush() ;
+			int jump=step*((mask&EPBM_B)?16:1) ;
+			int p=(st?fs:fe)+((mask&EPBM_RIGHT)?jump:-jump) ;
+			if (p<0) p=0 ;
+			if (p>size) p=size ;
+			si->SetRegionPoint(st,p) ;
+			markVar_.SetInt(si->RegionPoint(st)) ;
+			waveFlag_=st?1:2 ;
+			waveARelease() ;   // suena: desde el inicio, o el último segundo
+			return true ;
+		}
+		if (mask==EPBM_A) wavePush() ;
+		return true ;
+	}
+	// (slice a mano) B + L / B + R: el inicio / el final donde está el cursor
 	if ((mask&EPBM_B) && (mask&(EPBM_L|EPBM_R)) && !(mask&(EPBM_SELECT|EPBM_A)) && size>0) {
 		// sostenidos, ← → lo van moviendo (y va sonando)
 		wavePush() ;
@@ -4159,6 +4194,11 @@ bool InstrumentView::Undo(bool redo) {
 		si->FindVariable(SIP_S_END)->SetInt(w.e) ; si->FindVariable(SIP_S_ENDF)->SetInt(w.ef) ;
 		si->SetMarks(w.marks) ;
 		waveSel_=0 ; waveFlag_=0 ; waveAPut_=false ;
+		if (!canMark()) {   // sin cursor libre: se queda en la bandera en la que estaba (la más cercana)
+			int c=markVar_.GetInt(), fs=si->RegionPoint(true), fe=si->RegionPoint(false) ;
+			int ds=c>fs?c-fs:fs-c, de=c>fe?c-fe:fe-c ;
+			markVar_.SetInt(de<ds?fe:fs) ;
+		}
 		View::SetNotification(redo?"rehecho":"deshecho") ;
 		isDirty_=true ;
 		return true ;
