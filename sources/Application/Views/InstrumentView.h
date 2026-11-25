@@ -118,8 +118,8 @@ private:
 	void envNoteOff() ;
 	bool drawEditing() { return waveEdit_ || fadeEdit_ || envEdit_ ; }
 	// deshacer / rehacer en la onda (Select + L / R): inicio, fin y marcas
-	struct WaveSnap { int s,sf,e,ef ; std::vector<int> marks ;
-		bool operator==(const WaveSnap &o) const { return s==o.s && sf==o.sf && e==o.e && ef==o.ef && marks==o.marks ; } } ;
+	struct WaveSnap { int s,sf,e,ef,fi,fo ; std::vector<int> marks ;
+		bool operator==(const WaveSnap &o) const { return s==o.s && sf==o.sf && e==o.e && ef==o.ef && fi==o.fi && fo==o.fo && marks==o.marks ; } } ;
 	std::vector<WaveSnap> waveUndo_, waveRedo_ ;
 	bool waveGesture_ ;       // ya se guardó la foto de este gesto
 	WaveSnap waveNow() ;
