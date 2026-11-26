@@ -373,7 +373,7 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data),
 	markTap_=false ;
 	manualPending_=false ;
 	kitWfIndex_=-1 ; kitWfSize_=0 ;
-	padHoldAt_=0 ; padPlus_=false ; kitLitShown_=0 ;
+	padHoldAt_=0 ; padPlus_=false ; kitLitShown_=0 ; padEdit_=false ;
 	waveEdit_=false ;
 	waveZoom_=1 ;
 	waveSel_=0 ;
@@ -612,7 +612,12 @@ void InstrumentView::fillSampleParameters() {
 				pageName_[pageCount_++]="KIT" ;
 				int &pg=page_[1] ;
 				if (pg<0 || pg>=pageCount_) pg=0 ;
+				// PAD: las cajas se ven, pero la cruz solo anda por los pads;
+				// Select las desbloquea (y Select otra vez regresa a los pads)
+				if (pg!=0) padEdit_=false ;
 				if (lastFocusID_==0) lastFocusID_=IV_PADSEL ;
+				if (pg==0 && padEdit_ && lastFocusID_==IV_PADSEL) lastFocusID_=IV_PADST ;
+				if (pg==0 && !padEdit_) lastFocusID_=IV_PADSEL ;
 				const int KX[4]={1,11,21,31}, KY[2]={20,26} ;
 				#define KAT(k) (pt=GUIPoint(KX[(k)%4],KY[(k)/4]))
 				pt=GUIPoint(1,12) ;
@@ -1807,6 +1812,22 @@ void InstrumentView::drawGrid() {
 		tx+=w+8 ;
 	}
 	if (pageCount_>1 && !drawEditing()) DrawText(640-10-16*3,GRID_TABS_Y+6,"L·R",dim,1) ;
+	// donde Select entra a editar algo, se dice
+	{
+		bool can=false ;
+		if (kitMode_) can=(page_[1]==0) ;
+		else if (!audioMode_ && simplerView_ && pageCount_>0) {
+			const char *pn=pageName_[page_[1]] ;
+			can=!strcmp(pn,"FILTRO") || !strcmp(pn,"AMP") || (!sfMode_ && !strcmp(pn,"SAMPLER")) ;
+		}
+		bool in=drawEditing() || (kitMode_ && padEdit_) ;
+		if (can) {
+			const char *t=in?"SELECT sale":"SELECT edita" ;
+			int tw=16*int(strlen(t)) ;
+			int rx=drawEditing()?640-10-tw:640-10-16*3-24-tw ;
+			DrawText(rx,GRID_TABS_Y+6,t,in?fg:dim,1) ;
+		}
+	}
 
 	bool used[8]={false,false,false,false,false,false,false,false} ;
 	IteratorPtr<UIField> it(T_SimpleList<UIField>::GetIterator()) ;
@@ -1938,7 +1959,8 @@ void InstrumentView::drawWaveform() {
 		// trk2als: en la rejilla, arriba solo el nombre del sonido (sin la extensión)
 		SampleInstrument *si=(SampleInstrument *)current_ ;
 		std::string nm ;
-		if (sfMode_ && si->ZoneCount()) nm=si->ZoneSetName() ;
+		if (kitMode_) nm=topInfo_ ;   // el sonido del pad donde está la cruz
+		else if (sfMode_ && si->ZoneCount()) nm=si->ZoneSetName() ;
 		else {
 			int idx=si->GetSampleIndex() ;
 			SamplePool *sp=SamplePool::GetInstance() ;
@@ -2983,6 +3005,13 @@ void InstrumentView::toggleDraw() {
 	if (envEdit_) { envNoteOff() ; envEdit_=false ; return ; }
 	if (!current_ || current_->GetType()!=IT_SAMPLE) return ;
 	SampleInstrument *si=(SampleInstrument *)current_ ;
+	if (kitMode_ && gridMode_) {   // kit, pestaña PAD: las cajas del pad <-> los pads
+		if (page_[1]!=0) return ;
+		padEdit_=!padEdit_ ;
+		lastFocusID_=padEdit_?IV_PADST:IV_PADSEL ;
+		onInstrumentChange() ;
+		return ;
+	}
 	if (kitMode_ || audioMode_ || !simplerView_ || !gridMode_) return ;
 	// AMP en one-shot: los fades (un multicapa siempre lleva su envolvente)
 	(void)si ;
@@ -3809,12 +3838,14 @@ bool InstrumentView::processKit(unsigned short mask) {
 			return true ;
 		}
 	}
+	// editando las cajas del pad: de la fila de arriba no se sube a los pads
+	if (gridMode_ && padEdit_ && mask==EPBM_UP && f->GetPosition()._y<=20) return true ;
 	if (!isPadField(id)) return false ;
 	SampleInstrument *si=(SampleInstrument *)current_ ;
 	int note=padNote() ;
 	if (!gridMode_ && padShortcut(mask)) return true ;
 	// con cajas: sobre un pad, A + flechas es "la clavija" (lo que más se le
-	// mueve a un golpe): A + arriba/abajo el volumen, A + izq/der la afinación
+	// mueve a un golpe): A + arriba/abajo el volumen, A + izq/der el largo
 	if (gridMode_ && id==IV_PADSEL) {
 		const unsigned short arr=EPBM_UP|EPBM_DOWN|EPBM_LEFT|EPBM_RIGHT ;
 		unsigned short d=mask&arr ;
@@ -3827,8 +3858,18 @@ bool InstrumentView::processKit(unsigned short mask) {
 				p.gain=std::max(-36,std::min(12,p.gain+((d==EPBM_UP)?1:-1))) ;
 				snprintf(msg,sizeof(msg),"volumen %+ddB",p.gain) ;
 			} else {
-				p.tune=std::max(-24,std::min(24,p.tune+((d==EPBM_RIGHT)?1:-1))) ;
-				snprintf(msg,sizeof(msg),"afinación %+dst",p.tune) ;
+				// el largo del golpe: hacia la izquierda más corto (de todo a
+				// 10 ms), hacia la derecha más largo
+				static const int longs[]={0,5000,3000,2000,1500,1000,750,500,400,300,250,200,150,100,75,50,40,30,20,10} ;
+				const int n=sizeof(longs)/sizeof(int) ;
+				int k=0 ;
+				if (p.decay>0) { k=1 ; while (k<n-1 && longs[k]>p.decay) k++ ; }
+				k+=(d==EPBM_LEFT)?1:-1 ;
+				if (k<0) k=0 ;
+				if (k>n-1) k=n-1 ;
+				p.decay=longs[k] ;
+				if (p.decay) snprintf(msg,sizeof(msg),"largo %dms",p.decay) ;
+				else strcpy(msg,"largo: todo") ;
 			}
 			si->SetPad(note,p) ;
 			loadPadVars() ;
@@ -3848,7 +3889,7 @@ bool InstrumentView::processKit(unsigned short mask) {
 			else if (dir==EPBM_RIGHT && c<3) c++ ;
 			else if (dir==EPBM_UP && r<3) r++ ;        // el pad 1 está abajo
 			else if (dir==EPBM_DOWN && r>0) r-- ;
-			else if (mask==EPBM_DOWN) return false ;   // la orilla de abajo: a los campos
+			else if (mask==EPBM_DOWN) return gridMode_ && page_[1]==0 ;   // la orilla de abajo: a los campos (en PAD no: Select)
 			else if (mask==EPBM_UP && !ownedByTrack()) return false ;   // arriba, el kit (si se puede cambiar aquí)
 			else return true ;
 			padSelVar_.SetInt(r*4+c) ;

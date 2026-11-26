@@ -143,6 +143,7 @@ private:
 	int kitWfIndex_, kitWfSize_ ;
 	unsigned long padHoldAt_ ;   // A apretada en un pad (sostenida: sale el +)
 	bool padPlus_ ;
+	bool padEdit_ ;              // kit, pestaña PAD: Select desbloqueó las cajas del pad
 	int kitLitShown_ ;           // los pads prendidos que se dibujaron
 	void waveNotice(FourCC id) ;
 	void exitWaveEdit() ;
