@@ -3664,14 +3664,30 @@ void InstrumentView::refreshKit() {
 // su pista (con el volumen, la afinación, el paneo, el inicio y el decay)
 void InstrumentView::previewPad() {
 	if (!current_ || current_->GetType()!=IT_SAMPLE) return ;
-	if (Player::GetInstance()->IsRunning()) return ;
 	SampleInstrument *si=(SampleInstrument *)current_ ;
 	int note=padNote() ;
 	if (si->PadSample(note).empty()) return ;
-	if (previewing_) stopPreview() ;
 	int ch=viewData_->songX_ ;
 	if (ch<0 || ch>=SONG_CHANNEL_COUNT) ch=0 ;
-	Player::GetInstance()->PreviewNote(ch,si,note) ;
+	Player *player=Player::GetInstance() ;
+	if (player->IsRunning()) {
+		// trk2als: sonando: el pad se oye solo si el clip de la pista no lo
+		// toca (si ya trae notas de ese pad, se oye el clip)
+		int tr=viewData_->project_->GetTranspose() ;
+		if (player->ClipTickPos(ch)>=0) {
+			unsigned char c=viewData_->currentPlayChain_[ch] ;
+			if (c<CLIP_COUNT) {
+				Clip &clip=viewData_->song_->clips_->Get(c) ;
+				for (size_t i=0;i<clip.notes.size();i++) if (clip.notes[i].pitch+tr==note) return ;
+			}
+		}
+		MixerService::GetInstance()->Lock() ;
+		player->LiveNoteOn(ch,si,note-tr,100) ;
+		MixerService::GetInstance()->Unlock() ;
+		return ;
+	}
+	if (previewing_) stopPreview() ;
+	player->PreviewNote(ch,si,note) ;
 }
 
 // el kit entero (todas sus variables), para deshacer
