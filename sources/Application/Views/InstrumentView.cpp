@@ -3266,9 +3266,23 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 			if (c>=fa-step && c<=fa+step) { waveFlag_=1 ; waveSel_=0 ; waveAPut_=false ; markVar_.SetInt(fa) ; return true ; }
 			if (c>=fb-step && c<=fb+step) { waveFlag_=2 ; waveSel_=0 ; waveAPut_=false ; markVar_.SetInt(fb) ; return true ; }
 			if (!canMark() || c<=a || c>=b) { waveSel_=0 ; waveAPut_=false ; return true ; }
+			// A: suena al apretarla. Sobre una marca la agarra; en vacío pone
+			// una ahí mismo y queda agarrada (A + ← → la mueve y la va sonando)
 			int k=nearMark(m) ;
-			if (k>=0) { waveSel_=1 ; markVar_.SetInt(m[k]) ; waveAPut_=false ; }
-			else { waveSel_=0 ; waveAPut_=true ; }
+			waveAPut_=false ;
+			if (k<0) {
+				int at=si->AddMark(c) ;
+				if (at<0) { waveSel_=0 ; View::SetNotification("muy cerca de otra marca") ; return true ; }
+				markVar_.SetInt(at) ;
+				m=si->GetMarks() ;
+				k=nearMark(m) ;
+				waveNotice(1) ;
+			}
+			if (k>=0) {
+				waveSel_=1 ;
+				markVar_.SetInt(m[k]) ;
+				startPreview(m[k],(k+1<(int)m.size())?m[k+1]:b) ;
+			}
 			return true ;
 		}
 		if ((mask&(EPBM_LEFT|EPBM_RIGHT)) && waveFlag_) {   // A + ← → sobre una bandera: de 1 en 1 %
@@ -3386,12 +3400,7 @@ void InstrumentView::waveARelease() {
 		}
 		waveSel_=0 ;
 	}
-	if (at>=0) {
-		markVar_.SetInt(at) ;
-		int f,t ;
-		sliceAt(at,f,t) ;
-		startPreview(at,t) ;
-	}
+	if (at>=0) markVar_.SetInt(at) ;   // (ya sonó al apretar A y al moverla: al soltar, nada)
 	isDirty_=true ;
 }
 
