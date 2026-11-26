@@ -4032,7 +4032,7 @@ bool InstrumentView::openCurve() {
 	if (!automatable(id)) return false ;
 	int ch=autoChannel() ;
 	int clip=autoClip(ch) ;
-	if (clip<0) return false ;
+	if (clip<0) { View::SetNotification("sin clip") ; isDirty_=true ; return false ; }   // no hay dónde dibujarla
 	if (touching_) cancelTouch() ;   // la A del combo no graba nada
 	ViewData *vd=viewData_ ;
 	CurveMeta m ;
@@ -4270,7 +4270,8 @@ const char *InstrumentView::CaptureAutomation(int track) {
 	if (capping_) capEnd() ;
 	// la pista donde moviste algo por última vez (no importa dónde estés
 	// ahora); solo esa. Sin nada anotado, R2 no hace nada (ni avisa)
-	if (capSegs_.empty()) return 0 ;
+	// (... salvo que la pista no tenga clip: ahí no hay dónde capturar)
+	if (capSegs_.empty()) return (autoClip(track>=0?track:viewData_->songX_)<0)?"sin clip":0 ;
 	track=capSegs_[0].ch ;
 	unsigned long newest=capSegs_[0].tEnd ;
 	for (size_t i=1;i<capSegs_.size();i++)
