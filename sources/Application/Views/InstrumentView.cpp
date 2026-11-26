@@ -256,6 +256,27 @@ static std::string padNoteName(int n) {
 
 // trk2als: campos del kit que se dibujan distinto: el pad (nota y sample),
 // el sample del pad (toda la lista del pool), decay (0 = completo) y choke
+// trk2als: el largo del golpe de un pad. 0 = todo, que es lo más largo: hacia
+// la derecha / arriba se alarga hasta 'todo', hacia la izquierda se acorta
+static const int padLongs[]={0,5000,3000,2000,1500,1000,750,500,400,300,250,200,150,100,75,50,40,30,20,10} ;
+static int padLongStep(int cur,int steps) {   // steps > 0: más corto
+	const int n=sizeof(padLongs)/sizeof(int) ;
+	int k=0 ;
+	if (cur>0) { k=1 ; while (k<n-1 && padLongs[k]>cur) k++ ; }
+	k+=steps ;
+	if (k<0) k=0 ;
+	if (k>n-1) k=n-1 ;
+	return padLongs[k] ;
+}
+class UILargoField : public UIIntVarField {
+public:
+	UILargoField(GUIPoint &p,Variable &v) : UIIntVarField(p,v,"LARGO: %dms",0,5000,10,100) {}
+	virtual void ProcessArrow(unsigned short mask) {
+		int st=(mask==EPBM_LEFT)?1:(mask==EPBM_RIGHT)?-1:(mask==EPBM_DOWN)?3:(mask==EPBM_UP)?-3:0 ;
+		if (st) src_.SetInt(padLongStep(src_.GetInt(),st)) ;
+	}
+} ;
+
 class UIPadField : public UIIntVarField {
 public:
 	enum Kind { PAD, SAMPLE, DECAY, CHOKE } ;
@@ -624,7 +645,7 @@ void InstrumentView::fillSampleParameters() {
 				ADD(new UIPadField(pt,padSelVar_,UIPadField::PAD,instrument,0,15,1,4)) ;
 				if (pg==0) {
 					ADD(new UIIntVarField(KAT(1),padStartVar_,"INICIO: %d%%",0,99,1,10)) ;
-					ADD(new UIIntVarField(KAT(2),padDecayVar_,"DECAY: %dms",0,5000,10,100)) ;
+					ADD(new UILargoField(KAT(2),padDecayVar_)) ;
 					ADD(new UIIntVarField(KAT(3),padChokeVar_,"CHOKE: %d",0,16,1,1)) ;
 					ADD(new UIIntVarField(KAT(4),padTuneVar_,"AFINA: %+dst",-24,24,1,12)) ;
 					ADD(new UIIntVarField(KAT(5),padGainVar_,"VOLUMEN: %+ddB",-36,12,1,6)) ;
@@ -3860,14 +3881,7 @@ bool InstrumentView::processKit(unsigned short mask) {
 			} else {
 				// el largo del golpe: hacia la izquierda más corto (de todo a
 				// 10 ms), hacia la derecha más largo
-				static const int longs[]={0,5000,3000,2000,1500,1000,750,500,400,300,250,200,150,100,75,50,40,30,20,10} ;
-				const int n=sizeof(longs)/sizeof(int) ;
-				int k=0 ;
-				if (p.decay>0) { k=1 ; while (k<n-1 && longs[k]>p.decay) k++ ; }
-				k+=(d==EPBM_LEFT)?1:-1 ;
-				if (k<0) k=0 ;
-				if (k>n-1) k=n-1 ;
-				p.decay=longs[k] ;
+				p.decay=padLongStep(p.decay,(d==EPBM_LEFT)?1:-1) ;
 				if (p.decay) snprintf(msg,sizeof(msg),"largo %dms",p.decay) ;
 				else strcpy(msg,"largo: todo") ;
 			}
