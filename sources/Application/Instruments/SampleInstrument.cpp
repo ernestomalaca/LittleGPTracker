@@ -128,6 +128,7 @@ SampleInstrument::SampleInstrument() {
 		 renderParams_[ch].envLevel_=0 ;
 		 renderParams_[ch].glideLeft_=0 ;
 		 renderParams_[ch].audioClip_=false ;
+		 if (ch<SONG_CHANNEL_COUNT) { stolenLeft_[ch]=0 ; stolen_[ch][0]=stolen_[ch][1]=0 ; lastTail_[ch][0]=lastTail_[ch][1]=0 ; }
 		 renderParams_[ch].declickIn_=-1 ;
 		 renderParams_[ch].declickOut_=renderParams_[ch].declickOutLen_=0 ;
 		 renderParams_[ch].declickDelay_=0 ;
@@ -1093,7 +1094,25 @@ void SampleInstrument::updateFeedback(renderParams *rp) {
 // Size in samples
 
 // trk2als: la voz del canal y, si la hay, la cola de la nota anterior
+// trk2als: la cola que una nota nueva le roba a otra que aún sonaba (más
+// notas que voces) no se corta en seco: su último valor se apaga en 5 ms
 bool SampleInstrument::Render(int channel, fixed *buffer, int size, int flags) {
+    bool on=renderVoices(channel,buffer,size,flags) ;
+    if (channel>=SONG_CHANNEL_COUNT || stolenLeft_[channel]<=0) return on ;
+    if (!on) memset(buffer,0,size*2*sizeof(fixed)) ;
+    const int N=220 ;
+    int left=stolenLeft_[channel] ;
+    for (int i=0;i<size && left>0;i++,left--) {
+        float g=0.5f*(1.0f-cosf(3.14159265f*float(left)/N)) ;
+        buffer[2*i]+=fl2fp(stolen_[channel][0]*g) ;
+        buffer[2*i+1]+=fl2fp(stolen_[channel][1]*g) ;
+    }
+    stolenLeft_[channel]=left ;
+    return true ;
+}
+
+bool SampleInstrument::renderVoices(int channel, fixed *buffer, int size, int flags) {
+    if (channel<SONG_CHANNEL_COUNT) lastTail_[channel][0]=lastTail_[channel][1]=0 ;
     bool main=renderVoice(channel,buffer,size,flags) ;
     if (channel<SONG_CHANNEL_COUNT) {   // trk2als: las voces del acorde
         for (int v=1;v<=SI_CHORD_VOICES;v++) {
@@ -1112,6 +1131,8 @@ bool SampleInstrument::Render(int channel, fixed *buffer, int size, int flags) {
     if ((int)tailBuffer_.size()<size*2) tailBuffer_.resize(size*2) ;
     bool tail=renderVoice(t,&tailBuffer_[0],size,flags) ;
     if (!tail) return main ;
+    lastTail_[channel][0]=fp2fl(tailBuffer_[2*size-2]) ;
+    lastTail_[channel][1]=fp2fl(tailBuffer_[2*size-1]) ;
     if (!main) {
         memcpy(buffer,&tailBuffer_[0],size*2*sizeof(fixed)) ;
     } else {
@@ -1191,6 +1212,16 @@ void SampleInstrument::startTail(int channel) {
     int t=channel+SONG_CHANNEL_COUNT ;
     renderParams *rp=renderParams_+channel ;
     renderParams *tp=renderParams_+t ;
+    if (channel<SONG_CHANNEL_COUNT && tailActive(channel) && voiceClock_[t]!=0 &&
+        System::GetInstance()->GetClock()-voiceClock_[t]<200) {
+        // la cola que se va todavía sonaba: lo que quedaba del apagado
+        // anterior más su último valor, a apagarse en 5 ms
+        float g=(stolenLeft_[channel]>0)?0.5f*(1.0f-cosf(3.14159265f*float(stolenLeft_[channel])/220)):0 ;
+        stolen_[channel][0]=stolen_[channel][0]*g+lastTail_[channel][0] ;
+        stolen_[channel][1]=stolen_[channel][1]*g+lastTail_[channel][1] ;
+        stolenLeft_[channel]=220 ;
+        lastTail_[channel][0]=lastTail_[channel][1]=0 ;
+    }
     std::vector<I_SRPUpdater *> own=tp->updaters_ ;   // los de la cola apuntan a la cola
     dropCache(tp) ;
     *tp=*rp ;

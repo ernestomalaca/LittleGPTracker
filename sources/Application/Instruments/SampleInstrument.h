@@ -390,6 +390,10 @@ private:
 	   bool renderVoiceNow(int voice, fixed *buffer, int size, int flags) ;
 	   void startTail(int channel) ;      // la nota que sonaba pasa a la voz de cola
 	   bool tailActive(int channel) ;
+	   bool renderVoices(int channel, fixed *buffer, int size, int flags) ;
+	   float lastTail_[SONG_CHANNEL_COUNT][2] ;   // último valor que dio la cola
+	   float stolen_[SONG_CHANNEL_COUNT][2] ;     // cola robada: lo que se apaga en 5 ms
+	   int stolenLeft_[SONG_CHANNEL_COUNT] ;
 	   std::vector<fixed> tailBuffer_ ;
 
 	   Variable *volume_ ;
