@@ -2750,6 +2750,10 @@ bool InstrumentView::processEnvEdit(unsigned short mask,bool pressed) {
 		return false ;
 	}
 	SampleInstrument *si=(SampleInstrument *)current_ ;
+	if (pressed && (mask==EPBM_UP || mask==EPBM_DOWN)) {   // ↑ / ↓: el otro dibujo, sin salir
+		hopDrawing(mask==EPBM_DOWN?1:-1) ;
+		return true ;
+	}
 	if (!pressed) {
 		// L o R solos (tocar y soltar): la parte anterior / la siguiente, y suena
 		if (pageTap_ && mask==0) {
@@ -3050,6 +3054,30 @@ void InstrumentView::toggleDraw() {
 	enterWaveEdit(false) ;
 }
 
+// trk2als: dentro de un dibujo, ↑ / ↓ pasan al dibujo de la otra pestaña sin
+// salir de la edición (de la onda / la envolvente de volumen a la del filtro
+// y de regreso): se termina una y se sigue con la otra
+void InstrumentView::hopDrawing(int dir) {
+	int list[8], n=0, cur=-1 ;
+	for (int i=0;i<pageCount_ && n<8;i++) {
+		const char *pn=pageName_[i] ;
+		bool draws=!strcmp(pn,"FILTRO") || !strcmp(pn,"AMP") || (!sfMode_ && !strcmp(pn,"SAMPLER")) ;
+		if (!draws) continue ;
+		if (i==page_[1]) cur=n ;
+		list[n++]=i ;
+	}
+	if (cur<0 || cur+dir<0 || cur+dir>=n) return ;
+	if (waveEdit_) exitWaveEdit() ;
+	envNoteOff() ;
+	envEdit_=false ;
+	fadeEdit_=false ;
+	page_[1]=list[cur+dir] ;
+	lastFocusID_=0 ;
+	onInstrumentChange() ;
+	toggleDraw() ;
+	isDirty_=true ;
+}
+
 bool InstrumentView::canMark() {
 	SampleInstrument *si=(SampleInstrument *)current_ ;
 	return si->GetSimpler(SIP_S_MODE)==SM_SLICE && si->GetSimpler(SIP_S_SLICEBY)==SSB_MANUAL ;
@@ -3170,6 +3198,10 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 	if ((mask&EPBM_R) && (mask&arrows) && !(mask&EPBM_B)) {
 		exitWaveEdit() ;
 		return false ;
+	}
+	if (mask==EPBM_UP || mask==EPBM_DOWN) {   // ↑ / ↓: el otro dibujo, sin salir
+		hopDrawing(mask==EPBM_DOWN?1:-1) ;
+		return true ;
 	}
 	SampleInstrument *si=(SampleInstrument *)current_ ;
 	int a,b ;

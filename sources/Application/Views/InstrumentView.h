@@ -139,6 +139,7 @@ private:
 	void stopTapPlay() ;
 	void enterWaveEdit(bool play=true) ;
 	void drawKit(SampleInstrument *si) ;
+	void hopDrawing(int dir) ;
 	unsigned char kitWf_[80] ;   // la onda del pad elegido
 	int kitWfIndex_, kitWfSize_ ;
 	unsigned long padHoldAt_ ;   // A apretada en un pad (sostenida: sale el +)
