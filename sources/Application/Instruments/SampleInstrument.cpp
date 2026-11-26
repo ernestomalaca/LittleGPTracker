@@ -429,7 +429,10 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
                  // una voz: la nota anterior no se corta de golpe (click),
                  // se apaga en 4 ms mientras entra la nueva
                  renderParams *tp=renderParams_+channel+SONG_CHANNEL_COUNT ;
-                 if (tp->envStage_<3) {
+                 // (también si ya venía soltándose, en gate: desde el nivel
+                 // que lleva; si no, al acortarle el release caía a cero de
+                 // golpe: el click de la nota cercana)
+                 if (tp->envStage_<4) {
                      tp->envReleaseFrom_=tp->envLevel_ ;
                      tp->envStage_=3 ;
                      tp->envClock_=0 ;
