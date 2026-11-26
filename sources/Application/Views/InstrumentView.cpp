@@ -3812,8 +3812,32 @@ bool InstrumentView::processKit(unsigned short mask) {
 	if (!isPadField(id)) return false ;
 	SampleInstrument *si=(SampleInstrument *)current_ ;
 	int note=padNote() ;
-	// los atajos del pad (X, Y o L + flechas): con la cruz sobre el pad
-	if ((!gridMode_ || id==IV_PADSEL) && padShortcut(mask)) return true ;
+	if (!gridMode_ && padShortcut(mask)) return true ;
+	// con cajas: sobre un pad, A + flechas es "la clavija" (lo que más se le
+	// mueve a un golpe): A + arriba/abajo el volumen, A + izq/der la afinación
+	if (gridMode_ && id==IV_PADSEL) {
+		const unsigned short arr=EPBM_UP|EPBM_DOWN|EPBM_LEFT|EPBM_RIGHT ;
+		unsigned short d=mask&arr ;
+		if ((mask&~arr)==EPBM_A && d) {
+			padHoldAt_=0 ; padPlus_=false ;
+			if (si->PadSample(note).empty()) return true ;
+			PadParams p=si->GetPad(note) ;
+			char msg[48] ;
+			if (d==EPBM_UP || d==EPBM_DOWN) {
+				p.gain=std::max(-36,std::min(12,p.gain+((d==EPBM_UP)?1:-1))) ;
+				snprintf(msg,sizeof(msg),"volumen %+ddB",p.gain) ;
+			} else {
+				p.tune=std::max(-24,std::min(24,p.tune+((d==EPBM_RIGHT)?1:-1))) ;
+				snprintf(msg,sizeof(msg),"afinación %+dst",p.tune) ;
+			}
+			si->SetPad(note,p) ;
+			loadPadVars() ;
+			View::SetNotification(msg) ;
+			previewPad() ;
+			isDirty_=true ;
+			return true ;
+		}
+	}
 	if (id==IV_PADSEL) {   // en la rejilla: las flechas (con o sin A) van de pad en pad
 		const unsigned short arrows=EPBM_UP|EPBM_DOWN|EPBM_LEFT|EPBM_RIGHT ;
 		unsigned short dir=mask&arrows ;
