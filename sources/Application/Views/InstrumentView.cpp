@@ -1437,8 +1437,13 @@ void InstrumentView::processButtonMask(unsigned short mask,bool pressed) {
 		if (mask&EPBM_DOWN) warpToNext(-16) ;
 		if (mask&EPBM_UP) warpToNext(+16);
 		if (mask&EPBM_A) { // Allow cut instrument
+		   // trk2als: solo sobre el campo del sample (con cajas ya no existe: la
+		   // primera caja de la página es un parámetro más, y B+A sobre ella
+		   // vaciaba el instrumento entero)
+		   bool onSample=!gridMode_ && GetFocus() && !GetFocus()->IsStatic() &&
+		       ((UIIntVarField *)GetFocus())->GetVariableID()==SIP_SAMPLE ;
 		   if (getInstrumentType()==IT_SAMPLE) {
-                if (GetFocus()==T_SimpleList<UIField>::GetFirst()) {
+                if (onSample) {
 	               int i=viewData_->currentInstrument_ ;
 	               InstrumentBank *bank=viewData_->project_->GetInstrumentBank() ;
 	               I_Instrument *instr=bank->GetInstrument(i) ;
@@ -1462,8 +1467,7 @@ void InstrumentView::processButtonMask(unsigned short mask,bool pressed) {
 		   } ;
 
 		   // trk2als: B+A en cualquier otro campo lo regresa a su valor por defecto
-		   if (GetFocus()!=T_SimpleList<UIField>::GetFirst() && !onTable &&
-		       !GetFocus()->IsStatic()) {
+		   if (!onSample && !onTable && !GetFocus()->IsStatic()) {
 				// trk2als: si está automatizado, B+A quita la automatización
 				if (!deleteLane()) resetFocusedField() ;
 		   }
