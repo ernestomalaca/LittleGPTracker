@@ -394,7 +394,7 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data),
 	markTap_=false ;
 	manualPending_=false ;
 	kitWfIndex_=-1 ; kitWfSize_=0 ;
-	padHoldAt_=0 ; padPlus_=false ; kitLitShown_=0 ; padEdit_=false ;
+	padHoldAt_=0 ; padPlus_=false ; kitLitShown_=0 ; padEdit_=false ; boxMode_=false ;
 	waveEdit_=false ;
 	waveZoom_=1 ;
 	waveSel_=0 ;
@@ -1229,6 +1229,7 @@ void InstrumentView::warpToNext(int offset) {
 	} ;
 	viewData_->currentInstrument_=instrument ;
 	onInstrumentChange() ;
+	autoDraw() ;
 	isDirty_=true ;
 } ;
 
@@ -1238,7 +1239,15 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 	// trk2als: Select tocado solo (sin nada más): de las cajas al dibujo y de
 	// regreso, como notas <-> curva en el clip
 	if (pressed) selTap_=(mask==EPBM_SELECT) ;
-	else if (selTap_ && mask==0) { selTap_=false ; toggleDraw() ; isDirty_=true ; return ; }
+	else if (selTap_ && mask==0) {
+		// (Sampler: del dibujo a las cajas, y ahí se queda hasta otro Select)
+		selTap_=false ;
+		bool was=drawEditing() ;
+		toggleDraw() ;
+		if (!kitMode_) boxMode_=was ;
+		isDirty_=true ;
+		return ;
+	}
 	// trk2als: L o R solos (tocar y soltar, sin nada más): la página de al lado
 	if (gridMode_ && pageCount_>1 && !drawEditing()) {
 		if (pressed) pageTap_=(mask==EPBM_L)?-1:(mask==EPBM_R)?1:0 ;
@@ -1841,7 +1850,8 @@ void InstrumentView::drawGrid() {
 			const char *pn=pageName_[page_[1]] ;
 			can=!strcmp(pn,"FILTRO") || !strcmp(pn,"AMP") || (!sfMode_ && !strcmp(pn,"SAMPLER")) ;
 		}
-		bool in=drawEditing() || (kitMode_ && padEdit_) ;
+		// 'edita' = abre las cajas; 'sale' = de las cajas de vuelta (al dibujo / a los pads)
+		bool in=kitMode_?padEdit_:!drawEditing() ;
 		if (can) {
 			const char *t=in?"SELECT sale":"SELECT edita" ;
 			int tw=16*int(strlen(t)) ;
@@ -1912,7 +1922,7 @@ void InstrumentView::drawGrid() {
 			if (waveEdit_) off=(bid!=SIP_S_START && bid!=SIP_S_END) ;
 			else if (fadeEdit_) off=(bid!=SIP_S_FIN && bid!=SIP_S_FOUT) ;
 			else off=!(bid==envID(0) || bid==envID(1) || bid==envID(2) || bid==envID(3)) ;
-			if (off) { ink=Mix(bg,fg,22) ; soft=Mix(bg,fg,18) ; }
+			if (off) { ink=Mix(bg,fg,45) ; soft=Mix(bg,fg,32) ; }   // se leen, pero en gris (como las del kit)
 		}
 		// kit, pestaña PAD sin desbloquear (Select): se leen, pero en gris
 		if (kitMode_ && page_[1]==0 && !padEdit_ && !moving) { ink=Mix(bg,fg,45) ; soft=Mix(bg,fg,32) ; }
@@ -2850,11 +2860,22 @@ void InstrumentView::OnFocus() {
 	fadeEdit_=false ;
 	envNoteOff() ;
 	envEdit_=false ;
+	bool fromCurve=(viewData_->curveFocus_!=0) ;
 	if (viewData_->curveFocus_) {   // vuelve de su curva: el foco en ese parámetro
 		lastFocusID_=viewData_->curveFocus_ ;
 		viewData_->curveFocus_=0 ;
 	}
 	onInstrumentChange();
+	// trk2als: al Sampler se llega parado en su dibujo (la onda, o la
+	// envolvente de la pestaña): lo fuerte se edita ahí; Select abre las cajas.
+	// (De regreso de una curva se queda en la caja de ese parámetro)
+	boxMode_=fromCurve ;
+	autoDraw() ;
+}
+
+void InstrumentView::autoDraw() {
+	if (boxMode_ || drawEditing() || !gridMode_ || kitMode_ || audioMode_) return ;
+	toggleDraw() ;
 }
 
 // trk2als: el instrumento de .sf2 del sample actual pasa a zonas

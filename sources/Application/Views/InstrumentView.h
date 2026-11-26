@@ -140,6 +140,8 @@ private:
 	void enterWaveEdit(bool play=true) ;
 	void drawKit(SampleInstrument *si) ;
 	void hopDrawing(int dir) ;
+	void autoDraw() ;
+	bool boxMode_ ;   // Sampler: Select abrió las cajas (si no, se está en el dibujo)
 	unsigned char kitWf_[80] ;   // la onda del pad elegido
 	int kitWfIndex_, kitWfSize_ ;
 	unsigned long padHoldAt_ ;   // A apretada en un pad (sostenida: sale el +)
