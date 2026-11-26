@@ -390,6 +390,9 @@ private:
 	   bool renderVoiceNow(int voice, fixed *buffer, int size, int flags) ;
 	   void startTail(int channel) ;      // la nota que sonaba pasa a la voz de cola
 	   bool tailActive(int channel) ;
+	   // el Sampler es siempre mono (la nota nueva apaga a la anterior); solo
+	   // el multicapa (.sf2) deja la cola sonando
+	   int voices() { return IsZoned()?GetSimpler(SIP_S_VOICES):1 ; }
 	   bool renderVoices(int channel, fixed *buffer, int size, int flags) ;
 	   float lastTail_[SONG_CHANNEL_COUNT][2] ;   // último valor que dio la cola
 	   float stolen_[SONG_CHANNEL_COUNT][2] ;     // cola robada: lo que se apaga en 5 ms

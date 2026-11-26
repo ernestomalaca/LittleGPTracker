@@ -417,11 +417,11 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
          // se apaga en la cola (sin click) y solo el tono se desliza
          if (wasSounding) {
              // glide: solo en mono, y nunca entre rebanadas (como Live)
-             bool glide=GetSimpler(SIP_S_GLIDE)>0 && GetSimpler(SIP_S_VOICES)<2 &&
+             bool glide=GetSimpler(SIP_S_GLIDE)>0 && voices()<2 &&
                         (IsZoned() || GetSimpler(SIP_S_MODE)!=SM_SLICE) ;
              startTail(channel) ;
              // slice: una rebanada a la vez (la nueva corta a la anterior)
-             bool oneVoice=GetSimpler(SIP_S_VOICES)<2 || (!IsZoned() && GetSimpler(SIP_S_MODE)==SM_SLICE) ;
+             bool oneVoice=voices()<2 ;
              if (oneVoice || glide) {
                  // una voz: la nota anterior no se corta de golpe (click),
                  // se apaga en 4 ms mientras entra la nueva
@@ -614,7 +614,7 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 
     // trk2als: glide desde la nota anterior (si seguía sonando)
     rp->glideLeft_=0 ;
-    if (rp->simpler_ && wasSounding && GetSimpler(SIP_S_GLIDE)>0 && GetSimpler(SIP_S_VOICES)<2 &&
+    if (rp->simpler_ && wasSounding && GetSimpler(SIP_S_GLIDE)>0 && voices()<2 &&
         (IsZoned() || GetSimpler(SIP_S_MODE)!=SM_SLICE)) {
         rp->glideFrom_=prevSpeed ;
         rp->glideLen_=rp->glideLeft_=int(GetSimpler(SIP_S_GLIDE)*44.1f) ;

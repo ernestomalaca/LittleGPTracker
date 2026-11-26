@@ -696,11 +696,9 @@ void InstrumentView::fillSampleParameters() {
 					v=instrument->FindVariable(SIP_S_BPM) ;
 					ADD(new UIIntVarField(GAT(1),*v,"BPM: %d",40,300,1,10)) ;
 				}   // sin warp no hay bpm: la caja queda vacía (el cursor no se atora)
-				if (mode!=SM_SLICE) {   // slice: una rebanada a la vez, sin glide ni voces
+				if (mode!=SM_SLICE) {   // siempre mono (los acordes del clip sí suenan); el glide: 0 = apagado
 					v=instrument->FindVariable(SIP_S_GLIDE) ;
 					ADD(new UIIntVarField(GAT(2),*v,"GLIDE: %dms",0,2000,10,100)) ;
-					v=instrument->FindVariable(SIP_S_VOICES) ;
-					ADD(new UIIntVarField(GAT(3),*v,"VOCES: %d",1,2,1,1)) ;
 				}
 				if (mode==SM_CLASSIC && instrument->GetSimpler(SIP_S_LOOP)) {
 					v=instrument->FindVariable(SIP_S_LLEN) ;
@@ -1785,7 +1783,8 @@ void InstrumentView::drawGrid() {
 				else if (current_->FindVariable(SIP_S_SLICEBY)->GetInt()==SSB_MANUAL) value="manual" ;   // (slice, a mano: no cabe más)
 				else { snprintf(b,sizeof(b),"slice %d",current_->FindVariable(SIP_S_SLICES)->GetInt()) ; value=b ; }
 			} else if (id==SIP_S_PAN && iv==0) value="C" ;
-			else if (id==SIP_S_GLIDE && current_->FindVariable(SIP_S_VOICES)->GetInt()>1) value="--" ;
+			else if (id==SIP_S_GLIDE && ((SampleInstrument *)current_)->IsZoned() && current_->FindVariable(SIP_S_VOICES)->GetInt()>1) value="--" ;
+			else if (id==SIP_S_GLIDE && iv==0) value="off" ;
 			// un segundo o más: en segundos, así el número cabe grande
 			if (value.size()>2 && value.compare(value.size()-2,2,"ms")==0) {
 				int ms=atoi(value.c_str()) ;
