@@ -112,6 +112,7 @@ enum SampleInstrumentLoopMode {
 #define SIP_S_FVEL  MAKE_FOURCC('S', 'F', 'V', 'L')   // velocity -> corte 0..100 %
 #define SIP_S_FEVER MAKE_FOURCC('S', 'F', 'E', 'V')   // 1 = ya con su envolvente
 #define SIP_S_ETAB  MAKE_FOURCC('S', 'E', 'T', 'B')   // pantalla: amp / filter
+#define SIP_S_POLY MAKE_FOURCC('S', 'P', 'L', 'Y') // voces: notas a la vez (1 = mono, con glide)
 #define SIP_S_SNAP MAKE_FOURCC('S', 'S', 'N', 'P') // snap: al cruce por cero más cercano
 #define SIP_S_SLICEBY MAKE_FOURCC('S', 'S', 'B', 'Y') // slice by: region / manual
 #define SIP_S_MARKS MAKE_FOURCC('S', 'M', 'R', 'K')   // marcas manuales (cuadros, "a,b,c")
@@ -336,6 +337,10 @@ private:
 	   std::string ZoneSetName() ;   // "marimba" (de marimba_01.wav)
 	   int LastNote() { return lastNote_ ; }   // la última nota que empezó
 	   // trk2als: Sampler en slice: una rebanada a la vez (la nueva roba la voz)
+	   // cuántas notas a la vez (las que se enciman en el clip): slice 1; lo
+	   // demás, lo que diga VOCES (1 = mono: la nueva reemplaza, y con glide)
+	   int MaxVoices() { if (IsKit()) return 4 ; if (IsSliceMono()) return 1 ;
+	                     int n=GetSimpler(SIP_S_POLY) ; return n<1?1:(n>4?4:n) ; }
 	   bool IsSliceMono() { return !IsKit() && !IsZoned() && GetSimpler(SIP_S_INIT) && GetSimpler(SIP_S_MODE)==SM_SLICE ; }
 	   // trk2als: la próxima nota (one-shot) empieza aquí y no en el inicio:
 	   // para escuchar el fade out sin esperar todo el sample

@@ -680,8 +680,8 @@ void InstrumentView::fillSampleParameters() {
 				if (sfMode_) {
 					v=instrument->FindVariable(SIP_S_GLIDE) ;
 					ADD(new UIIntVarField(GAT(4),*v,"GLIDE: %dms",0,2000,10,100)) ;
-					v=instrument->FindVariable(SIP_S_VOICES) ;
-					ADD(new UIIntVarField(GAT(5),*v,"VOCES: %d",1,2,1,1)) ;
+					v=instrument->FindVariable(SIP_S_POLY) ;
+					ADD(new UIIntVarField(GAT(5),*v,"VOCES: %d",1,4,1,1)) ;
 					ADD(new UIIntVarField(GAT(7),presetSaveVar_,"PRESET: guardar",0,0,1,1)) ;
 				}
 			} else if (!strcmp(pn,"MÁS")) {
@@ -696,9 +696,11 @@ void InstrumentView::fillSampleParameters() {
 					v=instrument->FindVariable(SIP_S_BPM) ;
 					ADD(new UIIntVarField(GAT(1),*v,"BPM: %d",40,300,1,10)) ;
 				}   // sin warp no hay bpm: la caja queda vacía (el cursor no se atora)
-				if (mode!=SM_SLICE) {   // siempre mono (los acordes del clip sí suenan); el glide: 0 = apagado
+				if (mode!=SM_SLICE) {   // VOCES: notas a la vez; con 1 es mono y actúa el glide
 					v=instrument->FindVariable(SIP_S_GLIDE) ;
 					ADD(new UIIntVarField(GAT(2),*v,"GLIDE: %dms",0,2000,10,100)) ;
+					v=instrument->FindVariable(SIP_S_POLY) ;
+					ADD(new UIIntVarField(GAT(3),*v,"VOCES: %d",1,4,1,1)) ;
 				}
 				if (mode==SM_CLASSIC && instrument->GetSimpler(SIP_S_LOOP)) {
 					v=instrument->FindVariable(SIP_S_LLEN) ;
@@ -813,8 +815,8 @@ void InstrumentView::fillSampleParameters() {
 		v=instrument->FindVariable(SIP_S_GLIDE) ;
 		ADD(new UIIntVarField(AT(L),*v,"glide: %dms",0,2000,10,100)) ;
 		// 2 voces: la nota anterior termina su cola en vez de cortarse
-		v=instrument->FindVariable(SIP_S_VOICES) ;
-		ADD(new UIIntVarField(AT(R),*v,"voices: %d",1,2,1,1)) ;
+		v=instrument->FindVariable(SIP_S_POLY) ;
+		ADD(new UIIntVarField(AT(R),*v,"voices: %d",1,4,1,1)) ;
 		row++ ;
 
 		LABEL("FILTER") ;
@@ -1783,7 +1785,7 @@ void InstrumentView::drawGrid() {
 				else if (current_->FindVariable(SIP_S_SLICEBY)->GetInt()==SSB_MANUAL) value="manual" ;   // (slice, a mano: no cabe más)
 				else { snprintf(b,sizeof(b),"slice %d",current_->FindVariable(SIP_S_SLICES)->GetInt()) ; value=b ; }
 			} else if (id==SIP_S_PAN && iv==0) value="C" ;
-			else if (id==SIP_S_GLIDE && ((SampleInstrument *)current_)->IsZoned() && current_->FindVariable(SIP_S_VOICES)->GetInt()>1) value="--" ;
+			else if (id==SIP_S_GLIDE && current_->FindVariable(SIP_S_POLY)->GetInt()>1) value="--" ;   // el glide es del mono
 			else if (id==SIP_S_GLIDE && iv==0) value="off" ;
 			// un segundo o más: en segundos, así el número cabe grande
 			if (value.size()>2 && value.compare(value.size()-2,2,"ms")==0) {

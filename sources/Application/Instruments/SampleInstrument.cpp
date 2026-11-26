@@ -239,7 +239,8 @@ SampleInstrument::SampleInstrument() {
 	 static const char *sliceBy[2]={"region","manual"} ;
 	 Insert(new Variable("s slice by",SIP_S_SLICEBY,sliceBy,2,SSB_REGION)) ;
 	 Insert(new Variable("s marks",SIP_S_MARKS,"")) ;
-	 Insert(new Variable("s snap",SIP_S_SNAP,offOn,2,1)) ;   // por defecto: al cruce por cero
+	 Insert(new Variable("s snap",SIP_S_SNAP,offOn,2,1)) ;
+	 Insert(new Variable("s poly",SIP_S_POLY,4)) ;   // voces: hasta 4 notas a la vez   // por defecto: al cruce por cero
 	 Insert(new Variable("audio clip",SIP_CLIP,0)) ;
 	 Insert(new Variable("s zones",SIP_S_ZONES,"")) ;
 	 Insert(new Variable("s kit",SIP_S_KIT,0)) ;
@@ -419,7 +420,7 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
          // se apaga en la cola (sin click) y solo el tono se desliza
          if (wasSounding) {
              // glide: solo en mono, y nunca entre rebanadas (como Live)
-             bool glide=GetSimpler(SIP_S_GLIDE)>0 && voices()<2 &&
+             bool glide=GetSimpler(SIP_S_GLIDE)>0 && GetSimpler(SIP_S_POLY)<2 &&
                         (IsZoned() || GetSimpler(SIP_S_MODE)!=SM_SLICE) ;
              startTail(channel) ;
              toTail=true ;
@@ -624,7 +625,7 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 
     // trk2als: glide desde la nota anterior (si seguía sonando)
     rp->glideLeft_=0 ;
-    if (rp->simpler_ && wasSounding && GetSimpler(SIP_S_GLIDE)>0 && voices()<2 &&
+    if (rp->simpler_ && wasSounding && GetSimpler(SIP_S_GLIDE)>0 && GetSimpler(SIP_S_POLY)<2 &&
         (IsZoned() || GetSimpler(SIP_S_MODE)!=SM_SLICE)) {
         rp->glideFrom_=prevSpeed ;
         rp->glideLen_=rp->glideLeft_=int(GetSimpler(SIP_S_GLIDE)*44.1f) ;

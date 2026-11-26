@@ -1294,14 +1294,18 @@ void Player::LiveNoteOn(int channel, I_Instrument *instr, int note, int vel) {
     int v = 0;
     // trk2als: un Sampler en slice es mono, como en Live: la rebanada nueva le
     // quita la voz a la que sonaba (siempre la voz 0)
-    bool slice = !kit && instr->GetType() == IT_SAMPLE && ((SampleInstrument *)instr)->IsSliceMono();
+    // ... y lo demás usa las voces que diga su caja VOCES (1 = mono)
+    int nv = VOICE_COUNT;
+    if (!kit && instr->GetType() == IT_SAMPLE) nv = ((SampleInstrument *)instr)->MaxVoices();
+    if (nv > VOICE_COUNT) nv = VOICE_COUNT;
+    bool slice = (nv <= 1);
     if (!kit) {
         v = slice ? 0 : -1;
-        for (int i = 0; i < VOICE_COUNT && v < 0; i++) if (liveNote_[channel][i] == note) v = i;
-        for (int i = 0; i < VOICE_COUNT && v < 0; i++) if (liveNote_[channel][i] < 0) v = i;
+        for (int i = 0; i < nv && v < 0; i++) if (liveNote_[channel][i] == note) v = i;
+        for (int i = 0; i < nv && v < 0; i++) if (liveNote_[channel][i] < 0) v = i;
         if (v < 0) {
             v = 0;
-            for (int i = 1; i < VOICE_COUNT; i++)
+            for (int i = 1; i < nv; i++)
                 if (liveAge_[channel][i] < liveAge_[channel][v]) v = i;
         }
         liveNote_[channel][v] = note;
@@ -1604,17 +1608,21 @@ void Player::playClipStep(int channel) {
         double span = n.len * 6.0;
         unsigned long startSlice = sliceCount_ + (unsigned long)start;
         // la voz: la que ya terminó o, si no hay, la que acaba antes
+        // (las voces que diga la caja VOCES del Sampler; 1 = mono)
+        int nv = VOICE_COUNT;
+        if (instrument->GetType() == IT_SAMPLE) nv = ((SampleInstrument *)instrument)->MaxVoices();
+        if (nv > VOICE_COUNT) nv = VOICE_COUNT;
         int v = -1;
-        for (int i = 0; i < VOICE_COUNT && v < 0; i++)
+        for (int i = 0; i < nv && v < 0; i++)
             if (voiceEnd_[channel][i] <= startSlice) v = i;
         if (v < 0) {
             v = 0;
-            for (int i = 1; i < VOICE_COUNT; i++)
+            for (int i = 1; i < nv; i++)
                 if (voiceEnd_[channel][i] < voiceEnd_[channel][v]) v = i;
         }
         // trk2als: slice es mono (como en Live): siempre la voz 0, la nueva
         // rebanada le quita la voz a la anterior (también en el mismo paso)
-        if (instrument->GetType() == IT_SAMPLE && ((SampleInstrument *)instrument)->IsSliceMono()) v = 0;
+        if (nv <= 1) v = 0;
         // lo pendiente de esa voz desde aquí ya no va
         for (size_t j = 0; j < q.size();) {
             if (q[j].voice == v && q[j].at >= startSlice) q.erase(q.begin() + j);
