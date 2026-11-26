@@ -3797,7 +3797,7 @@ bool InstrumentView::processKit(unsigned short mask) {
 	if (gridMode_) {   // Y + flechas: otro pad, sin salir de la caja donde estás
 		const unsigned short arr=EPBM_UP|EPBM_DOWN|EPBM_LEFT|EPBM_RIGHT ;
 		unsigned short d=mask&arr ;
-		if ((mask&~arr)==EPBM_Y && d) {
+		if ((mask&~arr)==EPBM_Y && d && id!=IV_PADSEL) {   // (sobre un pad, Y + flechas es su atajo)
 			int sel=padSelVar_.GetInt(), r=sel/4, c=sel%4 ;
 			if (d==EPBM_LEFT && c>0) c-- ;
 			else if (d==EPBM_RIGHT && c<3) c++ ;
@@ -3812,7 +3812,8 @@ bool InstrumentView::processKit(unsigned short mask) {
 	if (!isPadField(id)) return false ;
 	SampleInstrument *si=(SampleInstrument *)current_ ;
 	int note=padNote() ;
-	if (!gridMode_ && padShortcut(mask)) return true ;
+	// los atajos del pad (X, Y o L + flechas): con la cruz sobre el pad
+	if ((!gridMode_ || id==IV_PADSEL) && padShortcut(mask)) return true ;
 	if (id==IV_PADSEL) {   // en la rejilla: las flechas (con o sin A) van de pad en pad
 		const unsigned short arrows=EPBM_UP|EPBM_DOWN|EPBM_LEFT|EPBM_RIGHT ;
 		unsigned short dir=mask&arrows ;
