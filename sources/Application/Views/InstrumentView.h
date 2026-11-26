@@ -138,6 +138,7 @@ private:
 	void startTapPlay(int from,bool countIn=true) ;
 	void stopTapPlay() ;
 	void enterWaveEdit(bool play=true) ;
+	void waveNotice(FourCC id) ;
 	void exitWaveEdit() ;
 	bool processWaveEdit(unsigned short mask,bool pressed) ;
 	void startPreview(int from=-1,int end=-1) ;

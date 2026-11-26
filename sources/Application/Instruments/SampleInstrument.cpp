@@ -238,6 +238,7 @@ SampleInstrument::SampleInstrument() {
 	 static const char *sliceBy[2]={"region","manual"} ;
 	 Insert(new Variable("s slice by",SIP_S_SLICEBY,sliceBy,2,SSB_REGION)) ;
 	 Insert(new Variable("s marks",SIP_S_MARKS,"")) ;
+	 Insert(new Variable("s snap",SIP_S_SNAP,offOn,2,1)) ;   // por defecto: al cruce por cero
 	 Insert(new Variable("audio clip",SIP_CLIP,0)) ;
 	 Insert(new Variable("s zones",SIP_S_ZONES,"")) ;
 	 Insert(new Variable("s kit",SIP_S_KIT,0)) ;
@@ -2666,6 +2667,7 @@ SoundSource *SampleInstrument::currentSource() {
 }
 
 int SampleInstrument::snapZero(int frame,int lo,int hi,unsigned char note,SoundSource *src) {
+	if (!GetSimpler(SIP_S_SNAP)) return frame ;   // snap apagado: libre
 	if (!src) src=source_ ;
 	if (!src) return frame ;
 	short *wav=(short *)src->GetSampleBuffer(note) ;

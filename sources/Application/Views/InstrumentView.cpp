@@ -711,6 +711,8 @@ void InstrumentView::fillSampleParameters() {
 					v=instrument->FindVariable(SIP_S_FOUT) ;
 					ADD(new UIIntVarField(GAT(5),*v,"FADE OUT: %dms",0,2000,5,50)) ;
 				}
+				v=instrument->FindVariable(SIP_S_SNAP) ;
+				ADD(new UIIntVarField(GAT(6),*v,"SNAP: %s",0,1,1,1)) ;
 				ADD(new UIIntVarField(GAT(7),presetSaveVar_,"PRESET: guardar",0,0,1,1)) ;
 			} else if (fpage) {
 				v=instrument->FindVariable(SIP_S_FTYPE) ;
@@ -2380,8 +2382,7 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 			int size=cs?cs->GetSize(-1):0 ;
 			int pm=size>0?int((long long)cpos*1000/size):0 ;
 			sprintf(tag,"marcas %d  %d.%d%%  zoom x%d",int(m.size()),pm/10,pm%10,waveZoom_) ;
-			if (gridMode_) DrawText(X+4,Y+H-22,tag,fg,1) ;
-			else DrawText(X+4,Y+H-12,tag,fg,0) ;
+			if (!gridMode_) DrawText(X+4,Y+H-12,tag,fg,0) ;   // con cajas: va al aviso de abajo
 			{
 				const char *help=tapPlay_?"sonando: A marca  START para  L+START de nuevo" :
 				                         "START toca  A escucha  AA marca  B+<> mueve  A+^v zoom" ;
@@ -2422,7 +2423,7 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 		}
 		if (waveZoom_>1) sprintf(tag,"%d.%d%%%s  zoom x%d",pm/10,pm%10,fz,waveZoom_) ;
 		else sprintf(tag,"%d.%d%%%s",pm/10,pm%10,fz) ;
-		DrawText(X+4,Y+H-22,tag,fg,1) ;
+		if (!gridMode_) DrawText(X+4,Y+H-22,tag,fg,1) ;   // con cajas: va al aviso de abajo
 	}
 
 	// cursor de reproducción
@@ -3125,6 +3126,7 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 		if ((mask&EPBM_B) && (mask&(EPBM_UP|EPBM_DOWN))) {
 			if (mask&EPBM_UP) { if (waveZoom_<64) waveZoom_*=2 ; }
 			else if (waveZoom_>1) waveZoom_/=2 ;
+			waveNotice(0) ;
 			return true ;
 		}
 		// A + flechas: CÓMO. One-shot: el fade de esa bandera. Classic: el
@@ -3152,6 +3154,7 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 			if (nv==cur) return true ;
 			wavePush() ;
 			v->SetInt(nv) ;
+			waveNotice(id) ;
 			if (oneShot) { fadeSel_=en?1:0 ; fadeAudition() ; }
 			else envAudition() ;
 			return true ;
@@ -3220,6 +3223,7 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 		si->SetMarks(m) ;
 		waveSel_=0 ;
 		waveAPut_=false ;
+		waveNotice(1) ;
 		return true ;
 	}
 	if (mask&EPBM_B) {
@@ -3230,8 +3234,10 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 			markVar_.SetInt(c) ;
 		} else if (mask&EPBM_UP) {             // B + ↑ / ↓: zoom
 			if (waveZoom_<64) waveZoom_*=2 ;
+			waveNotice(0) ;
 		} else if (mask&EPBM_DOWN) {
 			if (waveZoom_>1) waveZoom_/=2 ;
+			waveNotice(0) ;
 		}
 		return true ;
 	}
@@ -3311,6 +3317,26 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 	return true ;
 }
 
+// trk2als: lo que antes se escribía dentro de la onda va al aviso de abajo,
+// y solo cuando cambia: el zoom (id 0), el fade / la envolvente que se mueve,
+// o cuántas rebanadas hay (id 1)
+void InstrumentView::waveNotice(FourCC id) {
+	if (!gridMode_ || !current_ || current_->GetType()!=IT_SAMPLE) return ;
+	SampleInstrument *si=(SampleInstrument *)current_ ;
+	char t[48] ;
+	if (id==0) sprintf(t,"zoom x%d",waveZoom_) ;
+	else if (id==1) sprintf(t,"%d rebanadas",int(si->GetMarks().size())+1) ;
+	else {
+		int sv=si->GetSimpler(id) ;
+		const char *sn=(id==SIP_S_FIN)?"fade in":(id==SIP_S_FOUT)?"fade out":(id==SIP_S_ATK)?"attack":
+		               (id==SIP_S_DEC)?"decay":(id==SIP_S_SUS)?"sustain":"release" ;
+		if (id==SIP_S_SUS) sprintf(t,"%s %ddB",sn,sv) ;
+		else if (sv>=1000) sprintf(t,"%s %d.%ds",sn,sv/1000,(sv%1000)/100) ;
+		else sprintf(t,"%s %dms",sn,sv) ;
+	}
+	View::SetNotification(t) ;
+}
+
 // el parámetro de 'cómo' de la parada elegida en la onda
 FourCC InstrumentView::waveStopID() {
 	if (!current_ || current_->GetType()!=IT_SAMPLE) return 0 ;
@@ -3343,6 +3369,7 @@ void InstrumentView::waveARelease() {
 		waveAPut_=false ;
 		at=si->AddMark(c) ;
 		if (at<0) View::SetNotification("muy cerca de otra marca") ;
+		else waveNotice(1) ;
 	} else if (waveSel_==1) {
 		std::vector<int> m=si->GetMarks() ;
 		int k=nearMark(m) ;

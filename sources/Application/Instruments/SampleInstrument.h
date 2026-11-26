@@ -112,6 +112,7 @@ enum SampleInstrumentLoopMode {
 #define SIP_S_FVEL  MAKE_FOURCC('S', 'F', 'V', 'L')   // velocity -> corte 0..100 %
 #define SIP_S_FEVER MAKE_FOURCC('S', 'F', 'E', 'V')   // 1 = ya con su envolvente
 #define SIP_S_ETAB  MAKE_FOURCC('S', 'E', 'T', 'B')   // pantalla: amp / filter
+#define SIP_S_SNAP MAKE_FOURCC('S', 'S', 'N', 'P') // snap: al cruce por cero más cercano
 #define SIP_S_SLICEBY MAKE_FOURCC('S', 'S', 'B', 'Y') // slice by: region / manual
 #define SIP_S_MARKS MAKE_FOURCC('S', 'M', 'R', 'K')   // marcas manuales (cuadros, "a,b,c")
 #define SIP_S_KIT MAKE_FOURCC('S', 'K', 'I', 'T')   // trk2als: las zonas son pads de batería (one-shot)
