@@ -128,7 +128,7 @@ SampleInstrument::SampleInstrument() {
 		 renderParams_[ch].envLevel_=0 ;
 		 renderParams_[ch].glideLeft_=0 ;
 		 renderParams_[ch].audioClip_=false ;
-		 if (ch<SONG_CHANNEL_COUNT) { stolenLeft_[ch]=0 ; stolen_[ch][0]=stolen_[ch][1]=0 ; lastTail_[ch][0]=lastTail_[ch][1]=0 ; }
+		 stolenLeft_[ch]=0 ; stolen_[ch][0]=stolen_[ch][1]=0 ; lastOut_[ch][0]=lastOut_[ch][1]=0 ; lastOutClock_[ch]=0 ;
 		 renderParams_[ch].declickIn_=-1 ;
 		 renderParams_[ch].declickOut_=renderParams_[ch].declickOutLen_=0 ;
 		 renderParams_[ch].declickDelay_=0 ;
@@ -382,6 +382,7 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
   // trk2als: la nota que sonaba pasa a la voz de cola ANTES de tocar rp:
   // así se lleva su volumen, paneo, nota y región (si no, la cola sonaba
   // con los valores de la nota nueva: click y voces raras)
+     bool toTail=false ;   // la nota que sonaba siguió en la voz de cola
      bool wasSounding=rp->simpler_ && !rp->finished_ && rp->envStage_<4 &&
                      voiceClock_[channel]!=0 ;
      fixed prevSpeed=rp->speed_ ;
@@ -402,6 +403,7 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
          voiceClock_[channel]!=0 &&
          System::GetInstance()->GetClock()-voiceClock_[channel]<200) {
          startTail(channel) ;
+         toTail=true ;
          renderParams *tp=renderParams_+channel+SONG_CHANNEL_COUNT ;
          tp->declickOut_=tp->declickOutLen_=176 ;
      }
@@ -420,6 +422,7 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
              bool glide=GetSimpler(SIP_S_GLIDE)>0 && voices()<2 &&
                         (IsZoned() || GetSimpler(SIP_S_MODE)!=SM_SLICE) ;
              startTail(channel) ;
+             toTail=true ;
              // slice: una rebanada a la vez (la nueva corta a la anterior)
              bool oneVoice=voices()<2 ;
              if (oneVoice || glide) {
@@ -431,12 +434,16 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
                      tp->envStage_=3 ;
                      tp->envClock_=0 ;
                  }
-                 tp->chokeMs_=4 ;
+                 tp->chokeMs_=10 ;
              }
              if (!glide) wasSounding=false ;
          }
      }
 
+  // trk2als: la voz se va a pisar y lo que sonaba no pasó a la cola (voces de
+  // acorde, golpes del kit, la vuelta del clip): su último valor se apaga en
+  // 5 ms en vez de cortarse en seco (click)
+  if (!toTail) stealVoice(channel) ;
   ensureZones() ;   // trk2als
  rp->midiNote_=midinote ;
   lastNote_=midinote ;   // trk2als: para el mapa de zonas
@@ -1094,25 +1101,7 @@ void SampleInstrument::updateFeedback(renderParams *rp) {
 // Size in samples
 
 // trk2als: la voz del canal y, si la hay, la cola de la nota anterior
-// trk2als: la cola que una nota nueva le roba a otra que aún sonaba (más
-// notas que voces) no se corta en seco: su último valor se apaga en 5 ms
 bool SampleInstrument::Render(int channel, fixed *buffer, int size, int flags) {
-    bool on=renderVoices(channel,buffer,size,flags) ;
-    if (channel>=SONG_CHANNEL_COUNT || stolenLeft_[channel]<=0) return on ;
-    if (!on) memset(buffer,0,size*2*sizeof(fixed)) ;
-    const int N=220 ;
-    int left=stolenLeft_[channel] ;
-    for (int i=0;i<size && left>0;i++,left--) {
-        float g=0.5f*(1.0f-cosf(3.14159265f*float(left)/N)) ;
-        buffer[2*i]+=fl2fp(stolen_[channel][0]*g) ;
-        buffer[2*i+1]+=fl2fp(stolen_[channel][1]*g) ;
-    }
-    stolenLeft_[channel]=left ;
-    return true ;
-}
-
-bool SampleInstrument::renderVoices(int channel, fixed *buffer, int size, int flags) {
-    if (channel<SONG_CHANNEL_COUNT) lastTail_[channel][0]=lastTail_[channel][1]=0 ;
     bool main=renderVoice(channel,buffer,size,flags) ;
     if (channel<SONG_CHANNEL_COUNT) {   // trk2als: las voces del acorde
         for (int v=1;v<=SI_CHORD_VOICES;v++) {
@@ -1131,8 +1120,6 @@ bool SampleInstrument::renderVoices(int channel, fixed *buffer, int size, int fl
     if ((int)tailBuffer_.size()<size*2) tailBuffer_.resize(size*2) ;
     bool tail=renderVoice(t,&tailBuffer_[0],size,flags) ;
     if (!tail) return main ;
-    lastTail_[channel][0]=fp2fl(tailBuffer_[2*size-2]) ;
-    lastTail_[channel][1]=fp2fl(tailBuffer_[2*size-1]) ;
     if (!main) {
         memcpy(buffer,&tailBuffer_[0],size*2*sizeof(fixed)) ;
     } else {
@@ -1212,16 +1199,7 @@ void SampleInstrument::startTail(int channel) {
     int t=channel+SONG_CHANNEL_COUNT ;
     renderParams *rp=renderParams_+channel ;
     renderParams *tp=renderParams_+t ;
-    if (channel<SONG_CHANNEL_COUNT && tailActive(channel) && voiceClock_[t]!=0 &&
-        System::GetInstance()->GetClock()-voiceClock_[t]<200) {
-        // la cola que se va todavía sonaba: lo que quedaba del apagado
-        // anterior más su último valor, a apagarse en 5 ms
-        float g=(stolenLeft_[channel]>0)?0.5f*(1.0f-cosf(3.14159265f*float(stolenLeft_[channel])/220)):0 ;
-        stolen_[channel][0]=stolen_[channel][0]*g+lastTail_[channel][0] ;
-        stolen_[channel][1]=stolen_[channel][1]*g+lastTail_[channel][1] ;
-        stolenLeft_[channel]=220 ;
-        lastTail_[channel][0]=lastTail_[channel][1]=0 ;
-    }
+    stealVoice(t) ;   // si la cola aún sonaba, no se corta en seco
     std::vector<I_SRPUpdater *> own=tp->updaters_ ;   // los de la cola apuntan a la cola
     dropCache(tp) ;
     *tp=*rp ;
@@ -1249,6 +1227,42 @@ void SampleInstrument::startTail(int channel) {
 // trk2als: una voz que empieza a media vuelta del bloque (subdivisiones):
 // silencio hasta su muestra y lo demás del bloque ya sonando
 bool SampleInstrument::renderVoice(int channel, fixed *buffer, int size, int flags) {
+    bool r = renderVoiceDelayed(channel, buffer, size, flags);
+    unsigned long now = System::GetInstance()->GetClock();
+    if (stolenLeft_[channel] > 0) {   // lo que quedó de la voz pisada, apagándose
+        if (!r) memset(buffer, 0, size * 2 * sizeof(fixed));
+        int left = stolenLeft_[channel];
+        for (int i = 0; i < size && left > 0; i++, left--) {
+            float g = 0.5f * (1.0f - cosf(3.14159265f * float(left) / STEAL_LEN));
+            buffer[2 * i] += fl2fp(stolen_[channel][0] * g);
+            buffer[2 * i + 1] += fl2fp(stolen_[channel][1] * g);
+        }
+        stolenLeft_[channel] = left;
+        r = true;
+    }
+    if (r) {
+        lastOut_[channel][0] = fp2fl(buffer[2 * size - 2]);
+        lastOut_[channel][1] = fp2fl(buffer[2 * size - 1]);
+        lastOutClock_[channel] = now;
+    }
+    return r;
+}
+
+// la voz (o cola) que está por pisarse: si sonó en el último bloque, su
+// último valor queda como residuo que se apaga en STEAL_LEN muestras
+void SampleInstrument::stealVoice(int idx) {
+    if (idx < 0 || idx >= SI_VOICE_COUNT) return;
+    unsigned long now = System::GetInstance()->GetClock();
+    if (lastOutClock_[idx] == 0 || now - lastOutClock_[idx] > 80) { stolenLeft_[idx] = 0; return; }
+    stolen_[idx][0] = lastOut_[idx][0];   // (incluye lo que quedara de un residuo anterior)
+    stolen_[idx][1] = lastOut_[idx][1];
+    stolenLeft_[idx] = STEAL_LEN;
+    lastOutClock_[idx] = 0;
+}
+
+// trk2als: una voz que empieza a media vuelta del bloque (subdivisiones):
+// silencio hasta su muestra y lo demás del bloque ya sonando
+bool SampleInstrument::renderVoiceDelayed(int channel, fixed *buffer, int size, int flags) {
     renderParams *rp = renderParams_ + channel;
     int d = rp->startDelay_;
     if (d <= 0) return renderVoiceNow(channel, buffer, size, flags);
@@ -2921,8 +2935,12 @@ void SampleInstrument::simplerEnvelope(renderParams *rp,fixed *buffer,int size) 
 		sus=(db<=-60)?0:powf(10.0f,db/20.0f) ;
 	}
 	float rel=(oneShot?envMs(SIP_S_FOUT):envMs(SIP_S_REL))*msr ;
-	// al soltar la nota nunca de golpe: 3 ms como mínimo (el click del final)
-	if (rel<3*msr) rel=3*msr ;
+	// al soltar la nota nunca de golpe: 8 ms como mínimo (el click del final;
+	// con graves, 3 ms todavía tronaba)
+	if (rel<8*msr) rel=8*msr ;
+	// las rampas cortas (hasta 20 ms) van en S (coseno): una recta tan corta
+	// sobre un grave suena a click; las largas siguen rectas
+	bool softRel=rel<=20*msr, softAtk=atk<=20*msr ;
 	// STOP o nota cortada: un release corto (no de golpe: eso es un click)
 	if (rp->chokeMs_>0 && rel>rp->chokeMs_*msr) rel=rp->chokeMs_*msr ;
 	// one-shot: el fade out cae al final de la región (como en Simpler); sin
@@ -2930,7 +2948,8 @@ void SampleInstrument::simplerEnvelope(renderParams *rp,fixed *buffer,int size) 
 	// no se corte en seco. Muestras de salida que le faltan a la voz al
 	// terminar este bloque
 	float fadeOut=oneShot?envMs(SIP_S_FOUT)*msr:0 ;
-	if (rp->simplerLoop_!=SILM_LOOP && fadeOut<3*msr) fadeOut=3*msr ;
+	if (rp->simplerLoop_!=SILM_LOOP && fadeOut<6*msr) fadeOut=6*msr ;
+	bool softOut=fadeOut<=20*msr ;
 	float leftEnd=rp->toEnd_ ;   // calculado antes de renderizar el bloque
 	for (int i=0;i<size;i++) {
 		float l=rp->envLevel_ ;
@@ -2938,6 +2957,7 @@ void SampleInstrument::simplerEnvelope(renderParams *rp,fixed *buffer,int size) 
 			case 0:   // ataque
 				l=(atk<1)?1:float(rp->envClock_)/atk ;
 				if (l>=1) { l=1 ; rp->envStage_=1 ; rp->envClock_=0 ; }
+				else if (softAtk) l=0.5f*(1.0f-cosf(3.14159265f*l)) ;
 				break ;
 			case 1:   // decay hacia el sustain
 				l=(dec<1)?sus:1.0f-(1.0f-sus)*float(rp->envClock_)/dec ;
@@ -2947,8 +2967,11 @@ void SampleInstrument::simplerEnvelope(renderParams *rp,fixed *buffer,int size) 
 				l=sus ;
 				break ;
 			case 3:   // release
-				l=(rel<1)?0:rp->envReleaseFrom_*(1.0f-float(rp->envClock_)/rel) ;
-				if (l<=0) { l=0 ; rp->envStage_=4 ; }
+				{
+					float t=(rel<1)?1:float(rp->envClock_)/rel ;
+					if (t>=1) { l=0 ; rp->envStage_=4 ; }
+					else l=rp->envReleaseFrom_*(softRel?0.5f*(1.0f+cosf(3.14159265f*t)):(1.0f-t)) ;
+				}
 				break ;
 			default:
 				l=0 ;
@@ -2963,7 +2986,10 @@ void SampleInstrument::simplerEnvelope(renderParams *rp,fixed *buffer,int size) 
 		}
 		if (fadeOut>=1) {
 			float left=leftEnd-i ;
-			if (left<fadeOut) l*=(left>0)?left/fadeOut:0 ;
+			if (left<fadeOut) {
+				float t=(left>0)?left/fadeOut:0 ;
+				l*=softOut?0.5f*(1.0f-cosf(3.14159265f*t)):t ;
+			}
 		}
 		fixed f=fl2fp(l) ;
 		buffer[2*i]=fp_mul(buffer[2*i],f) ;

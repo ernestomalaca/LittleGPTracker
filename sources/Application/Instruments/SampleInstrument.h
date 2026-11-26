@@ -393,10 +393,13 @@ private:
 	   // el Sampler es siempre mono (la nota nueva apaga a la anterior); solo
 	   // el multicapa (.sf2) deja la cola sonando
 	   int voices() { return IsZoned()?GetSimpler(SIP_S_VOICES):1 ; }
-	   bool renderVoices(int channel, fixed *buffer, int size, int flags) ;
-	   float lastTail_[SONG_CHANNEL_COUNT][2] ;   // último valor que dio la cola
-	   float stolen_[SONG_CHANNEL_COUNT][2] ;     // cola robada: lo que se apaga en 5 ms
-	   int stolenLeft_[SONG_CHANNEL_COUNT] ;
+	   bool renderVoiceDelayed(int voice, fixed *buffer, int size, int flags) ;
+	   void stealVoice(int idx) ;
+	   enum { STEAL_LEN=220 } ;                // 5 ms
+	   float lastOut_[SI_VOICE_COUNT][2] ;     // último valor que dio cada voz
+	   unsigned long lastOutClock_[SI_VOICE_COUNT] ;
+	   float stolen_[SI_VOICE_COUNT][2] ;      // voz pisada: lo que se apaga
+	   int stolenLeft_[SI_VOICE_COUNT] ;
 	   std::vector<fixed> tailBuffer_ ;
 
 	   Variable *volume_ ;
