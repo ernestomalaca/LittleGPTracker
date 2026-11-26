@@ -1914,6 +1914,8 @@ void InstrumentView::drawGrid() {
 			else off=!(bid==envID(0) || bid==envID(1) || bid==envID(2) || bid==envID(3)) ;
 			if (off) { ink=Mix(bg,fg,22) ; soft=Mix(bg,fg,18) ; }
 		}
+		// kit, pestaña PAD sin desbloquear (Select): se leen, pero en gris
+		if (kitMode_ && page_[1]==0 && !padEdit_ && !moving) { ink=Mix(bg,fg,45) ; soft=Mix(bg,fg,32) ; }
 		if (moving) FillRect(cx,cy,cw,ch,box,7) ;
 		if (here && !moving) FrameRect(cx,cy,cw,ch,fg,7,3) ;
 		DrawText(cx+12,cy+10,name.c_str(),soft,1) ;
