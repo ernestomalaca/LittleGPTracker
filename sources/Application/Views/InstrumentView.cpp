@@ -372,6 +372,7 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data),
 	recShown_=0 ;
 	markTap_=false ;
 	manualPending_=false ;
+	kitWfIndex_=-1 ; kitWfSize_=0 ;
 	waveEdit_=false ;
 	waveZoom_=1 ;
 	waveSel_=0 ;
@@ -597,6 +598,50 @@ void InstrumentView::fillSampleParameters() {
 			// trk2als: kit: la rejilla de arriba es el editor (un solo campo:
 			// las flechas van de pad en pad); abajo, lo de todo el kit
 			loadPadVars() ;
+			if (SupportsShapes()) {
+				// trk2als: el kit en la rejilla, como el Sampler: los 16 pads y la
+				// onda del pad elegido arriba; abajo PAD (lo de ese golpe),
+				// FILTRO y KIT (lo de todo el kit). Las flechas recorren pads y
+				// cajas como una sola rejilla
+				gridMode_=true ;
+				T_SimpleList<UIField>::Remove(*f1,true) ;   // el kit se cambia desde la cabecera
+				pageCount_=0 ;
+				pageName_[pageCount_++]="PAD" ;
+				pageName_[pageCount_++]="FILTRO" ;
+				pageName_[pageCount_++]="KIT" ;
+				int &pg=page_[1] ;
+				if (pg<0 || pg>=pageCount_) pg=0 ;
+				if (lastFocusID_==0) lastFocusID_=IV_PADSEL ;
+				const int KX[4]={1,11,21,31}, KY[2]={20,26} ;
+				#define KAT(k) (pt=GUIPoint(KX[(k)%4],KY[(k)/4]))
+				pt=GUIPoint(1,12) ;
+				ADD(new UIPadField(pt,padSelVar_,UIPadField::PAD,instrument,0,15,1,4)) ;
+				if (pg==0) {
+					ADD(new UIIntVarField(KAT(1),padStartVar_,"INICIO: %d%%",0,99,1,10)) ;
+					ADD(new UIIntVarField(KAT(2),padDecayVar_,"DECAY: %dms",0,5000,10,100)) ;
+					ADD(new UIIntVarField(KAT(3),padChokeVar_,"CHOKE: %d",0,16,1,1)) ;
+					ADD(new UIIntVarField(KAT(4),padTuneVar_,"AFINA: %+dst",-24,24,1,12)) ;
+					ADD(new UIIntVarField(KAT(5),padGainVar_,"VOLUMEN: %+ddB",-36,12,1,6)) ;
+					ADD(new UIIntVarField(KAT(6),padPanVar_,"PAN: %+d",-50,50,1,10)) ;
+				} else if (pg==1) {
+					v=instrument->FindVariable(SIP_S_FTYPE) ;
+					ADD(new UIIntVarField(KAT(0),*v,"FILTRO: %s",0,2,1,1)) ;
+					v=instrument->FindVariable(SIP_S_FHZ) ;
+					ADD(new UIFreqVarField(KAT(1),*v)) ;
+					v=instrument->FindVariable(SIP_S_FQ) ;
+					ADD(new UIIntVarField(KAT(2),*v,"RESO: %d%%",0,100,1,10)) ;
+				} else {
+					v=instrument->FindVariable(SIP_S_VOL) ;
+					ADD(new UIIntVarField(KAT(0),*v,"VOLUMEN: %+ddB",-36,6,1,6)) ;
+					v=instrument->FindVariable(SIP_S_TRANSP) ;
+					ADD(new UIIntVarField(KAT(1),*v,"AFINA: %+dst",-48,48,1,12)) ;
+					v=instrument->FindVariable(SIP_S_PAN) ;
+					ADD(new UIIntVarField(KAT(2),*v,"PAN: %+d",-50,50,1,10)) ;
+					ADD(new UIIntVarField(KAT(7),presetSaveVar_,"PRESET: guardar",0,0,1,1)) ;
+				}
+				#undef KAT
+				return ;
+			}
 			if (lastFocusID_==0 || (isPadField(lastFocusID_) && lastFocusID_!=IV_PADSEL)) lastFocusID_=IV_PADSEL ;
 			{
 				int keep=row ;
@@ -1757,6 +1802,7 @@ void InstrumentView::drawGrid() {
 	IteratorPtr<UIField> it(T_SimpleList<UIField>::GetIterator()) ;
 	for (it->Begin();!it->IsDone();it->Next()) {
 		UIField &f=it->CurrentItem() ;
+		if (f.GetPosition()._y<20) continue ;   // (los pads del kit: los dibuja drawKit)
 		int k=gridSlot(f) ;
 		used[k]=true ;
 		int cx,cy,cw,ch ;
@@ -1788,7 +1834,9 @@ void InstrumentView::drawGrid() {
 				if (UIModeField::fresh_==current_->FindVariable(SIP_S_MODE)) value="slice" ;   // recién llegado: aún no se elige
 				else if (current_->FindVariable(SIP_S_SLICEBY)->GetInt()==SSB_MANUAL) value="manual" ;   // (slice, a mano: no cabe más)
 				else { snprintf(b,sizeof(b),"slice %d",current_->FindVariable(SIP_S_SLICES)->GetInt()) ; value=b ; }
-			} else if (id==SIP_S_PAN && iv==0) value="C" ;
+			} else if ((id==SIP_S_PAN || id==IV_PADPAN) && iv==0) value="C" ;
+			else if (id==IV_PADDEC && iv==0) value="todo" ;
+			else if (id==IV_PADCHK && iv==0) value="--" ;
 			else if (id==SIP_S_GLIDE && current_->FindVariable(SIP_S_POLY)->GetInt()>1) value="--" ;   // el glide es del mono
 			else if (id==SIP_S_GLIDE && iv==0) value="off" ;
 			// un segundo o más: en segundos, así el número cabe grande
@@ -1925,11 +1973,12 @@ void InstrumentView::drawWaveformBody() {
 
 	const int X=16, Y=gridMode_?48:(kitMode_?56:34), W=WF_BARS*8,
 	          H=gridMode_?186:(kitMode_?144:(simplerView_?80:112)) ;
-	FillRect(X-8,Y-4,W+16,H+8,Mix(bg,fg,9),8) ;
+	if (!(kitMode_ && gridMode_)) FillRect(X-8,Y-4,W+16,H+8,Mix(bg,fg,9),8) ;
 	if (gridMode_ && drawEditing()) FrameRect(X-8,Y-4,W+16,H+8,fg,8,3) ;   // dibujando: el marco pasa aquí
 
 	if (kitMode_) {   // trk2als: kit: la rejilla de pads
-		drawPadGrid(si,X,Y,W,H) ;
+		if (gridMode_) drawKit(si) ;
+		else drawPadGrid(si,X,Y,W,H) ;
 		return ;
 	}
 	if (sfMode_ && si->IsZoned()) {   // trk2als: soundfont: el mapa de zonas
@@ -3877,6 +3926,115 @@ void InstrumentView::drawPadGrid(SampleInstrument *si,int X,int Y,int W,int H) {
 	char info[96] ;
 	snprintf(info,sizeof(info),"pad %d %s",sel+1,padNoteName(note).c_str()) ;
 	topInfo_=info ;
+}
+
+// las 3 letras de un pad: lo que es (KCK, SNA, CHH...) si el nombre lo dice;
+// si no, las primeras 3 de su palabra más larga
+static std::string padAbbrev(const std::string &name) {
+	std::string low ;
+	for (size_t i=0;i<name.size();i++) low+=(char)tolower((unsigned char)name[i]) ;
+	static const char *keys[][2]={
+		{"kick","KCK"},{"bombo","KCK"},{"bd","KCK"},{"snare","SNA"},{"tarola","SNA"},{"caja","SNA"},
+		{"clap","CLP"},{"rim","RIM"},{"openhat","OHH"},{"open","OHH"},{"ohh","OHH"},{"closed","CHH"},
+		{"chh","CHH"},{"hihat","CHH"},{"hat","CHH"},{"hh","CHH"},{"tom","TOM"},{"crash","CRA"},
+		{"ride","RID"},{"shaker","SHK"},{"cowbell","COW"},{"cencerro","COW"},{"conga","CNG"},
+		{"bongo","BNG"},{"guira","GUI"},{"guiro","GUI"},{"clave","CLV"},{"tamb","TMB"},{"perc","PER"},
+		{"cymbal","CYM"},{"fx","FX"},{0,0}} ;
+	for (int k=0;keys[k][0];k++) if (low.find(keys[k][0])!=std::string::npos) return keys[k][1] ;
+	std::string best, cur ;
+	for (size_t i=0;i<=low.size();i++) {
+		if (i<low.size() && isalpha((unsigned char)low[i])) cur+=low[i] ;
+		else { if (cur.size()>best.size()) best=cur ; cur.clear() ; }
+	}
+	if (best.empty()) best=low ;
+	best=best.substr(0,3) ;
+	for (size_t i=0;i<best.size();i++) best[i]=(char)toupper((unsigned char)best[i]) ;
+	return best ;
+}
+
+// trk2als: el kit en la rejilla: a la izquierda los 16 pads (el 1 abajo,
+// como en Live) con 3 letras; a la derecha la onda del pad elegido. Un pad
+// que acaba de sonar (el clip, la consola o el controlador) se prende
+void InstrumentView::drawKit(SampleInstrument *si) {
+	GUIColor bg=ColorOf(CD_BACKGROUND), fg=ColorOf(CD_NORMAL), play=ColorOf(CD_PLAY) ;
+	GUIColor panel=Mix(bg,fg,9) ;
+	int base=si->KitBase() ;
+	int sel=padSelVar_.GetInt() ;
+	bool onGrid=GetFocus() && !GetFocus()->IsStatic() &&
+	            ((UIIntVarField *)GetFocus())->GetVariableID()==IV_PADSEL ;
+	unsigned long now=System::GetInstance()->GetClock() ;
+	const int PW=52, PH=46, G=4, PX=8, PY=40 ;
+	for (int r=0;r<4;r++) for (int c=0;c<4;c++) {
+		int idx=r*4+c, note=base+idx ;
+		int x=PX+c*(PW+G), y=PY+(3-r)*(PH+G) ;
+		std::string name=si->PadName(note) ;
+		bool on=(idx==sel) ;
+		unsigned long hit=si->PadHit(note) ;
+		bool lit=hit && now>=hit && now-hit<160 ;
+		if (name.empty()) {   // vacío: solo el marco
+			FrameRect(x,y,PW,PH,Mix(bg,fg,22),5,2) ;
+		} else {
+			FillRect(x,y,PW,PH,lit?play:(on?fg:panel),5) ;
+			std::string t=padAbbrev(name) ;
+			DrawText(x+2,y+15,t.c_str(),(lit || on)?bg:fg,1) ;
+		}
+		if (on && onGrid) FrameRect(x-3,y-3,PW+6,PH+6,fg,7,3) ;   // la cruz está aquí
+		else if (on && name.empty()) FrameRect(x,y,PW,PH,fg,5,2) ;
+	}
+	// la onda del pad elegido
+	const int WX=236, WY=40, WW=396, WH=198 ;
+	FillRect(WX,WY,WW,WH,panel,8) ;
+	int note=base+sel ;
+	std::string wav=si->PadSample(note) ;
+	char info[96] ;
+	snprintf(info,sizeof(info),"%s",wav.empty()?padNoteName(note).c_str():si->PadName(note).c_str()) ;
+	topInfo_=info ;
+	if (wav.empty()) {
+		if (onGrid) DrawText(WX+16,WY+WH/2-8,"A: elegir sonido",Mix(bg,fg,50),1) ;
+		return ;
+	}
+	SamplePool *sp=SamplePool::GetInstance() ;
+	int index=sp->IndexOf(wav.c_str()) ;
+	SoundSource *src=(index>=0)?sp->GetSource(index):0 ;
+	if (!src) return ;
+	int size=src->GetSize(-1) ;
+	short *data=(short *)src->GetSampleBuffer(-1) ;
+	int channels=src->GetChannelCount(-1) ;
+	if (size<=0 || !data || channels<1) return ;
+	const int NB=76 ;   // barras de 3 px cada 5
+	if (kitWfIndex_!=index || kitWfSize_!=size) {
+		for (int b=0;b<NB;b++) {
+			int from=int((long long)size*b/NB), to=int((long long)size*(b+1)/NB) ;
+			int step=(to-from)/200+1, peak=0 ;
+			for (int i=from;i<to;i+=step) { int v=data[i*channels] ; if (v<0) v=-v ; if (v>peak) peak=v ; }
+			kitWf_[b]=(unsigned char)(peak>>7) ;
+		}
+		kitWfIndex_=index ; kitWfSize_=size ;
+	}
+	PadParams p=si->GetPad(note) ;
+	int ix=WX+8, iw=WW-16, mid=WY+WH/2 ;
+	int ax=ix+iw*p.start/100 ;   // el inicio
+	for (int b=0;b<NB;b++) {
+		int x=ix+b*5 ;
+		int h=kitWf_[b]*(WH-24)/2/255+1 ;
+		FillRect(x,mid-h,3,2*h,(x>=ax)?Mix(bg,fg,70):Mix(bg,fg,25)) ;
+	}
+	// la bandera del inicio y la del final
+	FillRect(ax-1,WY+4,2,WH-8,fg) ;
+	for (int q=0;q<20;q++) { int w=(q<10)?2*q+3:2*(20-q)+1 ; FillRect(ax,WY+4+q,w,1,fg) ; }
+	int bx=ix+iw ;
+	FillRect(bx-1,WY+4,2,WH-8,fg) ;
+	for (int q=0;q<20;q++) { int w=(q<10)?2*q+3:2*(20-q)+1 ; FillRect(bx-w,WY+4+q,w,1,fg) ; }
+	// el decay: la curva con la que se apaga el golpe
+	if (p.decay>0) {
+		float ms=size*1000.0f/src->GetSampleRate(-1) ;
+		int dw=(ms>0)?int(iw*p.decay/ms):0 ;
+		if (dw>bx-ax) dw=bx-ax ;
+		std::vector<int> ys ;
+		int top=WY+14, hh=WH-28 ;
+		for (int x=0;x<dw;x++) { float t=float(x)/dw, g=(1-t)*(1-t) ; ys.push_back(top+int((1.0f-g)*hh)) ; }
+		if (dw>2) drawCurveLine(ys,ax,TrackColor(viewData_->songX_),-1,-1,WX,WX+WW) ;
+	}
 }
 
 /************************************************************

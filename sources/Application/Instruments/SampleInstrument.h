@@ -366,6 +366,10 @@ private:
 	   bool kitStarting_ ;
 	   int lastKitSlot_[SONG_CHANNEL_COUNT] ;
 	   unsigned long kitStartClock_[SI_VOICE_COUNT] ;
+	   unsigned long padHit_[128] ;   // cuándo sonó cada nota del kit (para prender su pad)
+	public:
+	   unsigned long PadHit(int note) { return (note>=0 && note<128)?padHit_[note]:0 ; }
+	private:
 	   public:
 	   private:
 	   int lastNote_ ;

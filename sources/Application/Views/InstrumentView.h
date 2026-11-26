@@ -138,6 +138,9 @@ private:
 	void startTapPlay(int from,bool countIn=true) ;
 	void stopTapPlay() ;
 	void enterWaveEdit(bool play=true) ;
+	void drawKit(SampleInstrument *si) ;
+	unsigned char kitWf_[80] ;   // la onda del pad elegido
+	int kitWfIndex_, kitWfSize_ ;
 	void waveNotice(FourCC id) ;
 	void exitWaveEdit() ;
 	bool processWaveEdit(unsigned short mask,bool pressed) ;

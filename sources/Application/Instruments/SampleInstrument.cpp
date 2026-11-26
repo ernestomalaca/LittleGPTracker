@@ -109,6 +109,7 @@ SampleInstrument::SampleInstrument() {
 	 kitStarting_=false ;
 	 for (int i=0;i<SONG_CHANNEL_COUNT;i++) lastKitSlot_[i]=i ;
 	 for (int i=0;i<SI_VOICE_COUNT;i++) kitStartClock_[i]=0 ;
+	 memset(padHit_,0,sizeof(padHit_)) ;
 	 static bool notesInit=false ;
 	 if (!notesInit) {
 		 notesInit=true ;
@@ -818,6 +819,7 @@ bool SampleInstrument::startKit(int channel,unsigned char note,int velocity,int 
 		rp->pan_=rp->basePan_=i2fp(pan<0?0:(pan>254?254:pan)) ;
 	}
 	kitStartClock_[pick]=System::GetInstance()->GetClock()+1 ;
+	if (note<128) padHit_[note]=kitStartClock_[pick] ;
 	lastKitSlot_[channel]=pick ;
 	if (velocity>=0 && velocity!=100) ProcessCommand(pick,I_CMD_MVEL,(ushort)(velocity*2)) ;
 	return true ;
