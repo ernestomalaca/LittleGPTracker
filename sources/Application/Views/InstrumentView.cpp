@@ -373,6 +373,7 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data),
 	markTap_=false ;
 	manualPending_=false ;
 	kitWfIndex_=-1 ; kitWfSize_=0 ;
+	padHoldAt_=0 ; padPlus_=false ; kitLitShown_=0 ;
 	waveEdit_=false ;
 	waveZoom_=1 ;
 	waveSel_=0 ;
@@ -1266,6 +1267,15 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 	// automatiza, o no hay clip, no pasa nada)
 	if (pressed && mask==(EPBM_A|EPBM_L)) { openCurve() ; return ; }
 	if (!pressed && touching_ && !(mask&EPBM_A)) endTouch() ;
+	if (kitMode_ && padHoldAt_) {   // A sostenida en un pad: salió el +; al soltar, el navegador
+		if (pressed && mask!=EPBM_A) { padHoldAt_=0 ; padPlus_=false ; }
+		else if (!pressed && !(mask&EPBM_A)) {
+			bool plus=padPlus_ ;
+			padHoldAt_=0 ; padPlus_=false ;
+			isDirty_=true ;
+			if (plus) { openPadBrowser() ; return ; }
+		}
+	}
 	if (kitMode_ && padAPending_) {   // A tocada sola en un pad vacío (sin flechas)
 		if (pressed && mask!=EPBM_A) padAPending_=false ;
 		else if (!pressed && !(mask&EPBM_A)) {
@@ -2538,6 +2548,14 @@ void InstrumentView::AnimationUpdate() {
 	if (envOffAt_ && System::GetInstance()->GetClock()>=envOffAt_) envNoteOff() ;
 	if (!current_ || current_->GetType()!=IT_SAMPLE || HasModal()) return ;
 	SampleInstrument *si=(SampleInstrument *)current_ ;
+	if (kitMode_ && gridMode_) {   // los pads que suenan, y el + de A sostenida
+		unsigned long now=System::GetInstance()->GetClock() ;
+		int lit=0, base=si->KitBase() ;
+		for (int k=0;k<16;k++) { unsigned long h=si->PadHit(base+k) ; if (h && now>=h && now-h<160) lit|=1<<k ; }
+		bool redraw=(lit!=kitLitShown_) ;
+		if (padHoldAt_ && !padPlus_ && now-padHoldAt_>450) { padPlus_=true ; redraw=true ; }
+		if (redraw) { kitLitShown_=lit ; DrawView() ; return ; }
+	}
 	// trk2als: redibujar si cambió algún valor automatizado (o la grabación).
 	// Lo que se graba mientras se sostiene A va en Tick: aquí se está dibujando
 	// (candado de dibujo) y grabar toma el del mezclador: en ese orden, con el
@@ -3556,7 +3574,7 @@ void InstrumentView::kitSync() {
 	SampleInstrument *si=(SampleInstrument *)current_ ;
 	if (padSelVar_.GetInt()!=padShown_) {   // otro pad: se oye, como en el Move
 		loadPadVars() ;
-		previewPad() ;
+		if (!gridMode_) previewPad() ;   // con cajas: suena con A, no al pasar
 		isDirty_=true ;
 		return ;
 	}
@@ -3776,10 +3794,25 @@ bool InstrumentView::processKit(unsigned short mask) {
 		}
 		return (mask&EPBM_A)!=0 && !(mask&EPBM_B) ;   // A + flechas: nada (no es un sample)
 	}
+	if (gridMode_) {   // Y + flechas: otro pad, sin salir de la caja donde estás
+		const unsigned short arr=EPBM_UP|EPBM_DOWN|EPBM_LEFT|EPBM_RIGHT ;
+		unsigned short d=mask&arr ;
+		if ((mask&~arr)==EPBM_Y && d) {
+			int sel=padSelVar_.GetInt(), r=sel/4, c=sel%4 ;
+			if (d==EPBM_LEFT && c>0) c-- ;
+			else if (d==EPBM_RIGHT && c<3) c++ ;
+			else if (d==EPBM_UP && r<3) r++ ;
+			else if (d==EPBM_DOWN && r>0) r-- ;
+			padSelVar_.SetInt(r*4+c) ;
+			kitSync() ;
+			isDirty_=true ;
+			return true ;
+		}
+	}
 	if (!isPadField(id)) return false ;
 	SampleInstrument *si=(SampleInstrument *)current_ ;
 	int note=padNote() ;
-	if (padShortcut(mask)) return true ;
+	if (!gridMode_ && padShortcut(mask)) return true ;
 	if (id==IV_PADSEL) {   // en la rejilla: las flechas (con o sin A) van de pad en pad
 		const unsigned short arrows=EPBM_UP|EPBM_DOWN|EPBM_LEFT|EPBM_RIGHT ;
 		unsigned short dir=mask&arrows ;
@@ -3838,6 +3871,13 @@ bool InstrumentView::processKit(unsigned short mask) {
 			padClipCut_=false ;
 			View::SetNotification("pad pegado") ;
 		}
+		return true ;
+	}
+	if (mask==EPBM_A && gridMode_ && id==IV_PADSEL) {
+		if (si->PadSample(note).empty()) { padAPending_=true ; return false ; }   // vacío: al soltar, el navegador
+		padHoldAt_=System::GetInstance()->GetClock() ;   // sostenida: el +
+		padPlus_=false ;
+		previewPad() ;
 		return true ;
 	}
 	if (mask==EPBM_A) {
@@ -3971,15 +4011,20 @@ void InstrumentView::drawKit(SampleInstrument *si) {
 		bool on=(idx==sel) ;
 		unsigned long hit=si->PadHit(note) ;
 		bool lit=hit && now>=hit && now-hit<160 ;
-		if (name.empty()) {   // vacío: solo el marco
-			FrameRect(x,y,PW,PH,Mix(bg,fg,22),5,2) ;
-		} else {
-			FillRect(x,y,PW,PH,lit?play:(on?fg:panel),5) ;
-			std::string t=padAbbrev(name) ;
-			DrawText(x+2,y+15,t.c_str(),(lit || on)?bg:fg,1) ;
+		// lleno = está sonando; marco = el elegido; doble marco = la cruz está aquí
+		if (name.empty()) FrameRect(x,y,PW,PH,Mix(bg,fg,22),5,2) ;
+		else {
+			FillRect(x,y,PW,PH,lit?play:panel,5) ;
+			DrawText(x+2,y+15,padAbbrev(name).c_str(),lit?bg:fg,1) ;
 		}
-		if (on && onGrid) FrameRect(x-3,y-3,PW+6,PH+6,fg,7,3) ;   // la cruz está aquí
-		else if (on && name.empty()) FrameRect(x,y,PW,PH,fg,5,2) ;
+		if (on) FrameRect(x,y,PW,PH,fg,5,3) ;
+		if (on && onGrid) FrameRect(x-4,y-4,PW+8,PH+8,fg,8,2) ;
+		// el +: en un pad vacío con la cruz encima, o con A sostenida (cambiar el sonido)
+		if (on && onGrid && (name.empty() || padPlus_)) {
+			if (!name.empty()) FillRect(x+3,y+3,PW-6,PH-6,bg,3) ;
+			FillRect(x+PW/2-10,y+PH/2-2,20,4,fg) ;
+			FillRect(x+PW/2-2,y+PH/2-10,4,20,fg) ;
+		}
 	}
 	// la onda del pad elegido
 	const int WX=236, WY=40, WW=396, WH=198 ;

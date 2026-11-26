@@ -141,6 +141,9 @@ private:
 	void drawKit(SampleInstrument *si) ;
 	unsigned char kitWf_[80] ;   // la onda del pad elegido
 	int kitWfIndex_, kitWfSize_ ;
+	unsigned long padHoldAt_ ;   // A apretada en un pad (sostenida: sale el +)
+	bool padPlus_ ;
+	int kitLitShown_ ;           // los pads prendidos que se dibujaron
 	void waveNotice(FourCC id) ;
 	void exitWaveEdit() ;
 	bool processWaveEdit(unsigned short mask,bool pressed) ;
