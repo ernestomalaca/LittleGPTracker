@@ -371,6 +371,7 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data),
 	capLast_=-1 ;
 	recShown_=0 ;
 	markTap_=false ;
+	manualPending_=false ;
 	waveEdit_=false ;
 	waveZoom_=1 ;
 	waveSel_=0 ;
@@ -1284,7 +1285,18 @@ void InstrumentView::processButtonMask(unsigned short mask,bool pressed) {
 		}
 		if (markTap_ && !(mask&EPBM_A)) {
 			markTap_=false ;
-			enterWaveEdit() ;
+			enterWaveEdit(false) ;
+			isDirty_=true ;
+		}
+		// soltó A habiendo llegado a manual (y sigue ahí): a la onda, sin tocar nada
+		if (manualPending_ && !(mask&EPBM_A)) {
+			manualPending_=false ;
+			if (current_ && current_->GetType()==IT_SAMPLE &&
+			    ((SampleInstrument *)current_)->GetSimpler(SIP_S_MODE)==SM_SLICE &&
+			    ((SampleInstrument *)current_)->GetSimpler(SIP_S_SLICEBY)==SSB_MANUAL) {
+				if (gridMode_ && page_[1]!=0) { page_[1]=0 ; lastFocusID_=0 ; onInstrumentChange() ; }
+				enterWaveEdit(false) ;
+			}
 			isDirty_=true ;
 		}
 		return ;
@@ -1412,12 +1424,7 @@ void InstrumentView::processButtonMask(unsigned short mask,bool pressed) {
 		onInstrumentChange() ;
 		isDirty_=true ;
 	}
-	if (toManual) {
-		markTap_=false ;
-		if (gridMode_ && page_[1]!=0) { page_[1]=0 ; lastFocusID_=0 ; onInstrumentChange() ; }
-		enterWaveEdit() ;
-		isDirty_=true ;
-	}
+	if (toManual) { markTap_=false ; manualPending_=true ; isDirty_=true ; }   // al soltar A, a la onda
 
     Player *player=Player::GetInstance() ;
 	// B Modifier
@@ -2279,7 +2286,7 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 		else if (fid==SIP_S_DEC || fid==SIP_S_FDEC) { h0=xa ; h1=xd ; }
 		else if (fid==SIP_S_SUS || fid==SIP_S_FSUS) { h0=xd ; h1=b ; }
 		else if (fid==SIP_S_REL || fid==SIP_S_FREL || fid==SIP_S_FOUT) { h0=oneShot?b-int(msPerPx>0?rel/msPerPx:0):b ; h1=b+tl ; }
-		drawCurveLine(ys,a,cc,h0,h1,X,X+W) ;
+		if (!(mode==SM_SLICE && !ftab && !zsrc)) drawCurveLine(ys,a,cc,h0,h1,X,X+W) ;
 		int nodes[3]={xa,xd,b} ;
 		int nn=oneShot?0:3 ;
 		for (int k=0;k<nn;k++) {
@@ -2329,7 +2336,7 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 		int lastName=-1000 ;
 		for (int k=0;k<nSl;k++) {
 			int x=slPx[k] ;
-			FillRect(x-1,Y-4,2,H+8,hi2) ;
+			FillRect(x-2,Y-4,4,H+8,hi2) ;
 			if (x-lastName>=(gridMode_?56:30)) {   // nombres sin amontonar
 				lastName=x ;
 				char num[8] ;
@@ -2357,12 +2364,17 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 				bool sel=(waveSel_==2) || (waveSel_==1 && int(i)==near) || (waveSel_==3 && m[i]>=rlo && m[i]<=rhi) ;
 				if (sel) {
 					int mx=FPX(m[i]) ;
-					if (mx>=X && mx<=X+W) FillRect(mx-2,Y-4,4,H+8,hi) ;
+					if (mx>=X && mx<=X+W) FillRect(mx-5,Y-4,10,H+8,ColorOf(CD_PLAY)) ;   // agarrada / marcada
 				}
 			}
+			// el cursor: línea gruesa con un triángulo grande arriba y otro abajo
 			int cx=FPX(cpos) ;
-			FillRect(cx-1,Y-4,2,H+8,fg) ;
-			for (int q=0;q<6;q++) FillRect(cx-q,Y+H+4+q,2*q+1,1,fg) ;
+			GUIColor curC=(waveSel_==1)?ColorOf(CD_PLAY):fg ;
+			FillRect(cx-2,Y-4,5,H+8,curC) ;
+			for (int q=0;q<14;q++) {
+				FillRect(cx-(13-q),Y-4+q,2*(13-q)+1,1,curC) ;
+				FillRect(cx-q,Y+H+4-13+q,2*q+1,1,curC) ;
+			}
 			char tag[48] ;
 			SoundSource *cs=si->currentSource() ;
 			int size=cs?cs->GetSize(-1):0 ;
@@ -3283,6 +3295,9 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 			m[k]=p ;
 			si->SetMarks(m) ;
 			markVar_.SetInt(p) ;
+			// se oye la rebanada desde donde quedó (hasta donde empieza la
+			// siguiente); cada movimiento la vuelve a empezar
+			startPreview(p,(k+1<(int)m.size())?m[k+1]:b) ;
 		}
 		return true ;
 	}

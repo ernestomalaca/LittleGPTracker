@@ -2687,9 +2687,20 @@ void ClipView::drawCurves() {
         int x = GRID_X + (cursorStep_ - p0) * STEP_W;
         if (nodeK >= 0) x = GRID_X + (lane->points[nodeK].pos - p0 * CLIP_TICKS) * STEP_W / CLIP_TICKS;
         int y = top + int((1.0 - curveNorm(curV)) * h + 0.5);
-        FillRect(x - 14, y, 29, 1, fg);
-        FillRect(x, y - 14, 1, 29, fg);
-        FrameRect(x - 10, y - 10, 21, 21, (curveGrab_ || curveStand_) ? play : fg, 10, (curveGrab_ || curveStand_) ? 3 : 2);
+        if (curveGrab_ || curveStand_) {
+            // enganchado a un nodo: se ve de lejos. Las dos guías cruzan toda
+            // la rejilla y el nodo es un disco grande con su aro
+            FillRect(GRID_X, y - 1, gw, 3, play);
+            FillRect(x - 1, GRID_Y, 3, gh, play);
+            FillRect(x - 17, y - 17, 35, 35, play, 17);
+            FillRect(x - 12, y - 12, 25, 25, bg, 12);
+            FillRect(x - 8, y - 8, 17, 17, play, 8);
+        } else {
+            // suelto: solo una mira
+            FillRect(x - 14, y, 29, 1, fg);
+            FillRect(x, y - 14, 1, 29, fg);
+            FrameRect(x - 10, y - 10, 21, 21, fg, 10, 2);
+        }
     }
 
     // lo que se va a pegar (Select + A sostenido): su forma, donde cae

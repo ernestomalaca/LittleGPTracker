@@ -85,6 +85,7 @@ private:
 	std::string presetFolder_ ;   // trk2als: categoría donde se guarda el preset
 	Variable markVar_ ;      // trk2als: cursor de las marcas (slice manual)
 	bool markTap_ ;
+	bool manualPending_ ;   // llegó a slice manual con A apretada: al soltar entra a la onda
 	// trk2als: slice manual, editar marcas sobre la onda
 	bool waveEdit_ ;
 	int waveZoom_ ;
