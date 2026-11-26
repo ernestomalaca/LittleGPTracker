@@ -1320,6 +1320,14 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 		}
 	}
 	if (pressed && kitMode_ && processKit(mask)) { kitTrack() ; return ; }
+	// trk2als: en las cajas, Y + arriba / abajo: la misma caja en la pestaña de
+	// al lado (el mismo gesto que en el kit lleva al pad vecino). Sin dar la vuelta
+	if (pressed && gridMode_ && !kitMode_ && pageCount_>1 && !drawEditing() &&
+	    (mask==(EPBM_Y|EPBM_UP) || mask==(EPBM_Y|EPBM_DOWN))) {
+		int kind=audioMode_?0:1, d=(mask&EPBM_DOWN)?1:-1 ;
+		if (page_[kind]+d>=0 && page_[kind]+d<pageCount_) turnPage(d) ;
+		return ;
+	}
 	// A + flechas en un parámetro automatizado: se toma desde lo que suena
 	if (pressed && (mask&EPBM_A) && !(mask&EPBM_B) && !touching_) {   // para deshacer: cómo estaba la perilla
 		FourCC id=focusID(*this) ;
