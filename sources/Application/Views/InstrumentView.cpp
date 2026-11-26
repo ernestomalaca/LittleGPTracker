@@ -4124,6 +4124,19 @@ void InstrumentView::drawKit(SampleInstrument *si) {
 			FillRect(x+PW/2-2,y+PH/2-10,4,20,fg) ;
 		}
 	}
+	// en el hueco de la primera caja de PAD: de qué pad son los valores
+	// (su número y sus 3 letras)
+	if (page_[1]==0) {
+		int cx,cy,cw,ch ;
+		gridBox(0,cx,cy,cw,ch) ;
+		(void)cw ; (void)ch ;
+		std::string nm=si->PadName(base+sel) ;
+		char num[8] ;
+		snprintf(num,sizeof(num),"%d",sel+1) ;
+		DrawText(cx+12,cy+10,"PAD",Mix(bg,fg,55),1) ;
+		DrawText(cx+12,cy+32,num,fg,2) ;
+		DrawText(cx+16+24*int(strlen(num)),cy+48,nm.empty()?"--":padAbbrev(nm).c_str(),fg,1) ;
+	}
 	// la onda del pad elegido
 	const int WX=236, WY=40, WW=396, WH=198 ;
 	FillRect(WX,WY,WW,WH,panel,8) ;
