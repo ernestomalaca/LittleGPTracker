@@ -3797,6 +3797,9 @@ void SampleInstrument::Purge() {
 } ;
 
 bool SampleInstrument::IsEmpty() {
+    // trk2als: un sinte no necesita sample: no está vacío (si no, no se guardaba)
+    Variable *m=FindVariable(SIP_S_MODE) ;
+    if (m && m->GetInt()==SM_SYNTH) return false ;
     Variable *v=FindVariable(SIP_SAMPLE) ;
 	return (v->GetInt()==-1) ;
 } ;
