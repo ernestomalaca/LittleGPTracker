@@ -413,7 +413,9 @@ void Project::DeleteTrack(int channel) {
         mx->SetChannelVolume(c, mx->GetChannelVolume(c + 1));
         mx->SetChannelHPF(c, mx->GetChannelHPF(c + 1));
         mx->SetChannelLPF(c, mx->GetChannelLPF(c + 1));
+        for (int s = 0; s < Mixer::SEND_COUNT; s++) mx->SetSend(s, c, mx->GetSend(s, c + 1));
     }
+    for (int s = 0; s < Mixer::SEND_COUNT; s++) mx->SetSend(s, SONG_CHANNEL_COUNT - 1, 0);
     FindVariable(VAR_TRACKTYPE(SONG_CHANNEL_COUNT - 1))->SetInt(TT_OFF);
     FindVariable(VAR_TRACKNAME(SONG_CHANNEL_COUNT - 1))->SetString("");
     FindVariable(VAR_TRACKINSTR(SONG_CHANNEL_COUNT - 1))->SetInt(-1);

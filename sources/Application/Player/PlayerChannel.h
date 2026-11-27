@@ -28,6 +28,7 @@ public:
     void SetHPFMode(unsigned char mode);
     void ApplyHPF(fixed *buffer, int samplecount);
     void SetLPFFreq(unsigned short freq);
+    void SetSends(float eco, float rev) { ecoSend_ = eco; revSend_ = rev; }   // trk2als: 0..1
     void Reset();
 
   private:
@@ -47,6 +48,7 @@ public:
     fixed lpfPrevOutput_[2];
     fixed lpfAlpha_;
     unsigned short lpfFreq_;
+    float ecoSend_, revSend_;
 };
 
 #endif

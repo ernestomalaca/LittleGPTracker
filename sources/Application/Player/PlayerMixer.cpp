@@ -1,5 +1,6 @@
 #include "PlayerMixer.h"
 #include "Application/Mixer/MixerService.h"
+#include "Application/Mixer/SendBus.h"
 #include "Application/Model/Mixer.h"
 #include "Application/Utils/char.h"
 #include "Application/Utils/fixed.h"
@@ -159,7 +160,12 @@ void PlayerMixer::Update(Observable &o,I_ObservableData *d) {
       pc->SetVolume(fl2fp(mixer->GetChannelVolume(i) / 255.0f));
       pc->SetHPFMode((unsigned char)mixer->GetChannelHPF(i));
       pc->SetLPFFreq(mixer->GetChannelLPF(i));
+      pc->SetSends(mixer->GetSend(Mixer::SEND_ECO, i) / 100.0f, mixer->GetSend(Mixer::SEND_REV, i) / 100.0f);
   }
+  // trk2als: los efectos de envío: a tempo y con lo suyo
+  SendBus::Get()->SetParams(project_->GetTempo(), mixer->GetFx(Mixer::FX_ECO_TIME), mixer->GetFx(Mixer::FX_ECO_BACK),
+                            mixer->GetFx(Mixer::FX_ECO_TONE), mixer->GetFx(Mixer::FX_REV_SIZE), mixer->GetFx(Mixer::FX_REV_TONE));
+  SendBus::Get()->SetPregain(project_->GetPregain() * 0.01f);
   MixerService *ms=MixerService::GetInstance();
   ms->SetPregain(project_->GetPregain());
   ms->SetSoftclip(project_->GetSoftclip(), project_->GetSoftclipGain());

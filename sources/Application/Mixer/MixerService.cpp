@@ -1,5 +1,6 @@
 #include "AudioWatch.h"
 #include "MixerService.h"
+#include "SendBus.h"
 #include "Application/Audio/DummyAudioOut.h"
 #include "Application/Model/Config.h"
 #include "Application/Model/Mixer.h"
@@ -35,6 +36,7 @@ bool MixerService::Init() {
 	for (int i=0;i<MAX_BUS_COUNT;i++) {
 		master_.Insert(bus_[i]);
 	}
+	master_.Insert(*SendBus::Get());   // trk2als: al final: lo que devuelven los efectos de envío
 
 	bool result = false;
 	if (out_) {

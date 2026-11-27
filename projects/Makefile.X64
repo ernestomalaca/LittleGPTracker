@@ -34,6 +34,8 @@ LIBS := $(ALSA_LIBS) $(JACK_LIBS) $(SDL_LIBS) -lpthread
 # trk2als: Ableton Link (C++17, se compila aparte; ver Services/Link)
 LINK_DIR := $(PWD)/../sources/Externals/link
 LinkBridge.o: CXXFLAGS := $(filter-out -std=gnu++03,$(CXXFLAGS)) -std=c++17 -DLINK_PLATFORM_LINUX=1 -I$(LINK_DIR)/include -I$(LINK_DIR)/modules/asio-standalone/asio/include
+# trk2als: la reverb de los envíos es de Mutable Instruments (C++11; TEST = su versión portátil, sin ensamblador de ARM de 32 bits)
+SendFx.o: CXXFLAGS := $(filter-out -std=gnu++03,$(CXXFLAGS)) -std=c++11 -DTEST -I$(PWD)/../sources/Externals/mutable
 
 OUTPUT := ../lgpt
 EXTENSION := x64

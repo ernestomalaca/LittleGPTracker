@@ -1,0 +1,7 @@
+Código de Mutable Instruments (Émilie Gillet), licencia MIT.
+Tomado tal cual de https://github.com/pichenettes/eurorack y
+https://github.com/pichenettes/stmlib (cada archivo conserva su aviso).
+
+Lo que usa Chancho 6:
+  rings/dsp/fx/reverb.h, fx_engine.h   la reverb de los envíos
+  stmlib/...                           lo que esos archivos necesitan

@@ -1,6 +1,7 @@
 
 #include "PlayerChannel.h"
 #include "Application/Mixer/MixerService.h"
+#include "Application/Mixer/SendBus.h"
 #include "Application/Model/Mixer.h"
 #include "Application/Player/SyncMaster.h"
 #include "Application/Utils/fixed.h"
@@ -22,6 +23,7 @@ PlayerChannel::PlayerChannel(int index) {
     lpfPrevOutput_[0] = lpfPrevOutput_[1] = i2fp(0);
     lpfAlpha_ = i2fp(0);
     lpfFreq_ = 0;
+    ecoSend_ = revSend_ = 0.0f;
 }
 
 PlayerChannel::~PlayerChannel() {
@@ -154,6 +156,9 @@ bool PlayerChannel::Render(fixed *buffer,int samplecount) {
          }
      }
      if (silent) muteGain_ = 0.0f ;
+     // trk2als: lo que esta pista manda a los efectos (ya con su volumen y su mute)
+     if (status && !silent && (ecoSend_ > 0.0f || revSend_ > 0.0f))
+         SendBus::Get()->Add(buffer, samplecount, ecoSend_, revSend_) ;
      return (status && !silent);
    } else {
        return false;

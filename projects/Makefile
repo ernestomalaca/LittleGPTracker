@@ -274,7 +274,7 @@ COMMONFILES := \
 	AudioOut.o \
 	DummyAudioOut.o PlayerChannel.o AudioFileStreamer.o \
 	MixBus.o \
-	MixerService.o PlayerMixer.o MidiKeys.o MidiCapture.o \
+	MixerService.o SendBus.o SendFx.o PlayerMixer.o MidiKeys.o MidiCapture.o \
 	Service.o ServiceRegistry.o SubService.o \
 	Variable.o VariableContainer.o WatchedVariable.o \
 	SoundFontPreset.o SoundFontManager.o SoundFontSample.o \
