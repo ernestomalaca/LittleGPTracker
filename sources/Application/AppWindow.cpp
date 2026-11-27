@@ -397,9 +397,15 @@ void AppWindow::Flush() {
     // pone): una franja con fondo encima de todo; tapa las filas 27 a 29
     std::string notice;
     bool noticeOn = SupportsShapes() && _currentView && _currentView->NoticeText(notice);
-    if (noticeOn)
+    // (el clip y el instrumento lo escriben encima de lo suyo, sin franja)
+    int noticeX = 0, noticeY = 0, noticeW = 36;
+    bool noticeOver = noticeOn && _currentView->NoticePos(noticeX, noticeY, noticeW);
+    static bool prevNoticeOver = false;
+    if (noticeOn && !noticeOver)
         for (int cell = 27 * 40; cell < 1200; cell++) _shapeCells[cell] = true;
     bool anyOn = shapesOn || layersOn || noticeOn;
+    if (noticeOver || prevNoticeOver) _shapesDirty = true;   // se repinta lo de abajo (y al quitarse)
+    prevNoticeOver = noticeOver;
 
     // Las celdas tapadas solo se redibujan si las figuras cambiaron o si cambió
     // el texto de alguna de ellas (entonces se repinta todo el bloque de figuras)
@@ -480,11 +486,13 @@ void AppWindow::Flush() {
     }
     if (noticeOn) {
         GUIColor bg = GetColor(CD_BACKGROUND), fg = GetColor(CD_NORMAL);
-        GUIRect band(0, 432, 640, 480);
-        GUIWindow::FillRoundRect(band, 0, bg);
+        if (!noticeOver) {
+            GUIRect band(0, 432, 640, 480);
+            GUIWindow::FillRoundRect(band, 0, bg);
+        }
         // siempre con la letra grande: si no cabe en una línea, en dos (se
         // corta entre palabras); más de dos, se recorta
-        const size_t W = 36;
+        const size_t W = noticeOver ? (size_t)(noticeW < 8 ? 8 : noticeW) : 36;
         std::string l1 = notice, l2;
         size_t nl = notice.find('\n');
         if (nl != std::string::npos) { l1 = notice.substr(0, nl); l2 = notice.substr(nl + 1); }
@@ -497,9 +505,27 @@ void AppWindow::Flush() {
         while (!l2.empty() && l2[0] == ' ') l2.erase(0, 1);
         if (l1.size() > W) l1 = l1.substr(0, W);
         if (l2.size() > W) l2 = l2.substr(0, W - 2) + "..";
+        if (noticeOver) {
+            // encima de lo que haya: la letra con un borde del color del fondo
+            // para que se lea sobre las notas o la onda
+            for (int line = 0; line < 2; line++) {
+                const std::string &t = line ? l2 : l1;
+                if (t.empty()) continue;
+                int ty = (line || l2.empty()) ? noticeY : noticeY - 20;
+                for (int dy = -2; dy <= 2; dy += 2)
+                    for (int dx = -2; dx <= 2; dx += 2) {
+                        if (!dx && !dy) continue;
+                        GUIPoint q(noticeX + dx, ty + dy);
+                        GUIWindow::BlendText(t.c_str(), q, bg, 1);
+                    }
+                GUIPoint q(noticeX, ty);
+                GUIWindow::BlendText(t.c_str(), q, fg, 1);
+            }
+        } else {
         GUIPoint p(44, l2.empty() ? 450 : 436);
         GUIWindow::BlendText(l1.c_str(), p, fg, 1);
         if (!l2.empty()) { p._y = 456; GUIWindow::BlendText(l2.c_str(), p, fg, 1); }
+        }
     }
     // trk2als: la ayuda va encima de todo (rejilla y figuras)
     if (_overlayOn && (_overlayDirty || count > 0 || (anyOn && _shapesDirty))) {

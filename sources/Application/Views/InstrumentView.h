@@ -71,6 +71,9 @@ private:
 	int gridSlot(UIField &f) ;
 	void gridBox(int k,int &x,int &y,int &w,int &h) ;
 	bool oneRow() ;
+public:
+	virtual bool NoticePos(int &x,int &y,int &maxChars) ;
+private:
 	FourCC drawParam() ;
 	int curveFromDraw_ ;   // la curva se abrió desde un dibujo (1 onda, 2 filtro, 10+ parte de la envolvente)
 	int shownRow() ;

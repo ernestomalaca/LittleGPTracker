@@ -745,7 +745,7 @@ void InstrumentView::fillSampleParameters() {
 			if (instrument->GetSimpler(SIP_S_ETAB)!=(fpage?1:0))
 				instrument->FindVariable(SIP_S_ETAB)->SetInt(fpage?1:0) ;
 			bool warped=instrument->GetSimpler(SIP_S_WARP)!=SW_OFF ;
-			const int GX[4]={1,11,21,31}, GY[2]={20,26} ;
+			const int GX[4]={1,11,21,31}, GY[3]={20,26,29} ;
 			#define GAT(k) (pt=GUIPoint(GX[(k)%4],GY[(k)/4]))
 			if (!strcmp(pn,"SAMPLER")) {
 				int r2=4 ;
@@ -774,6 +774,23 @@ void InstrumentView::fillSampleParameters() {
 					ADD(new UIIntVarField(GAT(6),*v,"DETUNE: %+dct",-50,50,1,10)) ;
 					v=instrument->FindVariable(SIP_S_PAN) ;
 					ADD(new UIIntVarField(GAT(7),*v,"PAN: %+d",-50,50,1,10)) ;
+					// tercera fila: lo de volumen que se dibuja en la onda (su
+					// envolvente en classic, sus fades en one-shot), con su caja
+					if (mode==SM_CLASSIC) {
+						v=instrument->FindVariable(SIP_S_ATK) ;
+						ADD(new UIIntVarField(GAT(8),*v,"ATTACK: %dms",0,5000,5,100)) ;
+						v=instrument->FindVariable(SIP_S_DEC) ;
+						ADD(new UIIntVarField(GAT(9),*v,"DECAY: %dms",0,10000,10,100)) ;
+						v=instrument->FindVariable(SIP_S_SUS) ;
+						ADD(new UIIntVarField(GAT(10),*v,"SUSTAIN: %ddB",-60,0,1,6)) ;
+						v=instrument->FindVariable(SIP_S_REL) ;
+						ADD(new UIIntVarField(GAT(11),*v,"RELEASE: %dms",0,10000,10,100)) ;
+					} else if (mode==SM_ONESHOT) {
+						v=instrument->FindVariable(SIP_S_FIN) ;
+						ADD(new UIIntVarField(GAT(8),*v,"FADE IN: %dms",0,2000,5,50)) ;
+						v=instrument->FindVariable(SIP_S_FOUT) ;
+						ADD(new UIIntVarField(GAT(9),*v,"FADE OUT: %dms",0,2000,5,50)) ;
+					}
 				} else {   // multicapa: el tono arriba
 					r2=0 ;
 					v=instrument->FindVariable(SIP_S_TRANSP) ;
@@ -1839,6 +1856,15 @@ static const int GRID_TABS_Y0=250, GRID_Y0=284, GRID_W=150, GRID_H=92, GRID_GAP=
 #define GRID_TABS_Y (oneRow()?346:GRID_TABS_Y0)
 #define GRID_Y (oneRow()?380:GRID_Y0)
 
+// trk2als: los avisos, abajo a la izquierda de la onda (escritos encima)
+bool InstrumentView::NoticePos(int &x,int &y,int &maxChars) {
+	if (!gridMode_) return false ;
+	if (kitMode_) { x=316 ; y=40+294-24 ; maxChars=19 ; return true ; }   // la onda del pad
+	int H=oneRow()?282:186 ;
+	x=24 ; y=48+H-24 ; maxChars=36 ;
+	return true ;
+}
+
 bool InstrumentView::oneRow() {
 	return gridMode_ && !audioMode_ && (simplerView_ || kitMode_) ;
 }
@@ -1866,7 +1892,7 @@ int InstrumentView::gridSlot(UIField &f) {
 	int col=(p._x-1)/10 ;
 	if (col<0) col=0 ;
 	if (col>3) col=3 ;
-	return col+((p._y>=26)?4:0) ;
+	return col+((p._y>=29)?8:(p._y>=26)?4:0) ;
 }
 
 void InstrumentView::gridBox(int k,int &x,int &y,int &w,int &h) {
@@ -1957,9 +1983,9 @@ void InstrumentView::drawGrid() {
 		snprintf(fn,sizeof(fn),"%s %d%%",flagID==SIP_S_START?"INICIO":"FIN",current_->FindVariable(flagID)->GetInt()) ;
 		DrawText(640-10-14-12-16*int(strlen(fn)),GRID_TABS_Y+6,fn,fg,1) ;
 	}
-	bool used[8]={false,false,false,false,false,false,false,false} ;
+	bool used[12]={false,false,false,false,false,false,false,false,false,false,false,false} ;
 	int row=shownRow() ;
-	bool rows[2]={false,false} ;
+	bool rows[3]={false,false,false} ;
 	IteratorPtr<UIField> it(T_SimpleList<UIField>::GetIterator()) ;
 	for (it->Begin();!it->IsDone();it->Next()) {
 		UIField &f=it->CurrentItem() ;
@@ -2081,8 +2107,9 @@ void InstrumentView::drawGrid() {
 	// hay otra fila abajito (o arriba): dos rayitas, encendida la que se ve
 	if (row>=0 && rows[0] && rows[1]) {
 		int ix=drawEditing()?640-10-14:640-10-16*3-26 ;
-		for (int r=0;r<2;r++)
-			FillRect(ix,GRID_TABS_Y+7+r*9,14,5,(r==row)?fg:Mix(bg,fg,30),2) ;
+		int nr=rows[2]?3:2 ;
+		for (int r=0;r<nr;r++)
+			FillRect(ix,GRID_TABS_Y+(nr==3?4:7)+r*(nr==3?8:9),14,5,(r==row)?fg:Mix(bg,fg,30),2) ;
 	}
 }
 

@@ -1443,6 +1443,14 @@ void ClipView::handleButton(unsigned short mask, bool pressed) {
  dibujo
  ************************************************************/
 
+// trk2als: los avisos, a la altura de la última fila de notas (escritos encima)
+bool ClipView::NoticePos(int &x, int &y, int &maxChars) {
+    x = GRID_X + 8;
+    y = GRID_Y + ROWS * ROW_H - 20;
+    maxChars = (16 * STEP_W - 16) / 16;
+    return true;
+}
+
 void ClipView::DrawView() {
     Clear();
     ClearShapes();

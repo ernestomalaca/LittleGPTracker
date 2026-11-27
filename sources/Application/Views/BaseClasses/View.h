@@ -165,6 +165,9 @@ class View : public Observable {
     // trk2als: el aviso ya pasó y hay que redibujar para quitarlo (una vez)
     bool NoticeExpired();
     bool NoticeText(std::string &out);
+    // trk2als: dónde va el aviso en esta pantalla (true: escrito encima, sin
+    // franja, con su última línea en x,y y a lo más maxChars por línea)
+    virtual bool NoticePos(int &x, int &y, int &maxChars) { return false; }
     // trk2als: el color de cada pista (config.xml: TRACKCOLORS)
     GUIColor TrackColor(int track);
 

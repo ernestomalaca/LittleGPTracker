@@ -18,6 +18,7 @@ class ClipView : public View {
     ~ClipView();
     virtual void ProcessButtonMask(unsigned short mask, bool pressed);
     virtual void DrawView();
+    virtual bool NoticePos(int &x, int &y, int &maxChars);
     virtual void OnPlayerUpdate(PlayerEventType, unsigned int tick = 0);
     virtual void OnFocus();
     virtual bool WantsRawButtons() { return true; }
