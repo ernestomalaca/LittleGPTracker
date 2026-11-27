@@ -31,7 +31,10 @@ static int g_gridX = 64, g_stepW = 35;
 #define VEL_H 32
 
 static bool byStart(const ClipView::Note &a, const ClipView::Note &b) {
-    return a.start < b.start;
+    // trk2als: las que empiezan juntas, por altura: que un acorde no cambie de
+    // orden cada vez que se guarda
+    if (a.start != b.start) return a.start < b.start;
+    return a.pitch < b.pitch;
 }
 
 static bool isBlack(int pitch) {
@@ -47,6 +50,7 @@ ClipView::ClipView(GUIWindow &w, ViewData *viewData) : View(w, viewData) {
     lastVel_ = 100;
     aUsed_ = xUsed_ = bUsed_ = false;
     auditioning_ = false;
+    audOffAt_ = 0; audNote_ = -1; audCh_ = 0;
     playStep_ = -1;
     copyStep_ = copyPitch_ = 0;
     marking_ = false;
@@ -741,6 +745,7 @@ void ClipView::message(const char *fmt, int n) {
 }
 
 void ClipView::AnimationUpdate() {
+    if (audOffAt_ && System::GetInstance()->GetClock() >= audOffAt_) auditionOff();   // la nota de prueba se suelta sola
     if (HasModal()) return;   // no borrar la ventanita (se dibuja encima)
     if (!msg_.empty() && System::GetInstance()->GetClock() - msgTime_ > 1500) {
         msg_.clear();
@@ -828,9 +833,10 @@ void ClipView::changeVelocity(int d) {
         lastVel_ = n.vel;
     }
     if (!marking_) cursorStep_ = notes[idx[0]].start;
+    int shown = notes[idx[0]].vel;   // antes de guardar: al guardar se reordenan
     writeNotes(notes);
     char m[32];
-    if (idx.size() == 1) snprintf(m, sizeof(m), "Velocity %d", notes[idx[0]].vel);
+    if (idx.size() == 1) snprintf(m, sizeof(m), "Velocity %d", shown);
     else snprintf(m, sizeof(m), "Velocity %d notas", int(idx.size()));
     message(m);
 }
@@ -1046,18 +1052,52 @@ void ClipView::audition(int step) {
         player->PreviewNote(viewData_->songX_, k, cursorPitch_);
         return;
     }
-    viewData_->chainRow_ = step / 16;
-    viewData_->phraseCurPos_ = step % 16;
-    if (player->IsRunning()) player->Stop();
-    player->OnStartButton(PM_AUDITION, viewData_->songX_, false, viewData_->chainRow_);
-    auditioning_ = true;
+    // trk2als: lo demás: la nota del cursor, un momento, con el instrumento de
+    // la pista (antes pedía un arranque que con la Session en vivo no hace nada:
+    // no se oía)
+    int owner = viewData_->project_->GetTrackInstrument(viewData_->songX_);
+    if (owner < 0) return;
+    I_Instrument *in = viewData_->project_->GetInstrumentBank()->GetInstrument(owner);
+    if (!in) return;
+    auditionOff();
+    audCh_ = viewData_->songX_;
+    audNote_ = cursorPitch_;
+    MixerService::GetInstance()->Lock();
+    player->LiveNoteOn(audCh_, in, audNote_, lastVel_ > 0 ? lastVel_ : 100);
+    MixerService::GetInstance()->Unlock();
+    audOffAt_ = System::GetInstance()->GetClock() + 350;
+}
+
+void ClipView::auditionOff() {
+    if (!audOffAt_) return;
+    audOffAt_ = 0;
+    MixerService::GetInstance()->Lock();
+    Player::GetInstance()->LiveNoteOff(audCh_, audNote_);
+    MixerService::GetInstance()->Unlock();
 }
 
 void ClipView::stopAudition() {
+    auditionOff();
     if (!auditioning_) return;
     auditioning_ = false;
     Player *player = Player::GetInstance();
     if (viewData_->playMode_ == PM_AUDITION && player->IsRunning()) player->Stop();
+}
+
+// trk2als: el candado: B + abajo deja el clip dando vueltas solo en el compás
+// del cursor (para editarlo a gusto); B + arriba lo quita y vuelve a sonar todo
+void ClipView::lockPage(bool on) {
+    Song *song = viewData_->song_;
+    int chain = viewData_->currentChain_;
+    if (pages() == 0) return;
+    int page = cursorStep_ / 16;
+    if (on) {
+        song->SetClipLoop(chain, page, page);
+        message("Candado: solo el compás %d", page + 1);
+    } else {
+        song->ClearClipLoop(chain);
+        message("Sin candado: suena todo el clip");
+    }
 }
 
 void ClipView::switchView(ViewType vt) {
@@ -1271,7 +1311,7 @@ void ClipView::handleButton(unsigned short mask, bool pressed) {
             pasteNote();
         }
         if (!(mask & EPBM_A)) {
-            stopAudition();
+            if (auditioning_) stopAudition();   // la nota de prueba se suelta sola (no al soltar la flecha)
             if (aPending_ && marking_) {   // A sola con algo marcado: cancela
                 marking_ = false;
                 message("Marca cancelada");
@@ -1415,6 +1455,8 @@ void ClipView::handleButton(unsigned short mask, bool pressed) {
             if (dt > 0 && cursorStep_ / 16 + 1 >= pages()) addPage();
             moveCursor(dt * 16, 0);
         }
+        if (v == EPBM_DOWN) { bPending_ = false; lockPage(true); }    // el candado en este compás
+        if (v == EPBM_UP) { bPending_ = false; lockPage(false); }     // ... y fuera
         isDirty_ = true;
         return;
     }
@@ -1438,6 +1480,9 @@ void ClipView::handleButton(unsigned short mask, bool pressed) {
     if (dt || dp) moveCursor(dt, dp);
     if (v == EPBM_L) moveCursor(0, -12);
     if (v == EPBM_R) moveCursor(0, 12);
+    // trk2als: al subir o bajar se oye la nota donde quedó el cursor (para
+    // probarla antes de ponerla); a los lados no
+    if ((dp && !dt) || v == EPBM_L || v == EPBM_R) audition(cursorStep_);
     isDirty_ = true;
 }
 
@@ -1749,7 +1794,7 @@ void ClipView::DrawView() {
         drawHelpBar("flechas:marcar;B:copiar;B+A:cortar;A+<>:mover;SEL+A:duplicar;A:salir");
     else
         drawHelpBar(pasting_ ? "suelta A:pegar;flechas:acomodar;B:cancelar"
-                             : "A:nota;X:largo/vel;B+A:cortar;SEL+A:pegar;SEL,B:marcar;START:tocar / parar la sesión;SEL+L/R:deshacer / rehacer;SEL+<>:otra pantalla");
+                             : "A:nota;^v:se oye la nota;X:largo/vel;B+A:cortar;SEL+A:pegar;SEL,B:marcar;B+<>:de compás en compás;B+v:candado en este compás;B+^:quitar el candado;B+L/R:el loop a mano;START:tocar / parar la sesión;SEL+L/R:deshacer / rehacer;SEL+<>:otra pantalla");
 }
 
 void ClipView::OnPlayerUpdate(PlayerEventType, unsigned int) {
@@ -2453,6 +2498,8 @@ bool ClipView::curveButton(unsigned short mask, unsigned short v) {
         if (v == EPBM_A) { curveBPending_ = false; curveBAPending_ = true; curveStand_ = false; return true; }   // B + A: borra al soltar
         if ((mask & EPBM_A) && v == EPBM_UP) { curveBAPending_ = false; askDeletePage(); return true; }   // B + A + ↑: borrar compás
         if ((mask & EPBM_A) && v == EPBM_DOWN) { curveBAPending_ = false; askCrop(); return true; }      // B + A + ↓: recortar
+        if (v == EPBM_DOWN && !(mask & EPBM_A)) { curveBPending_ = false; lockPage(true); return true; }    // el candado, como en las notas
+        if (v == EPBM_UP && !(mask & EPBM_A)) { curveBPending_ = false; lockPage(false); return true; }
         if (v == EPBM_L) { curveBPending_ = false; loopButton(true); return true; }    // B + L / R: el loop, como en las notas
         if (v == EPBM_R) { curveBPending_ = false; loopButton(false); return true; }
         if (dt) {   // de compás en compás (y suelta el nodo)
@@ -2752,5 +2799,5 @@ void ClipView::drawCurves() {
         FillRect(GRID_X + (playStep_ - p0) * STEP_W, GRID_Y - 2, 2, gh + 4, play);
 
     View::EnableNotification();   // el aviso, abajo
-    drawHelpBar("A:pone el punto y lo toma;flechas:lo mueven (tomado);B:lo suelta;L/R:de punto en punto;B+A:borrar el punto;X:rampa / escalón;SEL,B:marcar varios;B+<>:de compás en compás;B+L/R:el loop;SEL+L/R:deshacer / rehacer;A+L:volver al instrumento;SEL+<>:otra pantalla");
+    drawHelpBar("A:pone el punto y lo toma;flechas:lo mueven (tomado);B:lo suelta;L/R:de punto en punto;B+A:borrar el punto;X:rampa / escalón;SEL,B:marcar varios;B+<>:de compás en compás;B+v:candado en este compás;B+^:quitar el candado;SEL+L/R:deshacer / rehacer;A+L:volver al instrumento;SEL+<>:otra pantalla");
 }

@@ -177,6 +177,10 @@ class ClipView : public View {
     int lastLen_, lastVel_;
     bool aUsed_, xUsed_, bUsed_;
     bool auditioning_;
+    unsigned long audOffAt_;   // trk2als: la nota de prueba: cuándo se suelta
+    int audNote_, audCh_;
+    void auditionOff();
+    void lockPage(bool on);    // el candado: que el clip dé vueltas solo en este compás
     int playStep_;
     std::vector<Note> clipboard_;   // lo copiado o cortado
     int copyStep_, copyPitch_;      // dónde estaba el cursor al copiar
