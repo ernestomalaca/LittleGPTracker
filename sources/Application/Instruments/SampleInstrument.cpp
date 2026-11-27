@@ -34,6 +34,10 @@ bool SampleInstrument::syncRequest_[SONG_CHANNEL_COUNT]= {false,false,false,fals
 
 unsigned long SampleInstrument::sliceClock_=0 ;
 
+#include "PlaitsVoice.h"
+// trk2als: las voces del sinte, una por voz de render (al primer uso)
+static PlaitsVoice *synthVoices[SI_VOICE_COUNT] ;
+
 // trk2als: el "sample" del sinte cuando el Sampler está vacío: silencio
 namespace {
 class SilentSource : public SoundSource {
@@ -1262,6 +1266,11 @@ void SampleInstrument::startTail(int channel) {
     tp->activeUpdaters_.clear() ;   // los comandos de la phrase siguen con la nota nueva
     memcpy(feedback_[t],feedback_[channel],sizeof(feedback_[t])) ;
     copy_filter(channel,t) ;
+    if (t<SI_VOICE_COUNT && channel<SI_VOICE_COUNT) {   // el sinte también: la nota que sonaba sigue con sus osciladores (si no, click)
+        PlaitsVoice *pv=synthVoices[t] ;
+        synthVoices[t]=synthVoices[channel] ;
+        synthVoices[channel]=pv ;
+    }
     WarpStretch *ws=stretch_[t] ;   // el time-stretch con su historia se va con la cola
     stretch_[t]=stretch_[channel] ;
     stretch_[channel]=ws ;
@@ -1988,18 +1997,23 @@ bool SampleInstrument::renderVoiceNow(int channel, fixed *buffer, int size, int 
  trk2als: el sinte (Plaits, de Mutable Instruments)
  ************************************************************/
 
-#include "PlaitsVoice.h"
-
 void SampleInstrument::renderSynth(int channel,renderParams *rp,int size,int ch) {
-	static PlaitsVoice *voices[SI_VOICE_COUNT] ;   // una por voz, al primer uso
+	PlaitsVoice **voices=synthVoices ;   // una por voz, al primer uso
 	if (channel<0 || channel>=SI_VOICE_COUNT) return ;
 	if (!voices[channel]) voices[channel]=new PlaitsVoice() ;
 	PlaitsVoice *v=voices[channel] ;
+	bool fresh=rp->synthTrig_ ;
 	if (rp->synthTrig_) { v->Trigger() ; rp->synthTrig_=false ; }
 	if (ch<1) ch=1 ;
 	if ((int)warpOut_.size()<(size+2)*ch) warpOut_.resize((size+2)*ch) ;
 	v->Render(rp->synthNote_,GetSimpler(SIP_S_SENG),GetSimpler(SIP_S_SHARM)/100.0f,
 	          GetSimpler(SIP_S_STIMB)/100.0f,GetSimpler(SIP_S_SMORPH)/100.0f,&warpOut_[0],size,ch) ;
+	// la nota nueva entra en 2 ms: los osciladores corren libres y con el
+	// ataque en 0 arrancaban a media onda (click)
+	if (fresh) {
+		int n=size<88?size:88 ;
+		for (int i=0;i<n;i++) warpOut_[i*ch]=short(int(warpOut_[i*ch])*i/n) ;
+	}
 	for (int i=0;i<size;i++) for (int c=1;c<ch;c++) warpOut_[i*ch+c]=warpOut_[i*ch] ;
 	for (int c=0;c<ch;c++) {
 		warpOut_[size*ch+c]=warpOut_[(size-1)*ch+c] ;
