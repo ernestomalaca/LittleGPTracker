@@ -30,6 +30,7 @@ ViewData::ViewData(Project *project) {
 	curveFmt_[0]=0 ;
 	curveFocus_=0 ;
 	curveLastID_=0 ;
+	kitPitch_=-1 ; kitPitchCh_=-1 ;
 	currentGroove_=0 ;
 	mixerCol_=0 ;
 	mixerRow_=0 ;

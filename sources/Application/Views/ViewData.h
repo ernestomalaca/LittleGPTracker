@@ -79,6 +79,7 @@ public:
 	int curveListN_ ;
 	unsigned int curveFocus_ ;  // al volver al instrumento: el foco ahí
 	unsigned int curveLastID_ ; // la última curva (Select tocado en el clip vuelve a ella)
+	int kitPitch_, kitPitchCh_ ; // trk2als: kit: el pad en el que estabas (clip <-> instrumento), y de qué pista
 
 	int currentTable_ ;			// .Current edited table
 

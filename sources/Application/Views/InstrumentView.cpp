@@ -3191,6 +3191,13 @@ void InstrumentView::OnFocus() {
 		viewData_->curveFocus_=0 ;
 	}
 	onInstrumentChange();
+	// trk2als: kit: vienes del clip: en el pad de la fila donde estabas
+	if (kitMode_ && current_ && viewData_->kitPitch_>=0 && viewData_->kitPitchCh_==viewData_->songX_) {
+		int sel=viewData_->kitPitch_-((SampleInstrument *)current_)->KitBase() ;
+		if (sel>=0 && sel<16 && sel!=padSelVar_.GetInt()) { padSelVar_.SetInt(sel) ; kitSync() ; }
+	}
+	// ... y de vuelta: el clip se abre en la fila del pad que dejes aquí
+	viewData_->kitPitch_=kitMode_?padNote():-1 ; viewData_->kitPitchCh_=viewData_->songX_ ;
 	// trk2als: al Sampler se llega parado en su dibujo (la onda, o la
 	// envolvente de la pestaña): lo fuerte se edita ahí; Select abre las cajas.
 	// (De regreso de una curva se queda en la caja de ese parámetro)
@@ -4162,6 +4169,7 @@ void InstrumentView::kitSync() {
 	if (!kitMode_ || !current_ || current_->GetType()!=IT_SAMPLE) return ;
 	SampleInstrument *si=(SampleInstrument *)current_ ;
 	if (padSelVar_.GetInt()!=padShown_) {   // otro pad: se oye, como en el Move
+		viewData_->kitPitch_=padNote() ; viewData_->kitPitchCh_=viewData_->songX_ ;   // (el clip, en esa fila)
 		loadPadVars() ;
 		if (!gridMode_) previewPad() ;   // con cajas: suena con A, no al pasar
 		isDirty_=true ;
@@ -4961,6 +4969,7 @@ bool InstrumentView::openCurve() {
 		envNoteOff() ;
 		envEdit_=false ; filtEdit_=false ;
 	}
+	if (kitMode_) { viewData_->kitPitch_=padNote() ; viewData_->kitPitchCh_=viewData_->songX_ ; }   // el clip, en la fila de este pad
 	ViewType vt=VT_CLIP ;
 	ViewEvent ve(VET_SWITCH_VIEW,&vt) ;
 	SetChanged() ;
