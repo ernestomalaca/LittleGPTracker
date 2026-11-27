@@ -2533,7 +2533,7 @@ void SongView::DrawView() {
     if (blockGrid()) {
         drawBlockGrid();
         if (rowMode_)
-            drawHelpBar("START:lanzar la fila;SEL+START:detener todo;>:a las pistas");
+            drawHelpBar("START:lanzar la fila;SEL+START:detener todo;B+Y:repeticiones sí / no;>:a las pistas");
         else if (sesMarking_)
             drawHelpBar("flechas:marcar;B:copiar;B+A:cortar;A+flechas:mover;SEL+A:duplicar;SEL,B:escenas;A:salir");
         else if (sesPasting_)
@@ -2684,7 +2684,7 @@ void SongView::DrawView() {
     // They will always show the empty dashes and smoothly decay when paused
     DrawVuBars();
     if (rowMode_)
-        drawHelpBar("START:lanzar la fila;SEL+START:detener todo;>:a las pistas");
+        drawHelpBar("START:lanzar la fila;SEL+START:detener todo;B+Y:repeticiones sí / no;>:a las pistas");
     else
     drawHelpBar(headerMode_ ? "A:sonido / agregar;B+A:borrar pista;<>:pista;v:a los clips"
                             : "A:poner/abrir;A+<>:elegir;B+A:borrar;SEL+<>:pantalla;SEL+L:deshacer;SEL+R:rehacer");

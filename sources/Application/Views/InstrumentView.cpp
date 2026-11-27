@@ -1869,24 +1869,6 @@ void InstrumentView::drawGrid() {
 		tx+=w+8 ;
 	}
 	if (pageCount_>1 && !drawEditing()) DrawText(640-10-16*3,GRID_TABS_Y+6,"L·R",dim,1) ;
-	// donde Select entra a editar algo, se dice
-	{
-		bool can=false ;
-		if (kitMode_) can=(page_[1]==0) ;
-		else if (!audioMode_ && simplerView_ && pageCount_>0) {
-			const char *pn=pageName_[page_[1]] ;
-			can=!strcmp(pn,"FILTRO") || !strcmp(pn,"AMP") || (!sfMode_ && !strcmp(pn,"SAMPLER")) ;
-		}
-		// 'edita' = abre las cajas; 'sale' = de las cajas de vuelta (al dibujo / a los pads)
-		bool in=kitMode_?padEdit_:!drawEditing() ;
-		if (can) {
-			const char *t=in?"SELECT sale":"SELECT edita" ;
-			int tw=16*int(strlen(t)) ;
-			int rx=drawEditing()?640-10-tw:640-10-16*3-24-tw ;
-			DrawText(rx,GRID_TABS_Y+6,t,in?fg:dim,1) ;
-		}
-	}
-
 	bool used[8]={false,false,false,false,false,false,false,false} ;
 	IteratorPtr<UIField> it(T_SimpleList<UIField>::GetIterator()) ;
 	for (it->Begin();!it->IsDone();it->Next()) {
@@ -2033,7 +2015,37 @@ void InstrumentView::drawWaveform() {
 		if (!nm.empty()) ctx=nm ;
 	} else if (!topInfo_.empty()) ctx+="  "+topInfo_ ;
 	drawTopBar(TAB_INST,ctx.c_str()) ;
-	if (gridMode_) { drawAutoMarks() ; return ; }
+	if (gridMode_) {
+		// trk2als: la ayuda (L2 + R2) de la rejilla: lo que hacen los botones
+		// donde se está ahora. Atajos de hasta 7 letras, para que quepa el texto
+		const char *gh ;
+		bool rec=Player::GetInstance()->AutoRecState()!=0 ;
+		if (kitMode_) {
+			UIField *kf=GetFocus() ;
+			bool onPad=kf && !kf->IsStatic() && ((UIIntVarField *)kf)->GetVariableID()==IV_PADSEL ;
+			if (onPad) gh=(page_[1]==0)
+				? "flechas:de pad en pad;A:tocar el pad;A larga:cambiar su sonido;A+^v:volumen del pad;A+<>:largo del pad;B:copiar el pad;B+A:cortarlo;SEL+A:pegarlo;SEL:las cajas del pad;L/R:otra pestaña;SEL+<>:otra pantalla"
+				: "flechas:de pad en pad;A:tocar el pad;A larga:cambiar su sonido;A+^v:volumen del pad;A+<>:largo del pad;B:copiar el pad;B+A:cortarlo;SEL+A:pegarlo;v:a las cajas;L/R:otra pestaña;SEL+<>:otra pantalla" ;
+			else gh=(page_[1]==0)
+				? "flechas:mover la cruz;A+<>:cambia el valor;A+^v:lo cambia de a mucho;Y+<>^v:otro pad, misma caja;SEL:de vuelta a los pads;L/R:otra pestaña;SEL+<>:otra pantalla"
+				: "flechas:mover la cruz;A+<>:cambia el valor;A+^v:lo cambia de a mucho;Y+<>^v:otro pad;^:de vuelta a los pads;L/R:otra pestaña;SEL+<>:otra pantalla" ;
+		} else if (waveEdit_ && canMark()) {
+			gh="<>:mover el cursor;L/R:de rebanada en rebanada;A:pone o agarra la marca;A+<>:mueve la marca (suena);B+A:borra la marca;SEL,B:marcar varias;B+L/R:inicio / fin aquí;B+^v:zoom;START:tocar todo;L+START:rebanar al vuelo;^v:otro dibujo;SEL:a las cajas;SEL+L/R:deshacer / rehacer" ;
+		} else if (waveEdit_) {
+			gh="L/R:elige la bandera;<>:mueve la bandera;A+<>:fade o envolvente;A+^v:sustain;B+<>:salto grande;B+^v:zoom;B+A:bandera a su lugar;^v:otro dibujo;START:tocar;R2:capturar lo movido;SEL:a las cajas;SEL+L/R:deshacer / rehacer;SEL+<>:otra pantalla" ;
+		} else if (filtEdit_) {
+			gh=rec ? "<>:corte (se graba);A+<>:corte, fino;A+^v:resonancia;L/R:tipo: LP, BP, HP;^v:otro dibujo;Y+START:dejar de grabar;SEL:a las cajas"
+			       : "<>:corte;A+<>:corte, fino;A+^v:resonancia;L/R:tipo: LP, BP, HP;^v:otro dibujo;START:tocar;R2:capturar lo movido;Y+START:grabar;SEL:a las cajas;SEL+<>:otra pantalla" ;
+		} else if (envEdit_) {
+			gh="L/R:elige la parte;<>:su tiempo;A+<>:su tiempo, fino;A+^v:sustain;^v:otro dibujo;START:tocar;R2:capturar lo movido;Y+START:grabar;SEL:a las cajas;SEL+<>:otra pantalla" ;
+		} else {
+			gh=rec ? "flechas:mover la cruz;A+<>:mantenida, se graba;L/R:otra pestaña;Y+START:dejar de grabar;SEL:al dibujo"
+			       : "flechas:mover la cruz;A+<>:cambia el valor;A+^v:lo cambia de a mucho;L/R:otra pestaña;A+L:su curva en el clip;B+A:de fábrica / sin curva;R2:capturar lo movido;Y+START:grabar;SEL:al dibujo;SEL+<>:otra pantalla" ;
+		}
+		drawHelpBar(gh) ;
+		drawAutoMarks() ;
+		return ;
+	}
 	const char *help=helpText_?helpText_:"A+<>:valor;A+^v:valor x16;SEL+<>:pantalla" ;
 	if (kitMode_ && GetFocus() && !GetFocus()->IsStatic() &&
 	    isPadField(((UIIntVarField *)GetFocus())->GetVariableID()))

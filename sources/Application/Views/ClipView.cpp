@@ -1743,7 +1743,7 @@ void ClipView::DrawView() {
         drawHelpBar("flechas:marcar;B:copiar;B+A:cortar;A+<>:mover;SEL+A:duplicar;A:salir");
     else
         drawHelpBar(pasting_ ? "suelta A:pegar;flechas:acomodar;B:cancelar"
-                             : "A:nota;X:largo/vel;B+A:cortar;SEL+A:pegar;SEL,B:marcar;SEL+L:deshacer");
+                             : "A:nota;X:largo/vel;B+A:cortar;SEL+A:pegar;SEL,B:marcar;START:tocar / parar la sesión;SEL+L/R:deshacer / rehacer;SEL+<>:otra pantalla");
 }
 
 void ClipView::OnPlayerUpdate(PlayerEventType, unsigned int) {
@@ -2730,5 +2730,5 @@ void ClipView::drawCurves() {
         FillRect(GRID_X + (playStep_ - p0) * STEP_W, GRID_Y - 2, 2, gh + 4, play);
 
     View::EnableNotification();   // el aviso, abajo
-    drawHelpBar("A:nodo;A+flechas:mover;B+A:borrar;X:forma;Y+<>:nodos;SEL:notas;A+L:volver");
+    drawHelpBar("A:pone el punto y lo toma;flechas:lo mueven (tomado);B:lo suelta;L/R:de punto en punto;B+A:borrar el punto;X:rampa / escalón;SEL,B:marcar varios;B+<>:de compás en compás;B+L/R:el loop;SEL+L/R:deshacer / rehacer;A+L:volver al instrumento;SEL+<>:otra pantalla");
 }
