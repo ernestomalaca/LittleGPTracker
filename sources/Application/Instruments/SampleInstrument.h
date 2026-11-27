@@ -299,6 +299,9 @@ public:
 	   // El Player avisa si el canal es pista de audio: entonces la voz toca en
 	   // looper sync sin cambiar el loop mode del instrumento (que puede usarse en MIDI)
 	   static void SetChannelSync(int channel, bool sync) ;
+	   // trk2als: el reloj del reproductor (en rebanadas de 1/6 de paso), para
+	   // saber si una nota acabó justo donde empieza la siguiente (glide)
+	   static unsigned long sliceClock_ ;
 	   int GetVolume() ;
 	   void SetVolume(int) ;
 	   int GetSampleSize(int channel=-1) ;

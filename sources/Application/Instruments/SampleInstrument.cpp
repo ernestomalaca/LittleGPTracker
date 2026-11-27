@@ -32,6 +32,8 @@ bool SampleInstrument::useDirtyDownsampling_ = false;
 
 bool SampleInstrument::syncRequest_[SONG_CHANNEL_COUNT]= {false,false,false,false,false,false,false,false} ;
 
+unsigned long SampleInstrument::sliceClock_=0 ;
+
 void SampleInstrument::SetChannelSync(int channel, bool sync) {
 	if (channel>=0 && channel<SONG_CHANNEL_COUNT) syncRequest_[channel]=sync ;
 }
@@ -396,7 +398,11 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
      // de cada nota el reproductor siempre suelta la que hubiera, así que una
      // sola soltada = seguía apretada; dos = ya había terminado (aunque su
      // cola o su sample sigan sonando) y entonces no se desliza
-     bool legato=(rp->stopsSinceStart_<=1) ;
+     // ... salvo que acabara justo donde empieza esta (notas pegadas, sin
+     // hueco): eso también es legato
+     bool legato=(rp->stopsSinceStart_<=1) ||
+                 (rp->stopsSinceStart_==2 && sliceClock_-rp->stopSlice_<=1 &&
+                  System::GetInstance()->GetClock()-rp->stopMs_<=60) ;
      rp->stopsSinceStart_=0 ;
      {
          static int dbgG = -1 ;
@@ -969,6 +975,7 @@ void SampleInstrument::Stop(int channel) {
 
 	 renderParams *rp=renderParams_+channel ;
 	 running_=false ;
+	 if (rp->stopsSinceStart_==0) { rp->stopSlice_=sliceClock_ ; rp->stopMs_=System::GetInstance()->GetClock() ; }
 	 rp->stopsSinceStart_++ ;
 	 // trk2als: el Sampler suelta la nota con su release (o la deja sonar
 	 // completa en modo trigger)

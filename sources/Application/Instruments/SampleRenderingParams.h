@@ -65,6 +65,7 @@ struct renderParams {
     bool gate_ ;             // false: la nota suena completa aunque se suelte
     float synthNote_ ;       // trk2als: sinte: la nota (con transposición y desafinación)
     bool synthTrig_ ;        // sinte: nota nueva, hay que dispararlo
+    unsigned long stopSlice_, stopMs_ ;   // trk2als: cuándo se soltó (la primera vez desde que empezó)
     int stopsSinceStart_ ;   // trk2als: cuántas veces se soltó la nota desde que empezó (glide: solo si seguía apretada)
     bool auditionTail_ ;     // trk2als: escucha del final (fade out): sin el fade in
     fixed glideFrom_ ;       // velocidad de la nota anterior

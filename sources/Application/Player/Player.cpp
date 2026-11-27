@@ -723,6 +723,7 @@ void Player::Update(Observable &o,I_ObservableData *d) {
         sliceAtMs_ = System::GetInstance()->GetClock();
         updateAutomation();   // trk2als: las lanes de los clips
         sliceCount_++;
+        SampleInstrument::sliceClock_ = sliceCount_;
 
         // trk2als: metrónomo, un click en cada tiempo (4 pasos)
         if (firstPlayCycle_) { metroStep_ = 0; barSlice_ = 0; if (mode_ == PM_LIVE) sceneTick(); }
