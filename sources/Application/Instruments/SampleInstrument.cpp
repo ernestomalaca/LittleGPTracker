@@ -388,6 +388,17 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
      bool wasSounding=rp->simpler_ && !rp->finished_ && rp->envStage_<4 &&
                      voiceClock_[channel]!=0 ;
      fixed prevSpeed=rp->speed_ ;
+     // trk2als: glide solo de una nota ENCIMADA con la anterior (legato). Antes
+     // de cada nota el reproductor siempre suelta la que hubiera, así que una
+     // sola soltada = seguía apretada; dos = ya había terminado (aunque su
+     // cola o su sample sigan sonando) y entonces no se desliza
+     bool legato=(rp->stopsSinceStart_<=1) ;
+     rp->stopsSinceStart_=0 ;
+     {
+         static int dbgG = -1 ;
+         if (dbgG < 0) dbgG = getenv("DBGTAIL") ? 1 : 0 ;
+         if (dbgG && channel<SONG_CHANNEL_COUNT) fprintf(stderr,"[DIAG] glide: sonaba=%d legato=%d\n",(int)wasSounding,(int)legato) ;
+     }
      // trk2als: con 2 voces, la nota que sonaba sigue como cola (su release,
      // o completa en trigger) en vez de cortarse; con glide no: se desliza
      // trk2als: clip de audio que sigue sonando: pasa a la voz de cola y se
@@ -421,7 +432,7 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
          // se apaga en la cola (sin click) y solo el tono se desliza
          if (wasSounding) {
              // glide: solo en mono, y nunca entre rebanadas (como Live)
-             bool glide=GetSimpler(SIP_S_GLIDE)>0 && GetSimpler(SIP_S_POLY)<2 &&
+             bool glide=legato && GetSimpler(SIP_S_GLIDE)>0 && GetSimpler(SIP_S_POLY)<2 &&
                         (IsZoned() || GetSimpler(SIP_S_MODE)!=SM_SLICE) ;
              startTail(channel) ;
              toTail=true ;
@@ -626,7 +637,7 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 
     // trk2als: glide desde la nota anterior (si seguía sonando)
     rp->glideLeft_=0 ;
-    if (rp->simpler_ && wasSounding && GetSimpler(SIP_S_GLIDE)>0 && GetSimpler(SIP_S_POLY)<2 &&
+    if (rp->simpler_ && wasSounding && legato && GetSimpler(SIP_S_GLIDE)>0 && GetSimpler(SIP_S_POLY)<2 &&
         (IsZoned() || GetSimpler(SIP_S_MODE)!=SM_SLICE)) {
         rp->glideFrom_=prevSpeed ;
         rp->glideLen_=rp->glideLeft_=int(GetSimpler(SIP_S_GLIDE)*44.1f) ;
@@ -954,6 +965,7 @@ void SampleInstrument::Stop(int channel) {
 
 	 renderParams *rp=renderParams_+channel ;
 	 running_=false ;
+	 rp->stopsSinceStart_++ ;
 	 // trk2als: el Sampler suelta la nota con su release (o la deja sonar
 	 // completa en modo trigger)
 	 // trk2als: clip de audio con fade: se apaga en 10 ms en vez de cortarse
