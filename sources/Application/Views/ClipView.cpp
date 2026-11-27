@@ -57,6 +57,7 @@ ClipView::ClipView(GUIWindow &w, ViewData *viewData) : View(w, viewData) {
     bTapGhost_ = false;
     ghostCount_ = 0;
     followPage_ = -1;
+    curveNoFollow_ = false;
     msgTime_ = 0;
     chainShown_ = -1;
     pasting_ = false;
@@ -1149,6 +1150,7 @@ std::string ClipView::noteName(int pitch) {
 }
 
 void ClipView::OnFocus() {
+    curveNoFollow_ = false;
     checkScaleChange();   // trk2als
     if (chainShown_ != viewData_->currentChain_) {
         chainShown_ = viewData_->currentChain_;
@@ -1760,12 +1762,14 @@ void ClipView::OnPlayerUpdate(PlayerEventType, unsigned int) {
         step = viewData_->chainPlayPos_[ch] * 16 + viewData_->phrasePlayPos_[ch];
     }
     if (step != playStep_) {
+        if (playStep_ < 0 && step >= 0) curveNoFollow_ = false;   // play: vuelve a seguir
         playStep_ = step;
         // trk2als: follow (como en Live): la página sigue a lo que suena; si
         // te vas a otra página, se pausa hasta que vuelves a la que suena
         Variable *fv = viewData_->project_->FindVariable(VAR_FOLLOW);
         // (en la curva también, salvo con un nodo agarrado o marcando)
-        bool curveBusy = curveOn() && (curveGrab_ || curveStand_ || curveMarking_ || curvePasting_);
+        if (curveOn() && (curveGrab_ || curveMarking_ || curvePasting_)) curveNoFollow_ = true;
+        bool curveBusy = curveOn() && curveNoFollow_;
         if (step >= 0 && fv && fv->GetBool() && !marking_ && !pasting_ && !curveBusy) {
             int pp = step / 16, cp = cursorStep_ / 16;
             if (cp == pp) followPage_ = pp;
@@ -1773,7 +1777,7 @@ void ClipView::OnPlayerUpdate(PlayerEventType, unsigned int) {
                 cursorStep_ += (pp - cp) * 16;
                 if (cursorStep_ >= total()) cursorStep_ = total() - 1;
                 followPage_ = pp;
-                if (curveOn()) { curveSel_ = -1; curveSyncCursor(); }   // el punto: el valor de la curva ahí
+                if (curveOn()) { curveSel_ = -1; curveStand_ = false; }   // (la mira no brinca: se queda a su altura)
             }
         }
         DrawView();
@@ -1929,6 +1933,7 @@ void ClipView::curvePutNode() {
 
 // A sostenido + flechas: mover el nodo agarrado
 void ClipView::curveMoveNode(int dt, int dv, bool big) {
+    curveNoFollow_ = true;   // se movió un nodo: ya no sigue
     Clip &c = clip();
     AutoLane *l = c.FindLane(viewData_->curveID_, -1);
     int k = curveNodeAt(cursorStep_);
@@ -2369,6 +2374,9 @@ void ClipView::curveJump(int dt) {
 
 bool ClipView::curveButton(unsigned short mask, unsigned short v) {
     ViewData *d = viewData_;
+    // tocar algo de la curva (A: poner o agarrar un nodo): deja de seguir a lo
+    // que suena, hasta el siguiente play
+    if (mask & EPBM_A) curveNoFollow_ = true;
     if (v != EPBM_Y) curveYPending_ = false;   // Y + otra cosa ya no es "Y sola"
     {   // sostener una flecha acelera (1, 2, 3... hasta 6)
         unsigned long now = System::GetInstance()->GetClock();

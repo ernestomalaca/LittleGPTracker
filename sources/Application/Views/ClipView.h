@@ -108,6 +108,7 @@ class ClipView : public View {
   private:
     bool bTapGhost_;   // trk2als: B sola: olvidar lo tocado (la silueta de la captura)
     int ghostCount_;
+    bool curveNoFollow_;   // trk2als: en la curva se tocó algo: ya no sigue (hasta el siguiente play)
     int followPage_;   // trk2als: follow: la página que se va siguiendo (-1 = no)
     void ratchet(int d);
     void rampVel(int d);
