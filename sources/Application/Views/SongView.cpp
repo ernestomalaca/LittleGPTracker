@@ -1195,7 +1195,7 @@ void SongView::duplicateMark() {
     if (at < 0) { View::SetNotification("no hay lugar abajo"); return; }
     int skipped;
     int n = pasteCells(cells, r.Left(), at, skipped);
-    // la marca se va a la copia, para duplicar otra vez
+    // el cursor se va a la copia
     int dy = at - r.Top();
     clipboard_.y_ += dy;
     updateCursor(0, dy);
@@ -1474,8 +1474,11 @@ bool SongView::InterceptButton(unsigned short phys, unsigned short v, bool press
                 }
             } else if (v == EPBM_A && !repeat) {
                 if (sel) {
+                    // trk2als: al duplicar se suelta la marca: el cursor queda
+                    // en la copia (si no hubo lugar, la marca sigue)
+                    int before = clipboard_.y_;
                     duplicateMark();
-                    sesDupDone_ = true;
+                    if (clipboard_.y_ != before) endMark();
                 } else if (phys & EPBM_B) {              // B + A: corta
                     copyMark(sesClip_);
                     GUIRect r = markRect();
