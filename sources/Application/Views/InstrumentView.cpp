@@ -1357,10 +1357,10 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 	}
 	// A + L en un dibujo: la curva de lo que ahí se está moviendo
 	if (pressed && mask==(EPBM_A|EPBM_L) && drawEditing()) { openCurve() ; return ; }
+	// trk2als: automatización (también desde los dibujos del filtro)
+	if (pressed && mask==(EPBM_Y|EPBM_START)) { toggleAutoRec() ; return ; }
 	if (filtEdit_ && processFiltEdit(mask,pressed)) return ;
 	if (envEdit_ && processEnvEdit(mask,pressed)) return ;
-	// trk2als: automatización
-	if (pressed && mask==(EPBM_Y|EPBM_START)) { toggleAutoRec() ; return ; }
 	// A + gatillo L: la curva de este parámetro en el clip (si no se
 	// automatiza, o no hay clip, no pasa nada)
 	if (pressed && mask==(EPBM_A|EPBM_L)) { openCurve() ; return ; }
@@ -1411,7 +1411,7 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 	// sin grabar: lo que se mueve con A + flechas se anota para la captura
 	if (pressed && (mask&EPBM_A) && (mask&(EPBM_LEFT|EPBM_RIGHT|EPBM_UP|EPBM_DOWN)) && !(mask&EPBM_B) &&
 	    !Player::GetInstance()->IsAutoRec()) {
-		if (!capping_) capBegin() ;
+		if (!capping_ && !drawEditing()) capBegin() ;   // (los dibujos anotan lo suyo: drawCapture)
 		if (capping_) capTick() ;
 	}
 	if (pressed) { kitSync() ; kitTrack() ; }
@@ -3634,6 +3634,7 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 			if (nv==cur) return true ;
 			wavePush() ;
 			v->SetInt(nv) ;
+			drawCapture(id,cur) ;
 			waveNotice(id) ;
 			if (oneShot) { fadeSel_=en?1:0 ; fadeAudition() ; }
 			else envAudition() ;
@@ -4463,7 +4464,7 @@ void InstrumentView::drawKit(SampleInstrument *si) {
 	bool onGrid=GetFocus() && !GetFocus()->IsStatic() &&
 	            ((UIIntVarField *)GetFocus())->GetVariableID()==IV_PADSEL ;
 	unsigned long now=System::GetInstance()->GetClock() ;
-	const int PW=52, PH=70, G=4, PX=8, PY=40 ;
+	const int PW=70, PH=70, G=4, PX=8, PY=40 ;   // cuadrados
 	for (int r=0;r<4;r++) for (int c=0;c<4;c++) {
 		int idx=r*4+c, note=base+idx ;
 		int x=PX+c*(PW+G), y=PY+(3-r)*(PH+G) ;
@@ -4475,7 +4476,8 @@ void InstrumentView::drawKit(SampleInstrument *si) {
 		if (name.empty()) FrameRect(x,y,PW,PH,Mix(bg,fg,22),5,2) ;
 		else {
 			FillRect(x,y,PW,PH,lit?play:panel,5) ;
-			DrawText(x+2,y+(PH-16)/2,padAbbrev(name).c_str(),lit?bg:fg,1) ;
+			std::string ab=padAbbrev(name) ;
+			DrawText(x+(PW-16*int(ab.size()))/2+1,y+(PH-16)/2,ab.c_str(),lit?bg:fg,1) ;
 		}
 		if (on) FrameRect(x,y,PW,PH,fg,5,3) ;
 		if (on && onGrid) FrameRect(x-4,y-4,PW+8,PH+8,fg,8,2) ;
@@ -4500,7 +4502,7 @@ void InstrumentView::drawKit(SampleInstrument *si) {
 		DrawText(cx+16+24*int(strlen(num)),cy+48,nm.empty()?"--":padAbbrev(nm).c_str(),fg,1) ;
 	}
 	// la onda del pad elegido
-	const int WX=236, WY=40, WW=396, WH=294 ;
+	const int WX=308, WY=40, WW=324, WH=294 ;
 	FillRect(WX,WY,WW,WH,panel,8) ;
 	int note=base+sel ;
 	std::string wav=si->PadSample(note) ;
@@ -4519,7 +4521,7 @@ void InstrumentView::drawKit(SampleInstrument *si) {
 	short *data=(short *)src->GetSampleBuffer(-1) ;
 	int channels=src->GetChannelCount(-1) ;
 	if (size<=0 || !data || channels<1) return ;
-	const int NB=76 ;   // barras de 3 px cada 5
+	const int NB=61 ;   // barras de 3 px cada 5
 	if (kitWfIndex_!=index || kitWfSize_!=size) {
 		for (int b=0;b<NB;b++) {
 			int from=int((long long)size*b/NB), to=int((long long)size*(b+1)/NB) ;
@@ -4699,6 +4701,33 @@ void InstrumentView::applyCurveMeta(const CurveMeta &m) {
 	vd->curveListN_=m.listN ;
 }
 
+// los datos de la curva de un parámetro: de su caja o, si en esta pestaña no
+// la tiene (la envolvente de volumen y los fades, que viven en la onda), de fábrica
+bool InstrumentView::metaFor(FourCC id,CurveMeta &m) {
+	if (!current_) return false ;
+	IteratorPtr<UIField> it(T_SimpleList<UIField>::GetIterator()) ;
+	for (it->Begin();!it->IsDone();it->Next()) {
+		UIField &f=it->CurrentItem() ;
+		if (!f.IsStatic() && ((UIIntVarField &)f).GetVariableID()==id) { curveMeta((UIIntVarField *)&f,m) ; return true ; }
+	}
+	Variable *v=current_->FindVariable(id) ;
+	if (!v) return false ;
+	GUIPoint pt(0,0) ;
+	const char *fmt=0 ; int mx=0, mn=0, st=5, bg=100 ;
+	switch (id) {
+		case SIP_S_ATK: fmt="ATTACK: %dms" ; mx=5000 ; break ;
+		case SIP_S_DEC: fmt="DECAY: %dms" ; mx=10000 ; st=10 ; break ;
+		case SIP_S_REL: fmt="RELEASE: %dms" ; mx=10000 ; st=10 ; break ;
+		case SIP_S_SUS: fmt="SUSTAIN: %ddB" ; mn=-60 ; mx=0 ; st=1 ; bg=6 ; break ;
+		case SIP_S_FIN: fmt="FADE IN: %dms" ; mx=2000 ; bg=50 ; break ;
+		case SIP_S_FOUT: fmt="FADE OUT: %dms" ; mx=2000 ; bg=50 ; break ;
+		default: return false ;
+	}
+	UIIntVarField tmp(pt,*v,fmt,mn,mx,st,bg) ;
+	curveMeta(&tmp,m) ;
+	return true ;
+}
+
 // A + L: al clip, a la curva del parámetro del foco
 // el parámetro del dibujo donde se está (0: ninguno)
 FourCC InstrumentView::drawParam() {
@@ -4710,37 +4739,33 @@ FourCC InstrumentView::drawParam() {
 	int ra,rb ;
 	if (!si->SimplerRegion(ra,rb)) return 0 ;
 	int c=markVar_.GetInt() ;
-	if (!canMark()) return (waveStop_==0)?SIP_S_START:(waveStop_==3)?(FourCC)SIP_S_END:0 ;
+	if (!canMark()) return (waveStop_==0)?SIP_S_START:(waveStop_==3)?(FourCC)SIP_S_END:waveStopID() ;   // (en medio: decay / sustain)
 	if (waveFlag_==1 || c==si->RegionPoint(true)) return SIP_S_START ;
 	if (waveFlag_==2 || c==si->RegionPoint(false)) return SIP_S_END ;
 	return 0 ;
 }
 
 bool InstrumentView::openCurve() {
-	UIField *f=GetFocus() ;
+	if (!current_ || current_->GetType()!=IT_SAMPLE) return false ;
 	int fromDraw=0 ;
-	if (drawEditing()) {   // desde el dibujo: la caja de lo que ahí se mueve
-		FourCC want=drawParam() ;
-		f=0 ;
-		IteratorPtr<UIField> it(T_SimpleList<UIField>::GetIterator()) ;
-		for (it->Begin();!it->IsDone();it->Next()) {
-			UIField &c=it->CurrentItem() ;
-			if (!c.IsStatic() && want && ((UIIntVarField &)c).GetVariableID()==want) { f=&c ; break ; }
-		}
-		if (!f) { View::SetNotification("aquí no hay qué automatizar") ; isDirty_=true ; return false ; }
+	FourCC id=0 ;
+	if (drawEditing()) {   // desde el dibujo: lo que ahí se mueve
+		id=drawParam() ;
+		if (!id || !automatable(id)) { View::SetNotification("aquí no hay qué automatizar") ; isDirty_=true ; return false ; }
 		fromDraw=envEdit_?(10+envSel_):filtEdit_?2:1 ;
+	} else {
+		UIField *f=GetFocus() ;
+		if (!f || f->IsStatic()) return false ;
+		id=((UIIntVarField *)f)->GetVariableID() ;
 	}
-	if (!f || f->IsStatic() || !current_ || current_->GetType()!=IT_SAMPLE) return false ;
-	UIIntVarField *fld=(UIIntVarField *)f ;
-	FourCC id=fld->GetVariableID() ;
 	if (!automatable(id)) return false ;
+	CurveMeta m ;
+	if (!metaFor(id,m)) return false ;
 	int ch=autoChannel() ;
 	int clip=autoClip(ch) ;
 	if (clip<0) { View::SetNotification("sin clip") ; isDirty_=true ; return false ; }   // no hay dónde dibujarla
 	if (touching_) cancelTouch() ;   // la A del combo no graba nada
 	ViewData *vd=viewData_ ;
-	CurveMeta m ;
-	curveMeta(fld,m) ;
 	applyCurveMeta(m) ;
 	vd->curveID_=id ;
 	vd->curveLastID_=id ;
@@ -4882,18 +4907,13 @@ void InstrumentView::drawCapture(FourCC id,int before) {
 		int ch=autoChannel() ;
 		int clip=autoClip(ch) ;
 		if (clip<0 || Player::GetInstance()->ClipTickPos(ch)<0) return ;
-		UIIntVarField *fld=0 ;
-		IteratorPtr<UIField> it(T_SimpleList<UIField>::GetIterator()) ;
-		for (it->Begin();!it->IsDone();it->Next()) {
-			UIField &f=it->CurrentItem() ;
-			if (!f.IsStatic() && ((UIIntVarField &)f).GetVariableID()==id) { fld=(UIIntVarField *)&f ; break ; }
-		}
-		if (!fld) return ;
+		CurveMeta cm ;
+		if (!metaFor(id,cm)) return ;
 		capCur_.id=id ;
 		capCur_.ch=ch ;
 		capCur_.clip=clip ;
 		capCur_.base=before ;
-		curveMeta(fld,capCur_.meta) ;
+		capCur_.meta=cm ;
 		capCur_.pts.clear() ;
 		capLast_=-1 ;
 		capping_=true ;

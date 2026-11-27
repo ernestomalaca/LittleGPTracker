@@ -254,6 +254,7 @@ private:
 	struct CurveMeta { int instr, min, max, step, big, disp, listN ; bool log, time ; char name[24], fmt[24] ; char **list ; } ;
 	void curveMeta(UIIntVarField *fld,CurveMeta &m) ;
 	void applyCurveMeta(const CurveMeta &m) ;
+	bool metaFor(FourCC id,CurveMeta &m) ;
 	struct CapSeg { FourCC id ; int ch ; int clip ; int base ; unsigned long tEnd ; std::vector<AutoPoint> pts ; CurveMeta meta ; } ;
 	std::vector<CapSeg> capSegs_ ;
 	CapSeg capCur_ ;
