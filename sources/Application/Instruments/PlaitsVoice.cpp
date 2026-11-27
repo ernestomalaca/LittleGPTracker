@@ -11,9 +11,14 @@ public:
 } ;
 
 static const char *names[PlaitsVoice::ENGINES]={
-	"filtro","fase","6 op A","6 op B","6 op C","terreno","cuerdas","chip",
-	"analogo","plegado","fm","formante","armonico","tabla","acordes","voz",
-	"enjambre","ruido","particulas","pulsada","campana","bombo","tarola","hihat"
+	"analogo","filtro","fase","plegado","fm","formante","armonico","tabla",
+	"acordes","enjambre","cuerdas","chip","ruido","particulas","pulsada","campana"
+} ;
+// el motor de Plaits de cada uno (fuera: 2..4 FM de 6 operadores, 5 terreno,
+// 15 voz, 21..23 bombo, tarola y hi-hat)
+static const int plaitsEngine[PlaitsVoice::ENGINES]={
+	8,0,1,9,10,11,12,13,
+	14,16,6,7,17,18,19,20
 } ;
 
 const char *PlaitsVoice::EngineName(int i) {
@@ -44,7 +49,7 @@ void PlaitsVoice::Render(float note,int engine,float harmonics,float timbre,floa
 	p.harmonics=harmonics ;
 	p.timbre=timbre ;
 	p.morph=morph ;
-	p.engine=engine ;
+	p.engine=plaitsEngine[engine] ;
 	p.decay=0.5f ;
 	p.lpg_colour=0.5f ;
 	plaits::Modulations m ;

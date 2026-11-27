@@ -243,7 +243,7 @@ SampleInstrument::SampleInstrument() {
 	 Insert(new Variable("s slice by",SIP_S_SLICEBY,sliceBy,2,SSB_REGION)) ;
 	 Insert(new Variable("s marks",SIP_S_MARKS,"")) ;
 	 Insert(new Variable("s snap",SIP_S_SNAP,offOn,2,1)) ;
-	 Insert(new Variable("s motor",SIP_S_SENG,8)) ;      // trk2als: sinte: motor (0..23) y macros (0..100)
+	 Insert(new Variable("s motor",SIP_S_SENG,0)) ;      // trk2als: sinte: motor (0..15) y macros (0..100)
 	 Insert(new Variable("s armonicos",SIP_S_SHARM,50)) ;
 	 Insert(new Variable("s timbre",SIP_S_STIMB,50)) ;
 	 Insert(new Variable("s morph",SIP_S_SMORPH,50)) ;

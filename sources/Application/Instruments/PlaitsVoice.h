@@ -1,5 +1,6 @@
 // trk2als: una voz del sinte de Chancho: Plaits, de Mutable Instruments (MIT).
-// 24 motores; cada uno se maneja con tres macros (ARMONICOS, TIMBRE, MORPH).
+// 16 motores (de los 24 de Plaits: sin percusiones, FM de 6 operadores, voz
+// ni terreno); cada uno se maneja con tres macros (ARMONICOS, TIMBRE, MORPH).
 #ifndef _PLAITS_VOICE_H_
 #define _PLAITS_VOICE_H_
 
@@ -14,7 +15,7 @@ public:
 	// Deja 'frames' samples mono de 16 bits en out (uno cada 'stride')
 	void Render(float note,int engine,float harmonics,float timbre,float morph,
 	            short *out,int frames,int stride) ;
-	enum { ENGINES=24 } ;
+	enum { ENGINES=16 } ;
 	static const char *EngineName(int i) ;
 private:
 	PlaitsVoiceImpl *impl_ ;

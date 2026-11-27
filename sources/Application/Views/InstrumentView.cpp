@@ -73,6 +73,7 @@ private:
 #include <vector>
 #include "Application/Instruments/MidiInstrument.h"
 #include "Application/Instruments/SampleInstrument.h"
+#include "Application/Instruments/PlaitsVoice.h"
 #include "Application/Instruments/SamplePool.h"
 #include "Application/Player/SyncMaster.h"
 #include "Application/Model/Config.h"
@@ -143,7 +144,7 @@ private:
 class UIModeField : public UIIntVarField {
 public:
 	UIModeField(GUIPoint &p, Variable &mode, Variable &by, Variable &count, I_Instrument *inst) :
-		UIIntVarField(p,mode,"MODO: %s",0,2,1,1), by_(by), count_(count), inst_(inst) {}
+		UIIntVarField(p,mode,"MODO: %s",0,3,1,1), by_(by), count_(count), inst_(inst) {}
 	static Variable *fresh_ ;   // el modo que acaba de llegar a slice (aún sin rebanar)
 	virtual void ProcessArrow(unsigned short mask) {
 		if (mask!=EPBM_UP && mask!=EPBM_DOWN) {
@@ -755,7 +756,10 @@ void InstrumentView::fillSampleParameters() {
 					v=instrument->FindVariable(SIP_S_MODE) ;
 					ADD(new UIModeField(GAT(0),*v,*instrument->FindVariable(SIP_S_SLICEBY),
 					                    *instrument->FindVariable(SIP_S_SLICES),instrument)) ;
-					if (mode==SM_CLASSIC) {   // classic no tiene trigger: ahí va su loop
+					if (mode==SM_SYNTH) {   // trk2als: el sinte (provisional): su motor
+						v=instrument->FindVariable(SIP_S_SENG) ;
+						ADD(new UIIntVarField(GAT(1),*v,"MOTOR: %d",0,PlaitsVoice::ENGINES-1,1,4)) ;
+					} else if (mode==SM_CLASSIC) {   // classic no tiene trigger: ahí va su loop
 						v=instrument->FindVariable(SIP_S_LOOP) ;
 						ADD(new UIIntVarField(GAT(1),*v,"LOOP: %s",0,1,1,1)) ;
 					} else {
@@ -772,16 +776,25 @@ void InstrumentView::fillSampleParameters() {
 					// envolvente en classic, sus fades en one-shot); es lo que más
 					// se automatiza. La región y lo fino, en la tercera (en
 					// slice no hay de eso: suben a la segunda)
-					int rg=(mode==SM_CLASSIC || mode==SM_ONESHOT)?8:4 ;
+					int rg=(mode==SM_CLASSIC || mode==SM_ONESHOT || mode==SM_SYNTH)?8:4 ;
+					if (mode==SM_SYNTH) {   // el sinte: sus tres macros (no hay región)
+						v=instrument->FindVariable(SIP_S_SHARM) ;
+						ADD(new UIIntVarField(GAT(rg),*v,"ARMONIA: %d",0,100,1,10)) ;
+						v=instrument->FindVariable(SIP_S_STIMB) ;
+						ADD(new UIIntVarField(GAT(rg+1),*v,"TIMBRE: %d",0,100,1,10)) ;
+						v=instrument->FindVariable(SIP_S_SMORPH) ;
+						ADD(new UIIntVarField(GAT(rg+2),*v,"MORPH: %d",0,100,1,10)) ;
+					} else {
 					v=instrument->FindVariable(SIP_S_START) ;
 					ADD(new UIIntVarField(GAT(rg),*v,"INICIO: %d%%",0,99,1,10)) ;
 					v=instrument->FindVariable(SIP_S_END) ;
 					ADD(new UIIntVarField(GAT(rg+1),*v,"FIN: %d%%",1,100,1,10)) ;
 					v=instrument->FindVariable(SIP_S_DETUNE) ;
 					ADD(new UIIntVarField(GAT(rg+2),*v,"DETUNE: %+dct",-50,50,1,10)) ;
+					}
 					v=instrument->FindVariable(SIP_S_PAN) ;
 					ADD(new UIIntVarField(GAT(rg+3),*v,"PAN: %+d",-50,50,1,10)) ;
-					if (mode==SM_CLASSIC) {
+					if (mode==SM_CLASSIC || mode==SM_SYNTH) {
 						v=instrument->FindVariable(SIP_S_ATK) ;
 						ADD(new UIIntVarField(GAT(4),*v,"ATTACK: %dms",0,5000,5,100)) ;
 						v=instrument->FindVariable(SIP_S_DEC) ;
@@ -1591,7 +1604,9 @@ void InstrumentView::processButtonMask(unsigned short mask,bool pressed) {
 	bool toManual=(sliceByBefore>=0 && sliceByBefore!=SSB_MANUAL && current_ && current_->GetType()==IT_SAMPLE &&
 	     current_->FindVariable(SIP_S_SLICEBY)->GetInt()==SSB_MANUAL &&
 	     current_->FindVariable(SIP_S_MODE)->GetInt()==SM_SLICE) ;
-	if (editedID==SIP_S_MODE) isDirty_=true ;   // (el número de rebanadas se ve en su caja)
+	if (editedID==SIP_S_MODE) isDirty_=true ;
+	if (editedID==SIP_S_MODE && current_ && current_->GetType()==IT_SAMPLE &&
+	    ((SampleInstrument *)current_)->GetSimpler(SIP_S_MODE)==SM_SYNTH) boxMode_=true ;   // el sinte: en sus cajas (su dibujo vendrá)   // (el número de rebanadas se ve en su caja)
 	if ((editedID==SIP_WARP || editedID==SIP_LOOPMODE || editedID==SIP_S_MODE ||
 	     editedID==SIP_S_LOOP || editedID==SIP_S_WARP || editedID==SIP_S_ETAB ||
 	     editedID==SIP_S_SLICEBY) &&
@@ -2012,7 +2027,8 @@ void InstrumentView::drawGrid() {
 				if (UIModeField::fresh_==current_->FindVariable(SIP_S_MODE)) value="slice" ;   // recién llegado: aún no se elige
 				else if (current_->FindVariable(SIP_S_SLICEBY)->GetInt()==SSB_MANUAL) value="manual" ;   // (slice, a mano: no cabe más)
 				else { snprintf(b,sizeof(b),"slice %d",current_->FindVariable(SIP_S_SLICES)->GetInt()) ; value=b ; }
-			} else if ((id==SIP_S_PAN || id==IV_PADPAN) && iv==0) value="C" ;
+			} else if (id==SIP_S_SENG) value=PlaitsVoice::EngineName(iv) ;
+			else if ((id==SIP_S_PAN || id==IV_PADPAN) && iv==0) value="C" ;
 			else if (id==IV_PADDEC && iv==0) value="todo" ;
 			else if (id==IV_PADCHK && iv==0) value="--" ;
 			else if (id==SIP_S_GLIDE && current_->FindVariable(SIP_S_POLY)->GetInt()>1) value="--" ;   // el glide es del mono
@@ -3214,6 +3230,9 @@ void InstrumentView::OnFocus() {
 
 void InstrumentView::autoDraw() {
 	if (boxMode_ || drawEditing() || !gridMode_ || kitMode_ || audioMode_) return ;
+	// trk2als: el sinte (provisional): se llega a sus cajas; su dibujo vendrá
+	if (current_ && current_->GetType()==IT_SAMPLE && !sfMode_ &&
+	    ((SampleInstrument *)current_)->GetSimpler(SIP_S_MODE)==SM_SYNTH) { boxMode_=true ; return ; }
 	toggleDraw() ;
 }
 
