@@ -553,7 +553,9 @@ void ClipView::selRect(int &s0, int &s1, int &p0, int &p1) {
     p0 = std::min(anchorPitch_, cursorPitch_);
     p1 = std::max(anchorPitch_, cursorPitch_);
     if (markLevel_ >= 2) { p0 = 0; p1 = MAX_PITCH; }
-    if (markLevel_ >= 3) { s0 = 0; s1 = std::max(0, total() - 1); }
+    // trk2als: 3 = el compás entero (o los compases, de la marca al cursor); 4 = todo el clip
+    if (markLevel_ == 3) { s0 = (s0 / 16) * 16; s1 = std::min((s1 / 16) * 16 + 15, std::max(0, total() - 1)); }
+    if (markLevel_ >= 4) { s0 = 0; s1 = std::max(0, total() - 1); }
 }
 
 void ClipView::selectedNotes(std::vector<Note> &notes, std::vector<int> &idx) {
@@ -654,7 +656,7 @@ void ClipView::duplicateSelection() {
     }
     if (add.empty()) { message("No cabe en el clip"); return; }
     placeNotes(notes, add);
-    if (markLevel_ >= 3) markLevel_ = 2;   // la copia, no todo el clip otra vez
+    if (markLevel_ >= 4) markLevel_ = 2;   // la copia, no todo el clip otra vez
     anchorStep_ = s0 + width;
     cursorStep_ = s1 + width;
     if (cursorStep_ >= total()) cursorStep_ = total() - 1;
@@ -1353,7 +1355,7 @@ void ClipView::handleButton(unsigned short mask, bool pressed) {
     }
 
     if (mask & EPBM_SELECT) {
-        if (v == EPBM_B) {   // Select, B: marcar; otra B: pasos completos; otra: todo el clip
+        if (v == EPBM_B) {   // Select, B: marcar; otra B: pasos completos; otra: el compás; otra: todo el clip
             if (!marking_ || dupDone_) {   // después de duplicar, Select+B marca de nuevo
                 dupDone_ = false;
                 marking_ = true;
@@ -1361,9 +1363,11 @@ void ClipView::handleButton(unsigned short mask, bool pressed) {
                 anchorStep_ = cursorStep_;
                 anchorPitch_ = cursorPitch_;
                 message("Marcando: flechas para agrandar");
-            } else if (markLevel_ < 3) {
+            } else if (markLevel_ < 4) {
                 markLevel_++;
-                message(markLevel_ == 2 ? "Marcando pasos completos" : "Marcado todo el clip");
+                if (markLevel_ == 2) message("Marcando pasos completos");
+                else if (markLevel_ == 3) message("Marcado el compás %d", cursorStep_ / 16 + 1);
+                else message("Marcado todo el clip");
             }
         } else if (v == EPBM_A) {
             if (marking_) { duplicateSelection(); dupDone_ = true; }   // Select, B, A
@@ -1588,7 +1592,7 @@ void ClipView::DrawView() {
             if (rx + 16 * int(strlen(rest)) <= limit) DrawText(rx, 36, rest, fg, 1);
             else DrawText(rx, 40, rest, fg, 0);   // no cabe grande: chico
             int used = 10 + 16 * int(strlen(info));
-            if (marking_ && markLevel_ >= 3) {   // trk2als: todo el clip, aunque no se vea
+            if (marking_ && markLevel_ >= 4) {   // trk2als: todo el clip, aunque no se vea
                 const char *t = "TODO EL CLIP";
                 int sx = 634 - 16 * 17 - 10 - 8 * int(strlen(t));
                 if (sx > used + 8) DrawText(sx, 38, t, TrackColor(viewData_->songX_), 0);
@@ -1794,7 +1798,7 @@ void ClipView::DrawView() {
         drawHelpBar("flechas:marcar;B:copiar;B+A:cortar;A+<>:mover;SEL+A:duplicar;A:salir");
     else
         drawHelpBar(pasting_ ? "suelta A:pegar;flechas:acomodar;B:cancelar"
-                             : "A:nota;^v:se oye la nota;X:largo/vel;B+A:cortar;SEL+A:pegar;SEL,B:marcar;B+<>:de compás en compás;B+v:candado en este compás;B+^:quitar el candado;B+L/R:el loop a mano;START:tocar / parar la sesión;SEL+L/R:deshacer / rehacer;SEL+<>:otra pantalla");
+                             : "A:nota;^v:se oye la nota;X:largo/vel;B+A:cortar;SEL+A:pegar;SEL,B:marcar (más B: pasos, compás, todo);B+<>:de compás en compás;B+v:candado en este compás;B+^:quitar el candado;B+L/R:el loop a mano;START:tocar / parar la sesión;SEL+L/R:deshacer / rehacer;SEL+<>:otra pantalla");
 }
 
 void ClipView::OnPlayerUpdate(PlayerEventType, unsigned int) {
