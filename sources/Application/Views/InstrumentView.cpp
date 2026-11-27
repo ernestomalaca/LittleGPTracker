@@ -766,30 +766,33 @@ void InstrumentView::fillSampleParameters() {
 					ADD(new UIIntVarField(GAT(2),*v,"VOLUMEN: %+ddB",-36,6,1,6)) ;
 					v=instrument->FindVariable(SIP_S_TRANSP) ;
 					ADD(new UIIntVarField(GAT(3),*v,"TRANSP: %+dst",-48,48,1,12)) ;
+					// segunda fila: lo de volumen que se dibuja en la onda (su
+					// envolvente en classic, sus fades en one-shot); es lo que más
+					// se automatiza. La región y lo fino, en la tercera (en
+					// slice no hay de eso: suben a la segunda)
+					int rg=(mode==SM_CLASSIC || mode==SM_ONESHOT)?8:4 ;
 					v=instrument->FindVariable(SIP_S_START) ;
-					ADD(new UIIntVarField(GAT(4),*v,"INICIO: %d%%",0,99,1,10)) ;
+					ADD(new UIIntVarField(GAT(rg),*v,"INICIO: %d%%",0,99,1,10)) ;
 					v=instrument->FindVariable(SIP_S_END) ;
-					ADD(new UIIntVarField(GAT(5),*v,"FIN: %d%%",1,100,1,10)) ;
+					ADD(new UIIntVarField(GAT(rg+1),*v,"FIN: %d%%",1,100,1,10)) ;
 					v=instrument->FindVariable(SIP_S_DETUNE) ;
-					ADD(new UIIntVarField(GAT(6),*v,"DETUNE: %+dct",-50,50,1,10)) ;
+					ADD(new UIIntVarField(GAT(rg+2),*v,"DETUNE: %+dct",-50,50,1,10)) ;
 					v=instrument->FindVariable(SIP_S_PAN) ;
-					ADD(new UIIntVarField(GAT(7),*v,"PAN: %+d",-50,50,1,10)) ;
-					// tercera fila: lo de volumen que se dibuja en la onda (su
-					// envolvente en classic, sus fades en one-shot), con su caja
+					ADD(new UIIntVarField(GAT(rg+3),*v,"PAN: %+d",-50,50,1,10)) ;
 					if (mode==SM_CLASSIC) {
 						v=instrument->FindVariable(SIP_S_ATK) ;
-						ADD(new UIIntVarField(GAT(8),*v,"ATTACK: %dms",0,5000,5,100)) ;
+						ADD(new UIIntVarField(GAT(4),*v,"ATTACK: %dms",0,5000,5,100)) ;
 						v=instrument->FindVariable(SIP_S_DEC) ;
-						ADD(new UIIntVarField(GAT(9),*v,"DECAY: %dms",0,10000,10,100)) ;
+						ADD(new UIIntVarField(GAT(5),*v,"DECAY: %dms",0,10000,10,100)) ;
 						v=instrument->FindVariable(SIP_S_SUS) ;
-						ADD(new UIIntVarField(GAT(10),*v,"SUSTAIN: %ddB",-60,0,1,6)) ;
+						ADD(new UIIntVarField(GAT(6),*v,"SUSTAIN: %ddB",-60,0,1,6)) ;
 						v=instrument->FindVariable(SIP_S_REL) ;
-						ADD(new UIIntVarField(GAT(11),*v,"RELEASE: %dms",0,10000,10,100)) ;
+						ADD(new UIIntVarField(GAT(7),*v,"RELEASE: %dms",0,10000,10,100)) ;
 					} else if (mode==SM_ONESHOT) {
 						v=instrument->FindVariable(SIP_S_FIN) ;
-						ADD(new UIIntVarField(GAT(8),*v,"FADE IN: %dms",0,2000,5,50)) ;
+						ADD(new UIIntVarField(GAT(4),*v,"FADE IN: %dms",0,2000,5,50)) ;
 						v=instrument->FindVariable(SIP_S_FOUT) ;
-						ADD(new UIIntVarField(GAT(9),*v,"FADE OUT: %dms",0,2000,5,50)) ;
+						ADD(new UIIntVarField(GAT(5),*v,"FADE OUT: %dms",0,2000,5,50)) ;
 					}
 				} else {   // multicapa: el tono arriba
 					r2=0 ;
