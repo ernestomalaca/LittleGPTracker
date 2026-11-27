@@ -3881,6 +3881,9 @@ void InstrumentView::kitSync() {
 	if (p.gain!=q.gain || p.tune!=q.tune || p.pan!=q.pan || p.decay!=q.decay ||
 	    p.choke!=q.choke || p.start!=q.start) {
 		si->SetPad(note,p) ;
+		// en las cajas del pad también se oye lo que se mueve (con la regla
+		// del kit: si el clip ya toca ese pad, se oye el clip)
+		if (gridMode_) previewPad() ;
 		isDirty_=true ;
 	}
 	int idx=padSmpVar_.GetInt() ;
