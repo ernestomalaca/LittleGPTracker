@@ -2413,7 +2413,13 @@ void SampleInstrument::InitSimpler() {
 	initSimplerFromLGPT() ;
 	// trk2als: del filtro de LGPT (0..127) al nuevo (Hz, %, semitonos), con
 	// la misma conversión que ya usaba el export a Live
+	// trk2als: un sonido que llega con el filtro abierto del todo y sin
+	// envolvente (cualquiera recién cargado): su envolvente queda lista para
+	// oírse, +24 st con forma de golpe. Con el corte abierto no cambia nada;
+	// se oye en cuanto se baja el corte
+	bool fresh=false ;
 	if (!GetSimpler(SIP_S_FVER)) {
+		fresh=(GetSimpler(SIP_S_FFREQ)>=127 && GetSimpler(SIP_S_FENV)==0 && GetSimpler(SIP_S_FTYPE)==0) ;
 		FindVariable(SIP_S_FVER)->SetInt(1) ;
 		float f=float(GetSimpler(SIP_S_FFREQ)) ;
 		FindVariable(SIP_S_FHZ)->SetInt(int(30.0f*powf(22000.0f/30.0f,f/127.0f)+0.5f)) ;
@@ -2444,6 +2450,12 @@ void SampleInstrument::InitSimpler() {
 			FindVariable(SIP_S_FSUS)->SetInt(GetSimpler(SIP_S_SUS)) ;
 			FindVariable(SIP_S_FREL)->SetInt(GetSimpler(SIP_S_REL)) ;
 		}
+	}
+	if (fresh) {
+		FindVariable(SIP_S_FST)->SetInt(24) ;
+		FindVariable(SIP_S_FATK)->SetInt(0) ;
+		FindVariable(SIP_S_FDEC)->SetInt(600) ;
+		FindVariable(SIP_S_FSUS)->SetInt(-60) ;
 	}
 }
 

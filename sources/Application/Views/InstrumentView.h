@@ -121,7 +121,11 @@ private:
 	void envAudition(int holdMs=1000) ;
 	bool clipSounding() ;     // la pista ya suena con las notas de su clip
 	void envNoteOff() ;
-	bool drawEditing() { return waveEdit_ || fadeEdit_ || envEdit_ ; }
+	bool drawEditing() { return waveEdit_ || fadeEdit_ || envEdit_ || filtEdit_ ; }
+	bool filtEdit_ ;      // el dibujo del filtro (su curva de respuesta)
+	FourCC filtBox_ ;     // la caja que se movió al último ahí
+	bool processFiltEdit(unsigned short mask,bool pressed) ;
+	void drawFilterCurve(SampleInstrument *si,int X,int Y,int W,int H,GUIColor c) ;
 	// deshacer / rehacer en la onda (Select + L / R): inicio, fin y marcas
 	struct WaveSnap { int s,sf,e,ef,fi,fo,ak,dc,su,rl ; std::vector<int> marks ;
 		bool operator==(const WaveSnap &o) const { return s==o.s && sf==o.sf && e==o.e && ef==o.ef && fi==o.fi && fo==o.fo &&

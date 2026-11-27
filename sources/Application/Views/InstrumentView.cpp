@@ -403,7 +403,7 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data),
 	waveStop_=0 ;
 	fadeEdit_=false ;
 	fadeSel_=0 ;
-	envEdit_=false ;
+	envEdit_=false ; filtEdit_=false ;
 	envFilter_=false ;
 	envSel_=0 ;
 	envOffAt_=0 ;
@@ -1295,6 +1295,7 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 		}
 	}
 	if (fadeEdit_ && processFadeEdit(mask,pressed)) return ;
+	if (filtEdit_ && processFiltEdit(mask,pressed)) return ;
 	if (envEdit_ && processEnvEdit(mask,pressed)) return ;
 	// trk2als: automatización
 	if (pressed && mask==(EPBM_Y|EPBM_START)) { toggleAutoRec() ; return ; }
@@ -1842,7 +1843,8 @@ void InstrumentView::drawGrid() {
 		int nl=0 ;
 		for (const char *q=pageName_[i];*q;q++) if ((*q&0xC0)!=0x80) nl++ ;
 		int w=16*nl+24 ;
-		if (drawEditing()) DrawText(tx+12,GRID_TABS_Y+6,pageName_[i],Mix(bg,fg,i==page_[kind]?40:18),1) ;
+		// (en el dibujo: la pestaña donde se está sigue encendida; las otras, apagadas)
+		if (drawEditing() && i!=page_[kind]) DrawText(tx+12,GRID_TABS_Y+6,pageName_[i],Mix(bg,fg,18),1) ;
 		else if (i==page_[kind]) {
 			FillRect(tx,GRID_TABS_Y,w,28,fg,14) ;
 			DrawText(tx+12,GRID_TABS_Y+6,pageName_[i],bg,1) ;
@@ -1921,6 +1923,7 @@ void InstrumentView::drawGrid() {
 		bool flagBox=flagID && !f.IsStatic() && ((UIIntVarField &)f).GetVariableID()==flagID ;
 		if (fadeEdit_) flagBox=!f.IsStatic() && ((UIIntVarField &)f).GetVariableID()==(FourCC)(fadeSel_?SIP_S_FOUT:SIP_S_FIN) ;
 		if (envEdit_) flagBox=!f.IsStatic() && ((UIIntVarField &)f).GetVariableID()==envID(envSel_) ;
+		if (filtEdit_) flagBox=!f.IsStatic() && ((UIIntVarField &)f).GetVariableID()==filtBox_ ;
 		bool here=drawEditing()?flagBox:(&f==focus) ;
 		bool moving=here && aHeld && !f.IsStatic() ;
 		GUIColor box=moving?fg:card, ink=moving?bg:fg, soft=Mix(box,ink,55) ;
@@ -1929,6 +1932,7 @@ void InstrumentView::drawGrid() {
 			FourCC bid=f.IsStatic()?0:((UIIntVarField &)f).GetVariableID() ;
 			if (waveEdit_) off=(bid!=SIP_S_START && bid!=SIP_S_END) ;
 			else if (fadeEdit_) off=(bid!=SIP_S_FIN && bid!=SIP_S_FOUT) ;
+			else if (filtEdit_) off=!(bid==SIP_S_FTYPE || bid==SIP_S_FHZ || bid==SIP_S_FQ) ;
 			else off=!(bid==envID(0) || bid==envID(1) || bid==envID(2) || bid==envID(3)) ;
 			if (off) { ink=Mix(bg,fg,45) ; soft=Mix(bg,fg,32) ; }   // se leen, pero en gris (como las del kit)
 		}
@@ -2415,9 +2419,10 @@ void InstrumentView::drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int 
 		else if (fid==SIP_S_DEC || fid==SIP_S_FDEC) { h0=xa ; h1=xd ; }
 		else if (fid==SIP_S_SUS || fid==SIP_S_FSUS) { h0=xd ; h1=b ; }
 		else if (fid==SIP_S_REL || fid==SIP_S_FREL || fid==SIP_S_FOUT) { h0=oneShot?b-int(msPerPx>0?rel/msPerPx:0):b ; h1=b+tl ; }
-		if (!(mode==SM_SLICE && !ftab && !zsrc)) drawCurveLine(ys,a,cc,h0,h1,X,X+W) ;
+		if (filtEdit_) drawFilterCurve(si,X,Y,W,H,cc) ;
+		else if (!(mode==SM_SLICE && !ftab && !zsrc)) drawCurveLine(ys,a,cc,h0,h1,X,X+W) ;
 		int nodes[3]={xa,xd,b} ;
-		int nn=oneShot?0:3 ;
+		int nn=(oneShot || filtEdit_)?0:3 ;
 		for (int k=0;k<nn;k++) {
 			int nx=nodes[k] ;
 			if (nx<a || nx-a>=int(ys.size()) || nx<X || nx>X+W) continue ;
@@ -2760,11 +2765,11 @@ void InstrumentView::envAudition(int holdMs) {
 bool InstrumentView::processEnvEdit(unsigned short mask,bool pressed) {
 	bool ok=current_ && current_->GetType()==IT_SAMPLE && gridMode_ && !kitMode_ && !audioMode_ ;
 	if (ok && !envFilter_ && !sfMode_ && ((SampleInstrument *)current_)->GetSimpler(SIP_S_MODE)==SM_ONESHOT) ok=false ;
-	if (!ok) { envNoteOff() ; envEdit_=false ; return false ; }
+	if (!ok) { envNoteOff() ; envEdit_=false ; filtEdit_=false ; return false ; }
 	const unsigned short arrows=EPBM_UP|EPBM_DOWN|EPBM_LEFT|EPBM_RIGHT ;
 	if ((mask&(EPBM_SELECT|EPBM_R)) && (mask&arrows) && !(mask&EPBM_B)) {   // cambiar de pantalla: sale
 		envNoteOff() ;
-		envEdit_=false ;
+		envEdit_=false ; filtEdit_=false ;
 		return false ;
 	}
 	SampleInstrument *si=(SampleInstrument *)current_ ;
@@ -2867,7 +2872,7 @@ bool InstrumentView::processFadeEdit(unsigned short mask,bool pressed) {
 void InstrumentView::OnFocus() {
 	fadeEdit_=false ;
 	envNoteOff() ;
-	envEdit_=false ;
+	envEdit_=false ; filtEdit_=false ;
 	bool fromCurve=(viewData_->curveFocus_!=0) ;
 	if (viewData_->curveFocus_) {   // vuelve de su curva: el foco en ese parámetro
 		lastFocusID_=viewData_->curveFocus_ ;
@@ -3058,7 +3063,7 @@ void InstrumentView::enterWaveEdit(bool play) {
 void InstrumentView::toggleDraw() {
 	if (waveEdit_) { exitWaveEdit() ; return ; }
 	if (fadeEdit_) { fadeEdit_=false ; return ; }
-	if (envEdit_) { envNoteOff() ; envEdit_=false ; return ; }
+	if (envEdit_ || filtEdit_) { envNoteOff() ; envEdit_=false ; filtEdit_=false ; return ; }
 	if (!current_ || current_->GetType()!=IT_SAMPLE) return ;
 	SampleInstrument *si=(SampleInstrument *)current_ ;
 	if (kitMode_ && gridMode_) {   // kit, pestaña PAD: las cajas del pad <-> los pads
@@ -3073,9 +3078,14 @@ void InstrumentView::toggleDraw() {
 	(void)si ;
 	// FILTRO: su envolvente; AMP (classic / slice): la de volumen
 	bool fpage=!strcmp(pageName_[page_[1]],"FILTRO"), apage=!strcmp(pageName_[page_[1]],"AMP") ;
-	if (fpage || apage) {
+	if (fpage) {   // FILTRO: primero el filtro (su curva); abajo, su envolvente
+		filtEdit_=true ;
+		filtBox_=SIP_S_FHZ ;
+		return ;
+	}
+	if (apage) {
 		envEdit_=true ;
-		envFilter_=fpage ;
+		envFilter_=false ;
 		envSel_=0 ;
 		return ;
 	}
@@ -3087,24 +3097,125 @@ void InstrumentView::toggleDraw() {
 // salir de la edición (de la onda / la envolvente de volumen a la del filtro
 // y de regreso): se termina una y se sigue con la otra
 void InstrumentView::hopDrawing(int dir) {
-	int list[8], n=0, cur=-1 ;
-	for (int i=0;i<pageCount_ && n<8;i++) {
+	// la columna: la onda (SAMPLER), el volumen (AMP, multicapa), el filtro y
+	// la envolvente del filtro (los dos en FILTRO)
+	int pg[8], kd[8], n=0, cur=-1 ;   // kd: 0 onda / envolvente de la página, 1 la curva del filtro
+	for (int i=0;i<pageCount_ && n<7;i++) {
 		const char *pn=pageName_[i] ;
-		bool draws=!strcmp(pn,"FILTRO") || !strcmp(pn,"AMP") || (!sfMode_ && !strcmp(pn,"SAMPLER")) ;
-		if (!draws) continue ;
-		if (i==page_[1]) cur=n ;
-		list[n++]=i ;
+		bool here=(i==page_[1]) ;
+		if (!strcmp(pn,"FILTRO")) {
+			if (here && filtEdit_) cur=n ;
+			pg[n]=i ; kd[n++]=1 ;
+			if (here && envEdit_) cur=n ;
+			pg[n]=i ; kd[n++]=0 ;
+		} else if (!strcmp(pn,"AMP") || (!sfMode_ && !strcmp(pn,"SAMPLER"))) {
+			if (here) cur=n ;
+			pg[n]=i ; kd[n++]=0 ;
+		}
 	}
 	if (cur<0 || cur+dir<0 || cur+dir>=n) return ;
+	int t=cur+dir ;
 	if (waveEdit_) exitWaveEdit() ;
 	envNoteOff() ;
-	envEdit_=false ;
+	envEdit_=false ; filtEdit_=false ;
 	fadeEdit_=false ;
-	page_[1]=list[cur+dir] ;
-	lastFocusID_=0 ;
-	onInstrumentChange() ;
-	toggleDraw() ;
+	if (page_[1]!=pg[t]) {
+		page_[1]=pg[t] ;
+		lastFocusID_=0 ;
+		onInstrumentChange() ;
+	}
+	if (!strcmp(pageName_[pg[t]],"FILTRO")) {
+		if (kd[t]==1) { filtEdit_=true ; filtBox_=SIP_S_FHZ ; }
+		else { envEdit_=true ; envFilter_=true ; envSel_=0 ; }
+	} else toggleDraw() ;
 	isDirty_=true ;
+}
+
+// trk2als: el dibujo del filtro: su curva de respuesta. Izq / der cambia el
+// tipo; A + izq / der el corte; A + arriba / abajo la resonancia
+bool InstrumentView::processFiltEdit(unsigned short mask,bool pressed) {
+	bool ok=current_ && current_->GetType()==IT_SAMPLE && gridMode_ && !kitMode_ && !audioMode_ ;
+	if (!ok) { envNoteOff() ; filtEdit_=false ; return false ; }
+	const unsigned short arrows=EPBM_UP|EPBM_DOWN|EPBM_LEFT|EPBM_RIGHT ;
+	if ((mask&(EPBM_SELECT|EPBM_R)) && (mask&arrows) && !(mask&EPBM_B)) {   // cambiar de pantalla: sale
+		envNoteOff() ;
+		filtEdit_=false ;
+		return false ;
+	}
+	if (mask&EPBM_SELECT) return false ;   // Select solo (o deshacer): lo de siempre
+	SampleInstrument *si=(SampleInstrument *)current_ ;
+	if (!pressed) { pageTap_=0 ; isDirty_=true ; return true ; }
+	isDirty_=true ;
+	if (mask==EPBM_UP || mask==EPBM_DOWN) { hopDrawing(mask==EPBM_DOWN?1:-1) ; return true ; }
+	if (mask==EPBM_START) { envAudition() ; return true ; }
+	char msg[48] ;
+	if (mask==EPBM_LEFT || mask==EPBM_RIGHT) {   // el tipo de filtro
+		Variable *v=si->FindVariable(SIP_S_FTYPE) ;
+		int t=v->GetInt()+((mask==EPBM_RIGHT)?1:-1) ;
+		if (t<0) t=0 ;
+		if (t>2) t=2 ;
+		v->SetInt(t) ;
+		filtBox_=SIP_S_FTYPE ;
+		View::SetNotification(v->GetString()) ;
+		envAudition() ;
+		return true ;
+	}
+	if ((mask&EPBM_A) && !(mask&EPBM_B)) {
+		if (mask&(EPBM_LEFT|EPBM_RIGHT)) {   // el corte, de a semitono
+			Variable *v=si->FindVariable(SIP_S_FHZ) ;
+			float hz=float(v->GetInt())*((mask&EPBM_RIGHT)?1.0594631f:1.0f/1.0594631f) ;
+			int nv=int(hz+0.5f) ;
+			if (nv==v->GetInt()) nv+=(mask&EPBM_RIGHT)?1:-1 ;
+			if (nv<30) nv=30 ;
+			if (nv>22000) nv=22000 ;
+			v->SetInt(nv) ;
+			filtBox_=SIP_S_FHZ ;
+			if (nv>=1000) snprintf(msg,sizeof(msg),"corte %d.%dkHz",nv/1000,(nv%1000)/100) ;
+			else snprintf(msg,sizeof(msg),"corte %dHz",nv) ;
+			View::SetNotification(msg) ;
+			envAudition() ;
+		} else if (mask&(EPBM_UP|EPBM_DOWN)) {   // la resonancia
+			Variable *v=si->FindVariable(SIP_S_FQ) ;
+			int nv=v->GetInt()+((mask&EPBM_UP)?5:-5) ;
+			if (nv<0) nv=0 ;
+			if (nv>100) nv=100 ;
+			v->SetInt(nv) ;
+			filtBox_=SIP_S_FQ ;
+			snprintf(msg,sizeof(msg),"resonancia %d%%",nv) ;
+			View::SetNotification(msg) ;
+			envAudition() ;
+		}
+		return true ;
+	}
+	return true ;
+}
+
+// la curva de respuesta del filtro sobre el panel: 30 Hz a la izquierda,
+// 22 kHz a la derecha; 0 dB a un tercio de la altura
+void InstrumentView::drawFilterCurve(SampleInstrument *si,int X,int Y,int W,int H,GUIColor c) {
+	int type=si->GetSimpler(SIP_S_FTYPE) ;
+	float fc=float(si->GetSimpler(SIP_S_FHZ)) ;
+	if (fc<30) fc=30 ;
+	float q=0.707f+si->GetSimpler(SIP_S_FQ)*0.11f ;
+	std::vector<int> ys ;
+	int y0=Y+H/3, top=Y+8, bot=Y+H-8 ;
+	float pxDb=(H*0.62f)/48.0f ;   // 48 dB hacia abajo caben en el panel
+	for (int x=0;x<W;x++) {
+		float f=30.0f*powf(22000.0f/30.0f,float(x)/float(W-1)) ;
+		float r=f/fc ;
+		float den=sqrtf((1-r*r)*(1-r*r)+(r/q)*(r/q)) ;
+		if (den<1e-6f) den=1e-6f ;
+		float mag=(type==0)?1.0f/den:(type==2)?(r*r)/den:(r/q)/den ;
+		float db=20.0f*log10f(mag<1e-6f?1e-6f:mag) ;
+		int y=y0-int(db*pxDb) ;
+		if (y<top) y=top ;
+		if (y>bot) y=bot ;
+		ys.push_back(y) ;
+	}
+	drawCurveLine(ys,X,c,-1,-1,X,X+W) ;
+	// el corte: una guía
+	int cx=X+int(float(W-1)*logf(fc/30.0f)/logf(22000.0f/30.0f)) ;
+	FillRect(cx,Y+4,1,H-8,Mix(ColorOf(CD_BACKGROUND),ColorOf(CD_NORMAL),45)) ;
 }
 
 bool InstrumentView::canMark() {
