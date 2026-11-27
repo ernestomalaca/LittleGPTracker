@@ -51,13 +51,6 @@ protected:
 private:
     SDL_Window *window_;
     SDL_Surface *surface_;
-    // trk2als: pantalla más grande que la app (HDMI): se dibuja aparte y se
-    // amplía centrado al mostrar
-    SDL_Renderer *real_;     // quien amplía (la gráfica de la consola); 0 = se dibuja directo
-    SDL_Texture *realTex_;   // la app, tal cual (640x480)
-    SDL_Rect realDst_;       // dónde cae la app ampliada
-    int realK_;              // ampliación entera (0 = con fracción)
-    void presentScaled(const SDL_Rect *rects, int n);
 //	SDL_Surface *offscreen_ ;
     GUIRect screenRect_ ;
 	unsigned int currentColor_ ;
