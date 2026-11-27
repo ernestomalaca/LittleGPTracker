@@ -63,6 +63,8 @@ struct renderParams {
     float envReleaseFrom_ ;  // nivel al soltar
     int envClock_ ;          // muestras dentro de la etapa
     bool gate_ ;             // false: la nota suena completa aunque se suelte
+    float synthNote_ ;       // trk2als: sinte: la nota (con transposición y desafinación)
+    bool synthTrig_ ;        // sinte: nota nueva, hay que dispararlo
     bool auditionTail_ ;     // trk2als: escucha del final (fade out): sin el fade in
     fixed glideFrom_ ;       // velocidad de la nota anterior
     int glideLeft_, glideLen_ ; // muestras de glide que faltan / totales

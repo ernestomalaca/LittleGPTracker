@@ -112,6 +112,11 @@ enum SampleInstrumentLoopMode {
 #define SIP_S_FVEL  MAKE_FOURCC('S', 'F', 'V', 'L')   // velocity -> corte 0..100 %
 #define SIP_S_FEVER MAKE_FOURCC('S', 'F', 'E', 'V')   // 1 = ya con su envolvente
 #define SIP_S_ETAB  MAKE_FOURCC('S', 'E', 'T', 'B')   // pantalla: amp / filter
+// trk2als: el sinte (modo "sinte"): su motor y sus tres macros (0..100)
+#define SIP_S_SENG MAKE_FOURCC('S', 'Y', 'E', 'N')
+#define SIP_S_SHARM MAKE_FOURCC('S', 'Y', 'H', 'A')
+#define SIP_S_STIMB MAKE_FOURCC('S', 'Y', 'T', 'I')
+#define SIP_S_SMORPH MAKE_FOURCC('S', 'Y', 'M', 'O')
 #define SIP_S_POLY MAKE_FOURCC('S', 'P', 'L', 'Y') // voces: notas a la vez (1 = mono, con glide)
 #define SIP_S_SNAP MAKE_FOURCC('S', 'S', 'N', 'P') // snap: al cruce por cero más cercano
 #define SIP_S_SLICEBY MAKE_FOURCC('S', 'S', 'B', 'Y') // slice by: region / manual
@@ -143,7 +148,7 @@ enum SimplerSliceBy { SSB_REGION=0, SSB_MANUAL=1 } ;
 // voces 1..3 de los acordes (canal+(1+voz)*SONG_CHANNEL_COUNT)
 #define SI_CHORD_VOICES 3
 #define SI_VOICE_COUNT (SONG_CHANNEL_COUNT*(2+SI_CHORD_VOICES))
-enum SimplerMode { SM_CLASSIC = 0, SM_ONESHOT, SM_SLICE };
+enum SimplerMode { SM_CLASSIC = 0, SM_ONESHOT, SM_SLICE, SM_SYNTH };   // SM_SYNTH: no lee el sample, suena el sinte
 // trk2als: warp del Sampler (como en Simpler): sin warp, re-pitch o complex
 enum SimplerWarp { SW_OFF = 0, SW_REPITCH, SW_COMPLEX };
 
@@ -330,6 +335,7 @@ private:
 	   void applyLive(renderParams *rp) ;     // trk2als
 	   // trk2als: warp complex; deja size cuadros estirados en warpOut_
 	   void renderComplex(int channel,renderParams *rp,int size) ;
+	   void renderSynth(int channel,renderParams *rp,int size,int ch) ;   // trk2als: el sinte, a warpOut_
 	   void readLoop(renderParams *rp,int n) ;
 	   public: void SetZones(const std::string &zones) ; bool IsZoned() { ensureZones() ; return zoned_ ; } int ZoneCount() { ensureZones() ; return (int)zones_.zones_.size() ; }
 	   void ensureZones() ;   // al día con 's zones' y el pool (al abrir un proyecto llegan después del sample)

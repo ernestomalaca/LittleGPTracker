@@ -26,7 +26,30 @@ ICON    :=  lgpt_icon.bmp
 # Directory definitions
 #---------------------------------------------------------------------------------
 
+# trk2als: el sinte (Plaits, de Mutable Instruments): un archivo por cada .cc suyo
+MIFILES := \
+	mi_plaits_dsp_chords_chord_bank.o mi_plaits_dsp_engine_additive_engine.o mi_plaits_dsp_engine_bass_drum_engine.o \
+	mi_plaits_dsp_engine_chord_engine.o mi_plaits_dsp_engine_fm_engine.o mi_plaits_dsp_engine_grain_engine.o \
+	mi_plaits_dsp_engine_hi_hat_engine.o mi_plaits_dsp_engine_modal_engine.o mi_plaits_dsp_engine_noise_engine.o \
+	mi_plaits_dsp_engine_particle_engine.o mi_plaits_dsp_engine_snare_drum_engine.o mi_plaits_dsp_engine_speech_engine.o \
+	mi_plaits_dsp_engine_string_engine.o mi_plaits_dsp_engine_swarm_engine.o mi_plaits_dsp_engine_virtual_analog_engine.o \
+	mi_plaits_dsp_engine_waveshaping_engine.o mi_plaits_dsp_engine_wavetable_engine.o mi_plaits_dsp_engine2_chiptune_engine.o \
+	mi_plaits_dsp_engine2_phase_distortion_engine.o mi_plaits_dsp_engine2_six_op_engine.o mi_plaits_dsp_engine2_string_machine_engine.o \
+	mi_plaits_dsp_engine2_virtual_analog_vcf_engine.o mi_plaits_dsp_engine2_wave_terrain_engine.o mi_plaits_dsp_fm_algorithms.o \
+	mi_plaits_dsp_fm_dx_units.o mi_plaits_dsp_physical_modelling_modal_voice.o mi_plaits_dsp_physical_modelling_resonator.o \
+	mi_plaits_dsp_physical_modelling_string.o mi_plaits_dsp_physical_modelling_string_voice.o mi_plaits_dsp_speech_lpc_speech_synth.o \
+	mi_plaits_dsp_speech_lpc_speech_synth_controller.o mi_plaits_dsp_speech_lpc_speech_synth_phonemes.o mi_plaits_dsp_speech_lpc_speech_synth_words.o \
+	mi_plaits_dsp_speech_naive_speech_synth.o mi_plaits_dsp_speech_sam_speech_synth.o mi_plaits_dsp_voice.o \
+	mi_plaits_resources.o mi_stmlib_dsp_atan.o mi_stmlib_dsp_units.o \
+	mi_stmlib_utils_random.o
+
+# trk2als: lo de Mutable Instruments (la reverb de los envíos y el sinte) es
+# C++11, siempre optimizado; TEST = su versión portátil (sin ensamblador de ARM de 32 bits)
+MUTABLE := $(PWD)/../sources/Externals/mutable
+SendFx.o PlaitsVoice.o $(MIFILES): CXXFLAGS += -std=gnu++11 -O2 -DTEST -include cstdio -include cmath -I$(MUTABLE) -Wno-unused -Wno-sign-compare
+
 COMMONDIRS := \
+	../sources/Externals/mutable/unidades \
 	../sources/System/Console \
 	../sources/System/io \
 	../sources/Services/Midi \
@@ -274,7 +297,7 @@ COMMONFILES := \
 	AudioOut.o \
 	DummyAudioOut.o PlayerChannel.o AudioFileStreamer.o \
 	MixBus.o \
-	MixerService.o SendBus.o SendFx.o PlayerMixer.o MidiKeys.o MidiCapture.o \
+	MixerService.o SendBus.o SendFx.o PlayerMixer.o PlaitsVoice.o $(MIFILES) MidiKeys.o MidiCapture.o \
 	Service.o ServiceRegistry.o SubService.o \
 	Variable.o VariableContainer.o WatchedVariable.o \
 	SoundFontPreset.o SoundFontManager.o SoundFontSample.o \

@@ -223,12 +223,12 @@ SampleInstrument::SampleInstrument() {
 
 	 // trk2als: Sampler estilo Simpler (pistas MIDI). Se guardan aparte de los
 	 // de LGPT; InitSimpler() los deduce de ellos la primera vez
-	 static const char *simplerModes[3]={"classic","one-shot","slice"} ;
+	 static const char *simplerModes[4]={"classic","one-shot","slice","sinte"} ;
 	 static const char *offOn[2]={"off","on"} ;
 	 static const char *trigModes[2]={"trigger","gate"} ;
 	 static const char *filterTypes[3]={"LP","BP","HP"} ;
 	 Insert(new Variable("s init",SIP_S_INIT,0)) ;
-	 Insert(new Variable("s mode",SIP_S_MODE,simplerModes,3,SM_CLASSIC)) ;
+	 Insert(new Variable("s mode",SIP_S_MODE,simplerModes,4,SM_CLASSIC)) ;
 	 Insert(new Variable("s start",SIP_S_START,0)) ;
 	 Insert(new Variable("s end",SIP_S_END,100)) ;
 	 Insert(new Variable("s startf",SIP_S_STARTF,0)) ;
@@ -241,6 +241,10 @@ SampleInstrument::SampleInstrument() {
 	 Insert(new Variable("s slice by",SIP_S_SLICEBY,sliceBy,2,SSB_REGION)) ;
 	 Insert(new Variable("s marks",SIP_S_MARKS,"")) ;
 	 Insert(new Variable("s snap",SIP_S_SNAP,offOn,2,1)) ;
+	 Insert(new Variable("s motor",SIP_S_SENG,8)) ;      // trk2als: sinte: motor (0..23) y macros (0..100)
+	 Insert(new Variable("s armonicos",SIP_S_SHARM,50)) ;
+	 Insert(new Variable("s timbre",SIP_S_STIMB,50)) ;
+	 Insert(new Variable("s morph",SIP_S_SMORPH,50)) ;
 	 Insert(new Variable("s poly",SIP_S_POLY,4)) ;   // voces: hasta 4 notas a la vez   // por defecto: al cruce por cero
 	 Insert(new Variable("audio clip",SIP_CLIP,0)) ;
 	 Insert(new Variable("s zones",SIP_S_ZONES,"")) ;
@@ -1531,6 +1535,21 @@ bool SampleInstrument::renderVoiceNow(int channel, fixed *buffer, int size, int 
             rp->warpFresh_=false ;
         }
     }
+    // trk2als: el sinte: igual que el warp, deja 'size' cuadros en warpOut_ y el
+    // resto del camino (filtro, envolvente, volumen) los lee a velocidad 1
+    bool synth=(rp->simpler_ && !zoned_ && GetSimpler(SIP_S_MODE)==SM_SYNTH) ;
+    if (synth) {
+        complex=false ;
+        rpReverse=false ;
+        renderSynth(channel,rp,size,channelCount) ;
+        wavbuf=(char *)&warpOut_[0] ;
+        input=(short *)wavbuf ;
+        fpPos=0 ;
+        fpSpeed=FP_ONE ;
+        loopPosition=input ;
+        lastSample=input+(size+1)*channelCount ;
+        dsBasePtr=input ;
+    }
     if (complex) {
         renderComplex(channel,rp,size) ;
         wavbuf=(char *)&warpOut_[0] ;
@@ -1902,6 +1921,7 @@ bool SampleInstrument::renderVoiceNow(int channel, fixed *buffer, int size, int 
         }
         rp->position_=float(p) ;
     }
+    if (synth) rp->position_=float(rp->rendLoopStart_) ;   // (no avanza: no hay sample que recorrer)
     rp->justWrapped_=(rp->position_<posBefore) ;
 
 		// Update feedback position
@@ -1919,6 +1939,29 @@ bool SampleInstrument::renderVoiceNow(int channel, fixed *buffer, int size, int 
 
     return somethingToMix;
 };
+
+/************************************************************
+ trk2als: el sinte (Plaits, de Mutable Instruments)
+ ************************************************************/
+
+#include "PlaitsVoice.h"
+
+void SampleInstrument::renderSynth(int channel,renderParams *rp,int size,int ch) {
+	static PlaitsVoice *voices[SI_VOICE_COUNT] ;   // una por voz, al primer uso
+	if (channel<0 || channel>=SI_VOICE_COUNT) return ;
+	if (!voices[channel]) voices[channel]=new PlaitsVoice() ;
+	PlaitsVoice *v=voices[channel] ;
+	if (rp->synthTrig_) { v->Trigger() ; rp->synthTrig_=false ; }
+	if (ch<1) ch=1 ;
+	if ((int)warpOut_.size()<(size+2)*ch) warpOut_.resize((size+2)*ch) ;
+	v->Render(rp->synthNote_,GetSimpler(SIP_S_SENG),GetSimpler(SIP_S_SHARM)/100.0f,
+	          GetSimpler(SIP_S_STIMB)/100.0f,GetSimpler(SIP_S_SMORPH)/100.0f,&warpOut_[0],size,ch) ;
+	for (int i=0;i<size;i++) for (int c=1;c<ch;c++) warpOut_[i*ch+c]=warpOut_[i*ch] ;
+	for (int c=0;c<ch;c++) {
+		warpOut_[size*ch+c]=warpOut_[(size-1)*ch+c] ;
+		warpOut_[(size+1)*ch+c]=warpOut_[(size-1)*ch+c] ;
+	}
+}
 
 /************************************************************
  trk2als: warp complex (time-stretch de Signalsmith)
@@ -2554,6 +2597,15 @@ bool SampleInstrument::startSimpler(renderParams *rp,int channel,unsigned char n
 			rp->rendLoopEnd_=b ;
 			break ;
 		}
+		case SM_SYNTH:   // trk2als: el sinte: el "sample" lo va escribiendo él (nunca se acaba)
+			rp->synthNote_=float(note)+offset ;
+			rp->synthTrig_=true ;
+			offset=0 ;
+			first=a ;
+			rp->rendLoopStart_=a ;
+			rp->rendLoopEnd_=b ;
+			rp->simplerLoop_=SILM_LOOP ;
+			break ;
 		case SM_ONESHOT:
 			offset+=note-60 ;
 			first=a ;

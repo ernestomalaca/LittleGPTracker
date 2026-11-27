@@ -5,3 +5,10 @@ https://github.com/pichenettes/stmlib (cada archivo conserva su aviso).
 Lo que usa Chancho 6:
   rings/dsp/fx/reverb.h, fx_engine.h   la reverb de los envíos
   stmlib/...                           lo que esos archivos necesitan
+  plaits/...                           el sinte (Plaits): sus 24 motores
+
+Único cambio al código original: en plaits/dsp/dsp.h la frecuencia de
+muestreo es 44100 (el módulo corre a 48000) para que afine en Chancho.
+
+unidades/ son archivos de una línea: cada uno incluye un .cc de Mutable para
+compilarlo con las reglas de Chancho (C++11, -DTEST = versión portátil).
