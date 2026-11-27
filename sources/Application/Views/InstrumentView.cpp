@@ -1852,6 +1852,19 @@ void InstrumentView::drawGrid() {
 		else if (i==page_[kind]) {
 			FillRect(tx,GRID_TABS_Y,w,28,fg,14) ;
 			DrawText(tx+12,GRID_TABS_Y+6,pageName_[i],bg,1) ;
+			// la puntita del globo: hacia dónde va lo que se mueve. Arriba, el
+			// dibujo (o los pads del kit); abajo, las cajas
+			bool up=drawEditing() ;
+			if (kitMode_) {
+				UIField *kf=GetFocus() ;
+				up=kf && !kf->IsStatic() && ((UIIntVarField *)kf)->GetVariableID()==IV_PADSEL ;
+			}
+			int px=tx+w/2 ;
+			for (int q=0;q<8;q++) {
+				int tw=2*q+2 ;
+				if (up) FillRect(px-tw/2,GRID_TABS_Y-8+q,tw,1,fg) ;
+				else FillRect(px-tw/2,GRID_TABS_Y+28+(7-q),tw,1,fg) ;
+			}
 		} else DrawText(tx+12,GRID_TABS_Y+6,pageName_[i],dim,1) ;
 		tx+=w+8 ;
 	}
