@@ -1271,10 +1271,7 @@ bool InstrumentView::ownedByTrack() {
 }
 
 void InstrumentView::warpToNext(int offset) {
-	if (ownedByTrack()) {
-		View::SetNotification("se cambia en la cabecera de la pista") ;
-		return ;
-	}
+	if (ownedByTrack()) return ;   // el instrumento es de su pista: B + flechas no hace nada (ni avisa)
 	int instrument=viewData_->currentInstrument_+offset ;
 	if (instrument>=MAX_INSTRUMENT_COUNT) {
 		instrument=instrument-MAX_INSTRUMENT_COUNT ;
@@ -4963,7 +4960,8 @@ void InstrumentView::drawCapture(FourCC id,int before) {
 }
 
 void InstrumentView::capBegin() {
-	if (kitMode_ || !current_ || current_->GetType()!=IT_SAMPLE) return ;
+	// (también en el kit: su filtro, volumen, afinación y pan; lo de cada pad no se automatiza)
+	if (!current_ || current_->GetType()!=IT_SAMPLE) return ;
 	FourCC id=focusID(*this) ;
 	if (!automatable(id)) return ;
 	int ch=autoChannel() ;
