@@ -722,7 +722,7 @@ void MixerView::AnimationUpdate() {
         updateVu();
         bool changed = false;
         for (int i = 0; i < 9; i++) {
-            int l = int(vuL_[i] * 44), r = int(vuR_[i] * 44);   // escalones de ~8 px
+            int l = int(vuL_[i] * 10 + 0.5f), r = int(vuR_[i] * 10 + 0.5f);   // 10 escalones, como en la Session
             if (l != vuShown_[i * 2] || r != vuShown_[i * 2 + 1]) changed = true;
         }
         if (changed) { ClearShapes(); DrawView(); }   // (sin vaciar, las figuras se iban encimando sin fin)
@@ -769,7 +769,7 @@ void MixerView::drawStrips() {
     Player *player = Player::GetInstance();
     Mixer *mixer = Mixer::GetInstance();
     Project *project = viewData_->project_;
-    for (int i = 0; i < 9; i++) { vuShown_[i * 2] = int(vuL_[i] * 44); vuShown_[i * 2 + 1] = int(vuR_[i] * 44); }
+    for (int i = 0; i < 9; i++) { vuShown_[i * 2] = int(vuL_[i] * 10 + 0.5f); vuShown_[i * 2 + 1] = int(vuR_[i] * 10 + 0.5f); }
     // (la parte de arriba de la pantalla queda libre: ahí irán los envíos)
     const int PY = 200, PH = 272, TOP = PY + 40, HT = PH - 78;
     // las mismas columnas que la Session (su columna de escenas queda libre)
@@ -817,12 +817,15 @@ void MixerView::drawStrips() {
         int h = int(HT * fr);
         if (h > 0) FillRect(x + fx0, TOP + HT - (h < 10 ? 10 : h), fw, h < 10 ? 10 : h, muted ? Mix(bg, fg, 35) : fg, 5);
         FillRect(x + fx0 + fw + 6, TOP, mw, HT, slot, 3);
-        float v = vuL_[i] > vuR_[i] ? vuL_[i] : vuR_[i];
-        int vh = int(HT * v);
+        // (a escalones: lo mismo que se compara para decidir si se repinta)
+        int vq = vuShown_[i * 2] > vuShown_[i * 2 + 1] ? vuShown_[i * 2] : vuShown_[i * 2 + 1];
+        int vh = HT * vq / 10;
         if (vh > 3) FillRect(x + fx0 + fw + 6, TOP + HT - vh, mw, vh, tc, 3);
         if (muted || soloChannel_ == i) {
-            FillRect(x + 6, TOP + HT + 4, w - 12, 22, fg, 4);
-            DrawText(x + (w - 16) / 2 + 1, TOP + HT + 7, (soloChannel_ == i) ? "S" : "M", bg, 1);
+            // los mismos colores que la M y la S de la Session
+            bool solo = (soloChannel_ == i);
+            FillRect(x + 6, TOP + HT + 4, w - 12, 22, solo ? ColorOf(CD_HILITE2) : ColorOf(CD_MUTE), 4);
+            DrawText(x + (w - 16) / 2 + 1, TOP + HT + 7, solo ? "S" : "M", bg, 1);
         } else {
             char t[8];
             if (vol <= 0) strcpy(t, "off");
@@ -839,7 +842,7 @@ void MixerView::drawStrips() {
         for (int k = 0; k < 2; k++) {
             int mx = x + 12 + k * (bw + 6);
             FillRect(mx, TOP, bw, HT, slot, 4);
-            int vh = int(HT * (k ? vuR_[8] : vuL_[8]));
+            int vh = HT * vuShown_[16 + k] / 10;
             if (vh > 3) FillRect(mx, TOP + HT - vh, bw, vh, player->Clipped() ? ColorOf(CD_HILITE2) : fg, 4);
         }
     }
