@@ -1105,6 +1105,9 @@ void ClipView::lockPage(bool on) {
 
 void ClipView::switchView(ViewType vt) {
     stopAudition();
+    // trk2als: kit: el instrumento se abre en el pad de esta fila
+    if (kit()) { viewData_->kitPitch_ = cursorPitch_; viewData_->kitPitchCh_ = viewData_->songX_; }
+    else viewData_->kitPitch_ = -1;
     ViewEvent ve(VET_SWITCH_VIEW, &vt);
     SetChanged();
     NotifyObservers(&ve);
@@ -1211,6 +1214,15 @@ void ClipView::OnFocus() {
         keepVisible();
     }
     if (cursorStep_ >= total() && total() > 0) cursorStep_ = total() - 1;
+    // trk2als: kit: vienes del instrumento: el cursor, en la fila del pad que tenías
+    if (viewData_->kitPitch_ >= 0 && viewData_->kitPitchCh_ == viewData_->songX_ && kit()) {
+        int b = kitBase();
+        if (viewData_->kitPitch_ >= b && viewData_->kitPitch_ < b + 16 && cursorPitch_ != viewData_->kitPitch_) {
+            cursorPitch_ = viewData_->kitPitch_;
+            keepVisible();
+        }
+    }
+    viewData_->kitPitch_ = -1;
     playStep_ = -1;
 }
 
