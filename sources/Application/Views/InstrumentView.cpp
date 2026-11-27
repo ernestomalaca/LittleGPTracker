@@ -1271,7 +1271,8 @@ bool InstrumentView::ownedByTrack() {
 }
 
 void InstrumentView::warpToNext(int offset) {
-	if (ownedByTrack()) return ;   // el instrumento es de su pista: B + flechas no hace nada (ni avisa)
+	// el instrumento es de su pista, o es un clip de audio: B + flechas no hace nada (ni avisa)
+	if (ownedByTrack() || audioMode_) return ;
 	int instrument=viewData_->currentInstrument_+offset ;
 	if (instrument>=MAX_INSTRUMENT_COUNT) {
 		instrument=instrument-MAX_INSTRUMENT_COUNT ;
@@ -1866,7 +1867,7 @@ bool InstrumentView::NoticePos(int &x,int &y,int &maxChars) {
 }
 
 bool InstrumentView::oneRow() {
-	return gridMode_ && !audioMode_ && (simplerView_ || kitMode_) ;
+	return gridMode_ && (audioMode_ || simplerView_ || kitMode_) ;   // (el clip de audio también)
 }
 
 // la fila que se ve: en el dibujo, la de sus parámetros (la envolvente del
@@ -4837,7 +4838,16 @@ void InstrumentView::cancelTouch() {
 	if (v) v->SetInt(s.value) ;
 }
 
-void InstrumentView::beginTouch() { beginTouchID(focusID(*this)) ; }
+void InstrumentView::beginTouch() {
+	FourCC id=focusID(*this) ;
+	// grabando y esto no lleva curva (lo de cada pad, el modo...): que se sepa
+	// que es así, no una falla
+	if (id && !automatable(id) && id!=IV_PADSEL && (View::physMask_&(EPBM_LEFT|EPBM_RIGHT|EPBM_UP|EPBM_DOWN))) {
+		View::SetNotification("nada que grabar: esto no lleva curva") ;
+		isDirty_=true ;
+	}
+	beginTouchID(id) ;
+}
 
 void InstrumentView::beginTouchID(FourCC id) {
 	if (!automatable(id) || !current_ || current_->GetType()!=IT_SAMPLE) return ;
@@ -5085,7 +5095,7 @@ const char *InstrumentView::CaptureAutomation(int track) {
 	// la pista donde moviste algo por última vez (no importa dónde estés
 	// ahora); solo esa. Sin nada anotado, R2 no hace nada (ni avisa)
 	// (... salvo que la pista no tenga clip: ahí no hay dónde capturar)
-	if (capSegs_.empty()) return (autoClip(track>=0?track:viewData_->songX_)<0)?"sin clip":0 ;
+	if (capSegs_.empty()) return (autoClip(track>=0?track:viewData_->songX_)<0)?"sin clip":"nada que capturar" ;
 	track=capSegs_[0].ch ;
 	unsigned long newest=capSegs_[0].tEnd ;
 	for (size_t i=1;i<capSegs_.size();i++)
