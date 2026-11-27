@@ -87,25 +87,6 @@ double guessTempo(const std::vector<double> &t,double lastEnd,int projTempo,doub
 	return bestT ;
 }
 
-// si la frase se repite (cada 2, 4 u 8 compases), cuántos compases mide
-int repeatBars(const std::vector<int> &step,const std::vector<int> &pitch,int pages) {
-	for (int B=2;B<=8;B*=2) {
-		if (B*2>pages) break ;
-		int L=B*CLIP_STEPS_PER_PAGE, end=pages*CLIP_STEPS_PER_PAGE ;
-		int a=0, b=0, both=0 ;
-		for (size_t i=0;i<step.size();i++) {
-			if (step[i]>=end-L) {   // la última vuelta
-				a++ ;
-				for (size_t j=0;j<step.size();j++)
-					if (step[j]>=end-2*L && step[j]<end-L && pitch[j]==pitch[i] && abs(step[j]+L-step[i])<=1) { both++ ; break ; }
-			} else if (step[i]>=end-2*L) b++ ;
-		}
-		int m=a>b?a:b ;
-		if (m>=2 && both*10>=m*6) return B ;
-	}
-	return 0 ;
-}
-
 void addNote(Clip &c,int step,int tick,int len,int pitch,int vel) {
 	int total=c.Steps() ;
 	if (step<0 || step>=total) return ;
@@ -210,7 +191,8 @@ unsigned long MidiCapture::LastNoteMs() {
 // un clip nuevo con la última frase (sin pausas de más de 3 s): sin nada
 // sonando, el primer golpe en el 1.1.1 y el tempo adivinado ('tempo' entra con
 // el del proyecto y sale con el que quedó; 'guessed' = lo adivinó); sonando,
-// en la rejilla de la canción. Si se repite, el loop en la última vuelta
+// en la rejilla de la canción. Solo la última idea: la última vuelta si se
+// repite, o los últimos 8 compases
 static bool buildNew(const std::vector<Hit> &hits,int &tempo,bool &guessed,Clip &c,int &loopBars,bool *closed=0) {
 	guessed=false ;
 	if (closed) *closed=false ;
@@ -249,34 +231,54 @@ static bool buildNew(const std::vector<Hit> &hits,int &tempo,bool &guessed,Clip 
 			len.push_back((hits[i].offMs-hits[i].ms)/stepMs) ;
 		}
 	}
-	// el largo: hasta el compás del último golpe (una nota larga al final no
-	// pide otro compás; se recorta)
+	// trk2als: solo la última idea; lo de antes se olvida:
+	//  - si la frase se repite (cada 2, 4 u 8 compases): la última vuelta entera
+	//  - si no: los últimos compases, 8 como mucho
+	// (una nota larga al final no pide otro compás; se recorta)
+	const int P=CLIP_STEPS_PER_PAGE ;
 	double lastOn=0 ;
 	for (size_t i=0;i<pos.size();i++) {
 		if (pos[i]<0) pos[i]=0 ;
 		if (pos[i]>lastOn) lastOn=pos[i] ;
 	}
-	int bars=int(floor(lastOn/CLIP_STEPS_PER_PAGE))+1 ;
-	if (bars<1) bars=1 ;
-	int pages=1 ;
-	while (pages<bars && pages<CLIP_MAX_PAGES) pages*=2 ;
-	int shift=0 ;   // más de 16 compases: los últimos
-	if (bars>CLIP_MAX_PAGES) shift=(bars-CLIP_MAX_PAGES)*CLIP_STEPS_PER_PAGE ;
+	std::vector<int> st(pos.size()), tk(pos.size()) ;
+	for (size_t i=0;i<pos.size();i++) splitPos(pos[i],st[i],tk[i]) ;
+	int bars=1 ;
+	for (size_t i=0;i<st.size();i++) if (st[i]/P+1>bars) bars=st[i]/P+1 ;
+	int from=0, pages=1, B=0 ;
+	for (int b=2;b<=8 && !B;b*=2) {   // ¿se repite? las dos últimas vueltas, contadas desde el 1
+		int L=b*P ;
+		int k=(bars*P-1)/L ;   // la vuelta del último golpe
+		if (k<1) break ;
+		int na=0, nb=0, both=0 ;
+		for (size_t i=0;i<st.size();i++) {
+			if (st[i]>=k*L) {
+				na++ ;
+				for (size_t j=0;j<st.size();j++)
+					if (st[j]>=(k-1)*L && st[j]<k*L && hits[first+j].pitch==hits[first+i].pitch && abs(st[j]+L-st[i])<=1) { both++ ; break ; }
+			} else if (st[i]>=(k-1)*L) nb++ ;
+		}
+		if (na>=2 && nb>=2 && both*10>=na*6) {
+			B=b ;
+			// la última vuelta, si quedó entera; si la dejaste a medias, la anterior
+			from=(na*4>=nb*3)?k*L:(k-1)*L ;
+			pages=b ;
+		}
+	}
+	if (!B) {
+		int keep=bars>8?8:bars ;
+		from=(bars-keep)*P ;
+		while (pages<keep) pages*=2 ;
+	}
 	c.Clear() ;
 	c.pages=pages ;
-	std::vector<int> st, pi ;
 	for (size_t i=0;i<pos.size();i++) {
-		int step, tick ;
-		if (pos[i]-shift<0) continue ;
-		splitPos(pos[i]-shift,step,tick) ;
+		int step=st[i]-from ;
+		if (step<0 || step>=pages*P) continue ;
 		const Hit &h=hits[first+i] ;
-		addNote(c,step,tick,int(floor(len[i]+0.5)),h.pitch,h.vel) ;
-		st.push_back(step) ;
-		pi.push_back(h.pitch) ;
+		addNote(c,step,tk[i],int(floor(len[i]+0.5)),h.pitch,h.vel) ;
 	}
-	int B=repeatBars(st,pi,pages) ;
-	if (B>0) { c.loopStart=pages-B ; c.loopEnd=pages-1 ; }   // el loop, en la última vuelta
-	loopBars=B>0?B:pages ;
+	loopBars=pages ;
 	// trk2als: ¿cerró? (sin nada sonando: capturaste justo al terminar la
 	// vuelta, a un tiempo de distancia): entonces sigue en loop en seguida
 	if (closed && !running) {

@@ -186,7 +186,7 @@ class ClipView : public View {
     int copyStep_, copyPitch_;      // dónde estaba el cursor al copiar
     bool marking_;
     bool dupDone_;                  // se acaba de duplicar: Select+B empieza otra marca
-    int markLevel_;                 // 1 libre, 2 pasos completos, 3 todo el clip
+    int markLevel_;                 // 1 libre, 2 pasos completos, 3 el compás, 4 todo el clip
     int anchorStep_, anchorPitch_;
     bool aPending_, bPending_;      // A / B tocados solos (al soltar)
     std::string msg_;
