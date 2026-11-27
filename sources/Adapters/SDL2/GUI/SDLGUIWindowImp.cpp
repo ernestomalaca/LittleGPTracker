@@ -125,12 +125,11 @@ SDLGUIWindowImp::SDLGUIWindowImp(GUICreateWindowParams &p) {
     screenRect_._bottomRight._x = windowed_ ? appWidth * mult_ : screenWidth;
     screenRect_._bottomRight._y = windowed_ ? appHeight * mult_ : screenHeight;
 
-    // trk2als: HDMI: la pantalla es más grande que la app (en la consola, sin
-    // escritorio: KMSDRM). La ventana ocupa toda la pantalla y la app se
-    // amplía centrada. HDMISCALE=NO en config.xml lo apaga (queda en la esquina)
-    real_ = 0;
-    realTex_ = 0;
-    realK_ = 1;
+    // trk2als: HDMI (en la consola, sin escritorio: KMSDRM): la pantalla es más
+    // grande que la app. En vez de ampliar nosotros (lento), se le pide a la
+    // pantalla su modo más chico donde quepa la app (640x480 si lo tiene): la
+    // tele amplía sola y dibujar cuesta lo de siempre. Si el modo es mayor, la
+    // app va centrada. HDMISCALE=NO en config.xml lo apaga (queda en la esquina)
     bool big = windowed_ && (screenWidth > appWidth * mult_ || screenHeight > appHeight * mult_) &&
                screenWidth >= appWidth * mult_ && screenHeight >= appHeight * mult_;
     {
@@ -138,67 +137,50 @@ SDLGUIWindowImp::SDLGUIWindowImp(GUICreateWindowParams &p) {
         bool kms = !strcmp(driverName, "KMSDRM") || getenv("TRK_HDMITEST");
         if (!kms || (hs && !strcmp(hs, "NO"))) big = false;
     }
-
-    Trace::Log("DISPLAY", "Creating SDL Window (%d,%d)%s", screenRect_.Width(),
-               screenRect_.Height(), big ? " ampliada a la pantalla" : "");
+    SDL_DisplayMode small;
     if (big) {
-        window_ = SDL_CreateWindow(
-            "LittleGPTracker", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-            screenWidth, screenHeight, SDL_WINDOW_FULLSCREEN);
-    } else {
-        window_ = SDL_CreateWindow(
-            "LittleGPTracker", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-            screenRect_.Width(), screenRect_.Height(),
-            fullscreen ? SDL_WINDOW_FULLSCREEN : SDL_WINDOW_SHOWN);
+        int n = SDL_GetNumDisplayModes(0);
+        long bestArea = 0;
+        for (int i = 0; i < n; i++) {
+            SDL_DisplayMode m;
+            if (SDL_GetDisplayMode(0, i, &m) < 0) continue;
+            if (m.w < appWidth * mult_ || m.h < appHeight * mult_) continue;
+            long area = long(m.w) * m.h;
+            if (bestArea == 0 || area < bestArea) { bestArea = area; small = m; }   // (a igual tamaño, el primero)
+        }
+        if (bestArea == 0) big = false;
+        else Trace::Log("DISPLAY", "HDMI: modo %dx%d a %d Hz", small.w, small.h, small.refresh_rate);
     }
+
+    Trace::Log("DISPLAY", "Creating SDL Window (%d,%d)", screenRect_.Width(),
+               screenRect_.Height());
+    window_ = SDL_CreateWindow(
+        "LittleGPTracker", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+        big ? small.w : screenRect_.Width(), big ? small.h : screenRect_.Height(),
+        (fullscreen || big) ? SDL_WINDOW_FULLSCREEN : SDL_WINDOW_SHOWN);
     NAssert(window_);
+    if (big && SDL_SetWindowDisplayMode(window_, &small) < 0)
+        Trace::Log("DISPLAY", "HDMI: no se pudo pedir el modo: %s", SDL_GetError());
+
+    SDL_SetWindowIcon(window_, SDL_LoadBMP("lgpt_icon.bmp"));
+    surface_ = SDL_GetWindowSurface(window_);
+
+    NAssert(surface_);
+
+    // trk2als: si la ventana quedó más grande que la app (el modo más chico de
+    // la pantalla es mayor), la app va centrada
+    if (big && (surface_->w > screenRect_.Width() || surface_->h > screenRect_.Height())) {
+        screenRect_._bottomRight._x = surface_->w;
+        screenRect_._bottomRight._y = surface_->h;
+        SDL_FillRect(surface_, 0, SDL_MapRGB(surface_->format, 0, 0, 0));
+        SDL_UpdateWindowSurface(window_);
+        Trace::Log("DISPLAY", "HDMI: ventana de %dx%d, la app centrada", surface_->w, surface_->h);
+    }
 
     // Compute the x & y offset to locate our app window
 
     appAnchorX_ = (screenRect_.Width() - appWidth * mult_) / 2;
     appAnchorY_ = (screenRect_.Height() - appHeight * mult_) / 2;
-
-    SDL_SetWindowIcon(window_, SDL_LoadBMP("lgpt_icon.bmp"));
-    surface_ = 0;
-    realTex_ = 0;
-    if (big) {
-        // la app se dibuja en su superficie de siempre (640x480) y la gráfica de
-        // la consola la amplía: cuesta lo mismo que en la pantalla chica
-        int w = screenRect_.Width(), h = screenRect_.Height();
-        int k = MIN(screenWidth / w, screenHeight / h);
-        bool whole = k >= 1 && h * k * 10 >= screenHeight * 8;   // entera, si llena bastante (1080p: x2)
-        SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, whole ? "0" : "1");
-        real_ = SDL_CreateRenderer(window_, -1, 0);
-        SDL_Surface *off = real_ ? SDL_CreateRGBSurfaceWithFormat(0, w, h, 32, SDL_PIXELFORMAT_ARGB8888) : 0;
-        if (off) realTex_ = SDL_CreateTexture(real_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, w, h);
-        if (realTex_) {
-            surface_ = off;
-            int rw = screenWidth, rh = screenHeight;
-            SDL_GetRendererOutputSize(real_, &rw, &rh);
-            if (whole) {
-                realK_ = k;
-                realDst_.w = w * k;
-                realDst_.h = h * k;
-            } else {                                      // si no, lo más grande que quepa
-                realK_ = 0;
-                realDst_.h = rh;
-                realDst_.w = w * rh / h;
-                if (realDst_.w > rw) { realDst_.w = rw; realDst_.h = h * rw / w; }
-            }
-            realDst_.x = (rw - realDst_.w) / 2;
-            realDst_.y = (rh - realDst_.h) / 2;
-            Trace::Log("DISPLAY", "Pantalla (%d,%d): la app en (%d,%d) de %dx%d", rw, rh,
-                       realDst_.x, realDst_.y, realDst_.w, realDst_.h);
-        } else {   // no se pudo: como antes (en la esquina)
-            Trace::Log("DISPLAY", "No se pudo ampliar: %s", SDL_GetError());
-            if (off) SDL_FreeSurface(off);
-            if (real_) SDL_DestroyRenderer(real_);
-            real_ = 0;
-        }
-    }
-    if (!surface_) surface_ = SDL_GetWindowSurface(window_);
-
-    NAssert(surface_);
 
     Uint32 rmask, gmask, bmask, amask;
 
@@ -813,14 +795,6 @@ void SDLGUIWindowImp::Flush() {
         }
         if (SDL_MUSTLOCK(surface_)) SDL_UnlockSurface(surface_);
     }
-    if (real_) {   // trk2als: HDMI: ampliar lo que cambió
-        if (updateCount_ != 0) {
-            if (updateCount_ < MAX_OVERLAYS) presentScaled(updateRects_, updateCount_);
-            else presentScaled(0, 0);
-        }
-        updateCount_ = 0;
-        return;
-    }
     // blit partial updates on resource constrained platforms
     if ((!framebuffer_) && (updateCount_ != 0)) {
         if (updateCount_ < MAX_OVERLAYS) {
@@ -837,37 +811,8 @@ void SDLGUIWindowImp::Flush() {
     updateCount_ = 0;
 }
 
-// trk2als: la app (dibujada aparte) a la pantalla grande, ampliada y centrada
-void SDLGUIWindowImp::presentScaled(const SDL_Rect *rects, int n) {
-    if (!rects || n <= 0) {
-        SDL_UpdateTexture(realTex_, 0, surface_->pixels, surface_->pitch);
-    } else {
-        int bpp = surface_->format->BytesPerPixel;
-        for (int i = 0; i < n; i++) {
-            SDL_Rect src = rects[i];
-            if (src.x < 0) { src.w += src.x; src.x = 0; }
-            if (src.y < 0) { src.h += src.y; src.y = 0; }
-            if (src.x + src.w > surface_->w) src.w = surface_->w - src.x;
-            if (src.y + src.h > surface_->h) src.h = surface_->h - src.y;
-            if (src.w <= 0 || src.h <= 0) continue;
-            SDL_UpdateTexture(realTex_, &src,
-                              (unsigned char *)surface_->pixels + src.y * surface_->pitch + src.x * bpp,
-                              surface_->pitch);
-        }
-    }
-    SDL_SetRenderDrawColor(real_, 0, 0, 0, 255);
-    SDL_RenderClear(real_);
-    SDL_RenderCopy(real_, realTex_, 0, &realDst_);
-    SDL_RenderPresent(real_);
-}
-
 void SDLGUIWindowImp::ProcessExpose() {
     // Expose and resize events will cause a new surface to be needed.
-    if (real_) {   // trk2als: HDMI: la app sigue en su superficie
-        presentScaled(0, 0);
-        _window->Update();
-        return;
-    }
     surface_ = SDL_GetWindowSurface(window_);
     _window->Update();
 }
