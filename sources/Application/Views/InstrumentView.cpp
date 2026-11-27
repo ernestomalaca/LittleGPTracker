@@ -4641,17 +4641,17 @@ void InstrumentView::toggleAutoRec() {
 		View::SetNotification("no hay clip en la pista para grabar") ;
 		return ;
 	}
-	if (!player->IsRunning() || player->ClipTickPos(ch)<0) {
-		// no suena: precuenta de 4 tiempos y arranca el clip de la celda
-		// (desde su loop) ya grabando
+	if (!player->IsRunning()) {
+		// nada suena: precuenta de 4 tiempos y arranca el clip de la celda ya
+		// grabando (con la Session en vivo: se lanza como desde ahí)
 		viewData_->songX_=ch ;
-		viewData_->chainRow_=0 ;
-		if (player->IsRunning()) player->Stop() ;
 		player->RequestCountIn() ;
-		player->OnStartButton(PM_CHAIN,ch,false,0) ;
+		player->LaunchClip(ch,viewData_->songY_+viewData_->songOffset_) ;
 		View::SetNotification("precuenta: 4 tiempos y graba") ;
 	} else {
-		// ya suena: empieza en el siguiente uno del compás
+		// ya hay algo sonando: empieza en el siguiente uno del compás (y si
+		// este clip no sonaba, entra ahí mismo)
+		if (player->ClipTickPos(ch)<0) player->LaunchClip(ch,viewData_->songY_+viewData_->songOffset_) ;
 		player->ArmAutoRec() ;
 		View::SetNotification("graba desde el siguiente compás") ;
 	}
