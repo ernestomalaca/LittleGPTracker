@@ -1048,15 +1048,16 @@ int ClipView::rowOf(int pitch) {
 
 void ClipView::audition(int step) {
     Player *player = Player::GetInstance();
-    if (player->IsRunning() && viewData_->playMode_ != PM_AUDITION) return;
     if (step < 0 || step >= total()) return;
     if (SampleInstrument *k = kit()) {   // kit: solo el pad de la fila, tal como suena
-        player->PreviewNote(viewData_->songX_, k, cursorPitch_);
-        return;
+        if (!player->IsRunning()) {
+            player->PreviewNote(viewData_->songX_, k, cursorPitch_);
+            return;
+        }
     }
-    // trk2als: lo demás: la nota del cursor, un momento, con el instrumento de
-    // la pista (antes pedía un arranque que con la Session en vivo no hace nada:
-    // no se oía)
+    // trk2als: la nota que pones o mueves suena siempre (también con el clip
+    // sonando, como si la tocaras en el teclado), un momento, con el
+    // instrumento de la pista
     int owner = viewData_->project_->GetTrackInstrument(viewData_->songX_);
     if (owner < 0) return;
     I_Instrument *in = viewData_->project_->GetInstrumentBank()->GetInstrument(owner);
@@ -1484,9 +1485,6 @@ void ClipView::handleButton(unsigned short mask, bool pressed) {
     if (dt || dp) moveCursor(dt, dp);
     if (v == EPBM_L) moveCursor(0, -12);
     if (v == EPBM_R) moveCursor(0, 12);
-    // trk2als: al subir o bajar se oye la nota donde quedó el cursor (para
-    // probarla antes de ponerla); a los lados no
-    if ((dp && !dt) || v == EPBM_L || v == EPBM_R) audition(cursorStep_);
     isDirty_ = true;
 }
 
@@ -1798,7 +1796,7 @@ void ClipView::DrawView() {
         drawHelpBar("flechas:marcar;B:copiar;B+A:cortar;A+<>:mover;SEL+A:duplicar;A:salir");
     else
         drawHelpBar(pasting_ ? "suelta A:pegar;flechas:acomodar;B:cancelar"
-                             : "A:nota;^v:se oye la nota;X:largo/vel;B+A:cortar;SEL+A:pegar;SEL,B:marcar (más B: pasos, compás, todo);B+<>:de compás en compás;B+v:candado en este compás;B+^:quitar el candado;B+L/R:el loop a mano;START:tocar / parar la sesión;SEL+L/R:deshacer / rehacer;SEL+<>:otra pantalla");
+                             : "A:nota (suena al ponerla o moverla);X:largo/vel;B+A:cortar;SEL+A:pegar;SEL,B:marcar (más B: pasos, compás, todo);B+<>:de compás en compás;B+v:candado en este compás;B+^:quitar el candado;B+L/R:el loop a mano;START:tocar / parar la sesión;SEL+L/R:deshacer / rehacer;SEL+<>:otra pantalla");
 }
 
 void ClipView::OnPlayerUpdate(PlayerEventType, unsigned int) {
