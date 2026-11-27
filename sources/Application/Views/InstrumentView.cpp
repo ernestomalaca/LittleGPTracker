@@ -2140,7 +2140,7 @@ void InstrumentView::drawWaveform() {
 		} else if (waveEdit_ && canMark()) {
 			gh="<>:mover el cursor;L/R:de rebanada en rebanada;A:pone o agarra la marca;A+<>:mueve la marca (suena);B+A:borra la marca;SEL,B:marcar varias;B+L/R:inicio / fin aquí;B+^v:zoom;START:tocar todo;L+START:rebanar al vuelo;^v:otro dibujo;SEL:a las cajas;SEL+L/R:deshacer / rehacer" ;
 		} else if (waveEdit_) {
-			gh="L/R:elige la bandera;<>:mueve la bandera;A+<>:fade o envolvente;A+^v:sustain;B+<>:salto grande;B+^v:zoom;B+A:bandera a su lugar;^v:otro dibujo;START:tocar;A+L:su curva en el clip;R2:capturar lo movido;SEL:a las cajas;SEL+L/R:deshacer / rehacer" ;
+			gh="L/R:elige la bandera;<>:mueve la bandera;A+<>:fade o envolvente;A+^v:sustain;B+<>:salto grande;B+^v:zoom;B+A:bandera a su lugar;^v:otro dibujo;START:tocar;R2:capturar lo movido;SEL:a las cajas;SEL+L/R:deshacer / rehacer;SEL+<>:otra pantalla" ;
 		} else if (filtEdit_) {
 			gh=rec ? "<>:corte (se graba);A+<>:corte, fino;A+^v:resonancia;L/R:tipo: LP, BP, HP;^v:otro dibujo;Y+START:dejar de grabar;SEL:a las cajas"
 			       : "<>:corte;A+<>:corte, fino;A+^v:resonancia;L/R:tipo: LP, BP, HP;^v:otro dibujo;START:tocar;A+L:su curva en el clip;R2:capturar lo movido;Y+START:grabar;SEL:a las cajas;SEL+<>:otra pantalla" ;
@@ -4749,7 +4749,12 @@ bool InstrumentView::openCurve() {
 	if (!current_ || current_->GetType()!=IT_SAMPLE) return false ;
 	int fromDraw=0 ;
 	FourCC id=0 ;
-	if (drawEditing()) {   // desde el dibujo: lo que ahí se mueve
+	if (waveEdit_) {   // en la onda una bandera es dos cosas (INICIO y attack...): la curva, desde su caja
+		View::SetNotification("su curva: desde las cajas (Select)") ;
+		isDirty_=true ;
+		return false ;
+	}
+	if (drawEditing()) {   // desde el dibujo del filtro o de la envolvente: lo que ahí se mueve
 		id=drawParam() ;
 		if (!id || !automatable(id)) { View::SetNotification("aquí no hay qué automatizar") ; isDirty_=true ; return false ; }
 		fromDraw=envEdit_?(10+envSel_):filtEdit_?2:1 ;
