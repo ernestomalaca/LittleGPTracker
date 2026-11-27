@@ -1295,7 +1295,10 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 		}
 	}
 	if (fadeEdit_ && processFadeEdit(mask,pressed)) return ;
-	if (!pressed && mask==0 && capping_ && drawEditing()) capEnd() ;
+	if (!pressed && mask==0 && drawEditing()) {   // soltó todo en un dibujo: termina el tramo
+		if (capping_) capEnd() ;
+		if (touching_) endTouch() ;
+	}
 	if (filtEdit_ && processFiltEdit(mask,pressed)) return ;
 	if (envEdit_ && processEnvEdit(mask,pressed)) return ;
 	// trk2als: automatización
@@ -4564,8 +4567,9 @@ void InstrumentView::cancelTouch() {
 	if (v) v->SetInt(s.value) ;
 }
 
-void InstrumentView::beginTouch() {
-	FourCC id=focusID(*this) ;
+void InstrumentView::beginTouch() { beginTouchID(focusID(*this)) ; }
+
+void InstrumentView::beginTouchID(FourCC id) {
 	if (!automatable(id) || !current_ || current_->GetType()!=IT_SAMPLE) return ;
 	int ch=autoChannel() ;
 	int clip=autoClip(ch) ;
@@ -4652,7 +4656,20 @@ void InstrumentView::endTouch() {
 // sale su escala)
 void InstrumentView::drawCapture(FourCC id,int before) {
 	if (kitMode_ || !current_ || current_->GetType()!=IT_SAMPLE || !automatable(id)) return ;
-	if (Player::GetInstance()->IsAutoRec()) return ;
+	Player *player=Player::GetInstance() ;
+	if (player->IsAutoRec()) {
+		// grabando: se escribe en la curva, como A sostenida en su caja (hasta
+		// soltar todo)
+		if (touching_ && touchID_!=id) endTouch() ;
+		if (!touching_) { preTouchVal_=before ; beginTouchID(id) ; }
+		if (touching_) recordTouch() ;
+		return ;
+	}
+	// si el parámetro ya traía curva sonando: lo último que se mueve se lo queda
+	{
+		int av ;
+		if (((SampleInstrument *)current_)->GetAutomated(id,av)) player->OverrideAutomation(autoChannel(),id) ;
+	}
 	if (capping_ && capCur_.id!=id) capEnd() ;
 	if (!capping_) {
 		int ch=autoChannel() ;

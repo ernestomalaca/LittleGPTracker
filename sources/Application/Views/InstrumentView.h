@@ -145,6 +145,7 @@ private:
 	void drawKit(SampleInstrument *si) ;
 	void hopDrawing(int dir) ;
 	void drawCapture(FourCC id,int before) ;
+	void beginTouchID(FourCC id) ;
 	void autoDraw() ;
 	bool boxMode_ ;   // Sampler: Select abrió las cajas (si no, se está en el dibujo)
 	unsigned char kitWf_[80] ;   // la onda del pad elegido
