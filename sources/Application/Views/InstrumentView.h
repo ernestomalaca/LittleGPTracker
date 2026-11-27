@@ -128,7 +128,12 @@ private:
 	void envAudition(int holdMs=1000) ;
 	bool clipSounding() ;     // la pista ya suena con las notas de su clip
 	void envNoteOff() ;
-	bool drawEditing() { return waveEdit_ || fadeEdit_ || envEdit_ || filtEdit_ ; }
+	bool drawEditing() { return waveEdit_ || fadeEdit_ || envEdit_ || filtEdit_ || zoneEdit_ ; }
+	bool zoneEdit_ ;    // trk2als: multicapa (.sf2): parado en el mapa de zonas
+	int zoneSel_ ;      // la zona elegida
+	bool processZoneEdit(unsigned short mask,bool pressed) ;
+	void zoneAudition() ;
+	void drawZones(SampleInstrument *si,int X,int Y,int W,int H) ;
 	bool filtEdit_ ;      // el dibujo del filtro (su curva de respuesta)
 	FourCC filtBox_ ;     // la caja que se movió al último ahí
 	bool processFiltEdit(unsigned short mask,bool pressed) ;

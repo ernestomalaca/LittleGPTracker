@@ -415,7 +415,7 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data),
 	markTap_=false ;
 	manualPending_=false ;
 	kitWfIndex_=-1 ; kitWfSize_=0 ;
-	padHoldAt_=0 ; padPlus_=false ; kitLitShown_=0 ; padEdit_=false ; boxMode_=false ; curveFromDraw_=0 ;
+	padHoldAt_=0 ; padPlus_=false ; kitLitShown_=0 ; padEdit_=false ; boxMode_=false ; curveFromDraw_=0 ; zoneEdit_=false ; zoneSel_=-1 ;
 	drawRep_=0 ; drawRepMask_=0 ;
 	waveEdit_=false ;
 	waveZoom_=1 ;
@@ -1377,6 +1377,7 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 	if (pressed && mask==(EPBM_A|EPBM_L) && drawEditing()) { openCurve() ; return ; }
 	// trk2als: automatización (también desde los dibujos del filtro)
 	if (pressed && mask==(EPBM_Y|EPBM_START)) { toggleAutoRec() ; return ; }
+	if (zoneEdit_ && processZoneEdit(mask,pressed)) return ;
 	if (filtEdit_ && processFiltEdit(mask,pressed)) return ;
 	if (envEdit_ && processEnvEdit(mask,pressed)) return ;
 	// A + gatillo L: la curva de este parámetro en el clip (si no se
@@ -1936,14 +1937,16 @@ void InstrumentView::drawGrid() {
 	int kind=audioMode_?0:1 ;
 	int tx=10 ;
 	for (int i=0;i<pageCount_;i++) {
+		// (multicapa: su primera pestaña son las zonas)
+		const char *pname=(sfMode_ && kind==1 && !strcmp(pageName_[i],"SAMPLER"))?"ZONAS":pageName_[i] ;
 		int nl=0 ;
-		for (const char *q=pageName_[i];*q;q++) if ((*q&0xC0)!=0x80) nl++ ;
+		for (const char *q=pname;*q;q++) if ((*q&0xC0)!=0x80) nl++ ;
 		int w=16*nl+24 ;
 		// (en el dibujo: la pestaña donde se está sigue encendida; las otras, apagadas)
-		if (drawEditing() && i!=page_[kind]) DrawText(tx+12,GRID_TABS_Y+6,pageName_[i],Mix(bg,fg,18),1) ;
+		if (drawEditing() && i!=page_[kind]) DrawText(tx+12,GRID_TABS_Y+6,pname,Mix(bg,fg,18),1) ;
 		else if (i==page_[kind]) {
 			FillRect(tx,GRID_TABS_Y,w,28,fg,14) ;
-			DrawText(tx+12,GRID_TABS_Y+6,pageName_[i],bg,1) ;
+			DrawText(tx+12,GRID_TABS_Y+6,pname,bg,1) ;
 			// la puntita del globo: hacia dónde va lo que se mueve. Arriba, el
 			// dibujo (o los pads del kit); abajo, las cajas
 			bool up=drawEditing() ;
@@ -1957,7 +1960,7 @@ void InstrumentView::drawGrid() {
 				if (up) FillRect(px-tw/2,GRID_TABS_Y-8+q,tw,1,fg) ;
 				else FillRect(px-tw/2,GRID_TABS_Y+28+(7-q),tw,1,fg) ;
 			}
-		} else DrawText(tx+12,GRID_TABS_Y+6,pageName_[i],dim,1) ;
+		} else DrawText(tx+12,GRID_TABS_Y+6,pname,dim,1) ;
 		tx+=w+8 ;
 	}
 	if (pageCount_>1 && !drawEditing()) DrawText(640-10-16*3,GRID_TABS_Y+6,"L·R",dim,1) ;
@@ -2031,7 +2034,8 @@ void InstrumentView::drawGrid() {
 		bool off=false ;
 		if (drawEditing()) {   // en el dibujo: solo lo que ahí se mueve sigue vivo
 			FourCC bid=f.IsStatic()?0:((UIIntVarField &)f).GetVariableID() ;
-			if (waveEdit_) off=(bid!=SIP_S_START && bid!=SIP_S_END) ;
+			if (zoneEdit_) off=true ;
+			else if (waveEdit_) off=(bid!=SIP_S_START && bid!=SIP_S_END) ;
 			else if (fadeEdit_) off=(bid!=SIP_S_FIN && bid!=SIP_S_FOUT) ;
 			else if (filtEdit_) off=!(bid==SIP_S_FTYPE || bid==SIP_S_FHZ || bid==SIP_S_FQ) ;
 			else off=!(bid==envID(0) || bid==envID(1) || bid==envID(2) || bid==envID(3)) ;
@@ -2152,6 +2156,8 @@ void InstrumentView::drawWaveform() {
 			gh="<>:mover el cursor;L/R:de rebanada en rebanada;A:pone o agarra la marca;A+<>:mueve la marca (suena);B+A:borra la marca;SEL,B:marcar varias;B+L/R:inicio / fin aquí;B+^v:zoom;START:tocar todo;L+START:rebanar al vuelo;^v:otro dibujo;SEL:a las cajas;SEL+L/R:deshacer / rehacer" ;
 		} else if (waveEdit_) {
 			gh="L/R:elige la bandera;<>:mueve la bandera;A+<>:fade o envolvente;A+^v:sustain;B+<>:salto grande;B+^v:zoom;B+A:bandera a su lugar;^v:otro dibujo;START:play / stop;R2:capturar lo movido;SEL:a las cajas;SEL+L/R:deshacer / rehacer;SEL+<>:otra pantalla" ;
+		} else if (zoneEdit_) {
+			gh="<>:de zona en zona (suena);A:tocarla otra vez;^v:otro dibujo;START:play / stop;SEL:a las cajas;SEL+<>:otra pantalla" ;
 		} else if (filtEdit_) {
 			gh=rec ? "<>:corte (se graba);A+<>:corte, fino;A+^v:resonancia;L/R:tipo: LP, BP, HP;^v:otro dibujo;Y+START:dejar de grabar;SEL:a las cajas"
 			       : "<>:corte;A+<>:corte, fino;A+^v:resonancia;L/R:tipo: LP, BP, HP;^v:otro dibujo;START:play / stop;A+L:su curva en el clip;R2:capturar lo movido;Y+START:grabar;SEL:a las cajas;SEL+<>:otra pantalla" ;
@@ -2208,35 +2214,8 @@ void InstrumentView::drawWaveformBody() {
 	}
 	if (sfMode_ && si->IsZoned()) {   // trk2als: soundfont: el mapa de zonas
 		if (!gridMode_) { drawZoneMap(si,X,Y,W,H) ; return ; }
-		// en la rejilla: la onda de la zona que suena (la de la última nota)
-		// con su envolvente, y abajo la tira de zonas
-		const std::vector<ZoneSource::Zone> &zones=si->Zones() ;
-		int last=si->LastNote() ;
-		if (last<0) last=60 ;
-		int cur=-1, best=1000 ;
-		for (size_t i=0;i<zones.size();i++) {
-			int d=(last<zones[i].lo)?zones[i].lo-last:(last>zones[i].hi)?last-zones[i].hi:0 ;
-			if (d<best) { best=d ; cur=int(i) ; }
-		}
-		const int ZH=34 ;
-		drawZoneStrip(si,X,Y+H-ZH,W,ZH,cur) ;
-		if (cur<0 || !zones[cur].src) return ;
-		SoundSource *zs=zones[cur].src ;
-		int size=zs->GetSize(-1) ;
-		short *data=(short *)zs->GetSampleBuffer(-1) ;
-		int channels=zs->GetChannelCount(-1) ;
-		if (size<=0 || !data || channels<1) return ;
-		int key=-1000-cur ;
-		if (key!=wfSample_ || size!=wfSize_ || wfFrom_!=0 || wfTo_!=size) {
-			for (int b=0;b<WF_BARS;b++) {
-				int from=int((long long)size*b/WF_BARS), to=int((long long)size*(b+1)/WF_BARS) ;
-				int step=(to-from)/200+1, peak=0 ;
-				for (int i=from;i<to;i+=step) { int v=data[i*channels] ; if (v<0) v=-v ; if (v>peak) peak=v ; }
-				wfPeaks_[b]=(unsigned char)(peak>>7) ;
-			}
-			wfSample_=key ; wfSize_=size ; wfFrom_=0 ; wfTo_=size ;
-		}
-		drawSimplerWave(si,X,Y,W,H-ZH-8,size,zs) ;
+		// en la rejilla: el mapa de zonas (la onda de la elegida, y el teclado)
+		drawZones(si,X,Y,W,H) ;
 		return ;
 	}
 
@@ -2909,6 +2888,167 @@ void InstrumentView::envAudition(int holdMs) {
 	envOffAt_=System::GetInstance()->GetClock()+holdMs ;
 }
 
+// trk2als: multicapa: suena la zona elegida, en su nota (medio segundo)
+void InstrumentView::zoneAudition() {
+	if (!current_ || current_->GetType()!=IT_SAMPLE) return ;
+	SampleInstrument *si=(SampleInstrument *)current_ ;
+	const std::vector<ZoneSource::Zone> &zones=si->Zones() ;
+	if (zoneSel_<0 || zoneSel_>=int(zones.size())) return ;
+	if (clipSounding()) return ;
+	if (previewing_) stopPreview() ;
+	envNoteOff() ;
+	const ZoneSource::Zone &z=zones[zoneSel_] ;
+	int note=z.root ;
+	if (note<z.lo || note>z.hi) note=(z.lo+z.hi)/2 ;
+	int ch=viewData_->songX_ ;
+	if (ch<0 || ch>=SONG_CHANNEL_COUNT) ch=0 ;
+	envCh_=ch ;
+	envNote_=note ;
+	MixerService *ms=MixerService::GetInstance() ;
+	ms->Lock() ;
+	Player::GetInstance()->LiveNoteOn(ch,current_,envNote_,100) ;
+	ms->Unlock() ;
+	envOffAt_=System::GetInstance()->GetClock()+600 ;
+}
+
+// el mapa de zonas: ← → de zona en zona (suena), A la vuelve a tocar, ↑ ↓ el
+// otro dibujo. Nada se edita aquí
+bool InstrumentView::processZoneEdit(unsigned short mask,bool pressed) {
+	bool ok=current_ && current_->GetType()==IT_SAMPLE && gridMode_ && sfMode_ && ((SampleInstrument *)current_)->IsZoned() ;
+	if (!ok) { zoneEdit_=false ; return false ; }
+	const unsigned short arrows=EPBM_UP|EPBM_DOWN|EPBM_LEFT|EPBM_RIGHT ;
+	if ((mask&(EPBM_SELECT|EPBM_R)) && (mask&arrows) && !(mask&EPBM_B)) {   // cambiar de pantalla: sale
+		envNoteOff() ;
+		zoneEdit_=false ;
+		return false ;
+	}
+	if (mask&EPBM_SELECT) return false ;
+	if (!pressed) return true ;
+	SampleInstrument *si=(SampleInstrument *)current_ ;
+	int n=int(si->Zones().size()) ;
+	if (mask==EPBM_UP || mask==EPBM_DOWN) { hopDrawing(mask==EPBM_DOWN?1:-1) ; return true ; }
+	if (mask==EPBM_LEFT || mask==EPBM_RIGHT) {
+		int z=zoneSel_+((mask==EPBM_RIGHT)?1:-1) ;
+		if (z<0) z=0 ;
+		if (z>n-1) z=n-1 ;
+		if (z!=zoneSel_) { zoneSel_=z ; zoneAudition() ; isDirty_=true ; }
+		return true ;
+	}
+	if (mask==EPBM_A) { zoneAudition() ; isDirty_=true ; return true ; }
+	if (mask==EPBM_START) {
+		envNoteOff() ;
+		Player::GetInstance()->EditorStart(viewData_->songX_,viewData_->songY_) ;
+		isDirty_=true ;
+		return true ;
+	}
+	return true ;
+}
+
+// una nota -> su lugar en un teclado de teclas blancas iguales
+static float keyPos(int note) {
+	static const float off[12]={0,0.5f,1,1.5f,2,3,3.5f,4,4.5f,5,5.5f,6} ;
+	return (note/12)*7+off[note%12] ;
+}
+
+void InstrumentView::drawZones(SampleInstrument *si,int X,int Y,int W,int H) {
+	GUIColor bg=ColorOf(CD_BACKGROUND), fg=ColorOf(CD_NORMAL), dim=Mix(bg,fg,50) ;
+	const std::vector<ZoneSource::Zone> &zones=si->Zones() ;
+	if (zones.empty()) return ;
+	if (zoneSel_<0 || zoneSel_>=int(zones.size())) {   // la de la última nota (o la del C3)
+		int last=si->LastNote() ;
+		if (last<0) last=60 ;
+		int best=1000 ;
+		for (size_t i=0;i<zones.size();i++) {
+			int d=(last<zones[i].lo)?zones[i].lo-last:(last>zones[i].hi)?last-zones[i].hi:0 ;
+			if (d<best) { best=d ; zoneSel_=int(i) ; }
+		}
+	}
+	const ZoneSource::Zone &sel=zones[zoneSel_] ;
+	const int WH=H-144 ;                       // la onda de la zona
+	const int IY=Y+WH+6, BY=IY+24, BH=30, KY=BY+BH+6, KH=Y+H-KY ;
+	SoundSource *zs=sel.src ;
+	if (zs) {
+		int size=zs->GetSize(-1) ;
+		short *data=(short *)zs->GetSampleBuffer(-1) ;
+		int channels=zs->GetChannelCount(-1) ;
+		if (size>0 && data && channels>=1) {
+			int key=-1000-zoneSel_ ;
+			if (key!=wfSample_ || size!=wfSize_ || wfFrom_!=0 || wfTo_!=size) {
+				for (int b=0;b<WF_BARS;b++) {
+					int from=int((long long)size*b/WF_BARS), to=int((long long)size*(b+1)/WF_BARS) ;
+					int step=(to-from)/200+1, peak=0 ;
+					for (int i=from;i<to;i+=step) { int v=data[i*channels] ; if (v<0) v=-v ; if (v>peak) peak=v ; }
+					wfPeaks_[b]=(unsigned char)(peak>>7) ;
+				}
+				wfSample_=key ; wfSize_=size ; wfFrom_=0 ; wfTo_=size ;
+			}
+			drawSimplerWave(si,X,Y,W,WH,size,zs) ;
+		}
+	}
+	{   // qué zona es
+		char t[24] ;
+		snprintf(t,sizeof(t),"ZONA %d/%d",zoneSel_+1,int(zones.size())) ;
+		DrawText(X+4,IY,t,fg,1) ;
+		int tx=X+4+16*(int(strlen(t))+1) ;
+		std::string r=padNoteName(sel.lo)+"-"+padNoteName(sel.hi) ;
+		DrawText(tx,IY,r.c_str(),dim,1) ;
+		tx+=16*(int(r.size())+2) ;
+		std::string nn=std::string("nota ")+padNoteName(sel.root>=0?sel.root:sel.lo) ;
+		DrawText(tx,IY,nn.c_str(),dim,1) ;
+		tx+=16*(int(nn.size())+2) ;
+		if (sel.loopStart>=0 && tx+64<=X+W) DrawText(tx,IY,"loop",dim,1) ;
+	}
+	// el teclado: de la zona más grave a la más aguda, en octavas completas
+	int lo=127, hi=0 ;
+	for (size_t i=0;i<zones.size();i++) { if (zones[i].lo<lo) lo=zones[i].lo ; if (zones[i].hi>hi) hi=zones[i].hi ; }
+	if (lo<12) lo=12 ;
+	if (hi>107) hi=107 ;
+	if (hi<lo) hi=lo ;
+	int o0=lo/12, o1=hi/12 ;
+	while (o1-o0<2) { if (o0>1) o0-- ; else o1++ ; }
+	int nWhite=(o1-o0+1)*7 ;
+	float KW=float(W)/nWhite ;
+	float base=o0*7 ;
+	for (size_t i=0;i<zones.size();i++) {   // las zonas, encima de sus teclas
+		const ZoneSource::Zone &z=zones[i] ;
+		int zl=z.lo<o0*12?o0*12:z.lo, zh=z.hi>o1*12+11?o1*12+11:z.hi ;
+		if (zh<zl) continue ;
+		int x0=X+int((keyPos(zl)-base)*KW), x1=X+int((keyPos(zh)+((zh%12==4 || zh%12==11)?1.0f:0.5f)-base)*KW) ;
+		int w=x1-x0-3 ;
+		if (w<3) w=3 ;
+		bool on=(int(i)==zoneSel_) ;
+		FillRect(x0,BY,w,BH,on?fg:Mix(bg,fg,22),5) ;
+		std::string nm=padNoteName(z.root>=0?z.root:z.lo) ;
+		if (16*int(nm.size())+6<=w) DrawText(x0+(w-16*int(nm.size()))/2,BY+7,nm.c_str(),on?bg:fg,1) ;
+	}
+	int litNote=sel.root ;
+	if (litNote<sel.lo || litNote>sel.hi) litNote=(sel.lo+sel.hi)/2 ;
+	for (int k=0;k<nWhite;k++) {
+		int x0=X+int(k*KW), x1=X+int((k+1)*KW) ;
+		FillRect(x0,KY,x1-x0-1,KH,bg,2) ;
+	}
+	for (int k=0;k<nWhite;k++) {
+		int m=k%7 ;
+		if (m==2 || m==6) continue ;   // entre mi-fa y si-do no hay negra
+		int x0=X+int((k+0.68f)*KW), w=int(KW*0.64f) ;
+		FillRect(x0,KY,w<3?3:w,KH*6/10,fg,1) ;
+	}
+	if (litNote>=o0*12 && litNote<=o1*12+11) {   // la nota que suena al probar
+		float p=keyPos(litNote)-base ;
+		bool black=(litNote%12==1 || litNote%12==3 || litNote%12==6 || litNote%12==8 || litNote%12==10) ;
+		int x0=X+int((black?p+0.18f:p)*KW)+2, w=int(KW*(black?0.64f:1.0f))-5 ;
+		if (w<3) w=3 ;
+		FillRect(x0,black?KY+KH*6/10-18:KY+KH-16,w,12,ColorOf(CD_PLAY),3) ;
+	}
+	for (int o=o0;o<=o1;o++) {   // las octavas, con letra de la normal (muchas: una sí y una no)
+		if (o1-o0>3 && o%2!=0) continue ;
+		char t[8] ;
+		snprintf(t,sizeof(t),"C%d",o-2) ;   // 36 = C1, como en Live
+		int x0=X+int((o-o0)*7*KW)+2 ;
+		if (x0+32<=X+W) DrawText(x0,KY+KH-36,t,dim,1) ;
+	}
+}
+
 // true si la tecla se usó aquí
 bool InstrumentView::processEnvEdit(unsigned short mask,bool pressed) {
 	bool ok=current_ && current_->GetType()==IT_SAMPLE && gridMode_ && !kitMode_ && !audioMode_ ;
@@ -3027,7 +3167,7 @@ bool InstrumentView::processFadeEdit(unsigned short mask,bool pressed) {
 void InstrumentView::OnFocus() {
 	fadeEdit_=false ;
 	envNoteOff() ;
-	envEdit_=false ; filtEdit_=false ;
+	envEdit_=false ; filtEdit_=false ; zoneEdit_=false ;
 	bool fromCurve=(viewData_->curveFocus_!=0) ;
 	if (viewData_->curveFocus_) {   // vuelve de su curva: el foco en ese parámetro
 		lastFocusID_=viewData_->curveFocus_ ;
@@ -3225,7 +3365,7 @@ void InstrumentView::enterWaveEdit(bool play) {
 void InstrumentView::toggleDraw() {
 	if (waveEdit_) { exitWaveEdit() ; return ; }
 	if (fadeEdit_) { fadeEdit_=false ; return ; }
-	if (envEdit_ || filtEdit_) { envNoteOff() ; envEdit_=false ; filtEdit_=false ; return ; }
+	if (envEdit_ || filtEdit_ || zoneEdit_) { envNoteOff() ; envEdit_=false ; filtEdit_=false ; zoneEdit_=false ; return ; }
 	if (!current_ || current_->GetType()!=IT_SAMPLE) return ;
 	SampleInstrument *si=(SampleInstrument *)current_ ;
 	if (kitMode_ && gridMode_) {   // kit, pestaña PAD: las cajas del pad <-> los pads
@@ -3251,7 +3391,11 @@ void InstrumentView::toggleDraw() {
 		envSel_=0 ;
 		return ;
 	}
-	if (sfMode_ || strcmp(pageName_[page_[1]],"SAMPLER")) return ;   // la onda: solo en SAMPLER (no en multicapa)
+	if (strcmp(pageName_[page_[1]],"SAMPLER")) return ;
+	if (sfMode_) {   // multicapa: el mapa de zonas
+		if (si->IsZoned()) zoneEdit_=true ;
+		return ;
+	}
 	enterWaveEdit(false) ;
 }
 
@@ -3270,7 +3414,7 @@ void InstrumentView::hopDrawing(int dir) {
 			pg[n]=i ; kd[n++]=1 ;
 			if (here && envEdit_) cur=n ;
 			pg[n]=i ; kd[n++]=0 ;
-		} else if (!strcmp(pn,"AMP") || (!sfMode_ && !strcmp(pn,"SAMPLER"))) {
+		} else if (!strcmp(pn,"AMP") || !strcmp(pn,"SAMPLER")) {   // (multicapa: SAMPLER son sus zonas)
 			if (here) cur=n ;
 			pg[n]=i ; kd[n++]=0 ;
 		}
@@ -3279,7 +3423,7 @@ void InstrumentView::hopDrawing(int dir) {
 	int t=cur+dir ;
 	if (waveEdit_) exitWaveEdit() ;
 	envNoteOff() ;
-	envEdit_=false ; filtEdit_=false ;
+	envEdit_=false ; filtEdit_=false ; zoneEdit_=false ;
 	fadeEdit_=false ;
 	if (page_[1]!=pg[t]) {
 		page_[1]=pg[t] ;
