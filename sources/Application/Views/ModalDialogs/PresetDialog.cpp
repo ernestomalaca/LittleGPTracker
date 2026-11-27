@@ -7,6 +7,7 @@
 #include "Application/Utils/Latin1.h"
 #include "NewProjectDialog.h"
 #include "ImportSampleDialog.h"
+#include "Application/Instruments/SF2Reader.h"
 #include "System/FileSystem/FileSystem.h"
 #include <stdio.h>
 #include <math.h>
@@ -161,6 +162,24 @@ PresetDialog::~PresetDialog() {
 	stopPreview() ;
 }
 
+// trk2als: un .sf2 con varios sonidos se abre como una carpeta: adentro, uno
+// por renglón ("012 Marimba": el número es su lugar en el archivo)
+static bool isSf2Name(const std::string &n) {
+	if (n.size() < 5) return false ;
+	std::string e = n.substr(n.size() - 4) ;
+	for (size_t i = 0; i < e.size(); i++) e[i] = tolower(e[i]) ;
+	return e == ".sf2" ;
+}
+// "Librería/x/banco.sf2/012 Marimba" -> el archivo y el número; false si no es de esos
+static bool splitSf2(const std::string &full, std::string &file, int &idx) {
+	size_t p = full.rfind('/') ;
+	if (p == std::string::npos) return false ;
+	file = full.substr(0, p) ;
+	if (!isSf2Name(file)) return false ;
+	idx = atoi(full.c_str() + p + 1) ;
+	return true ;
+}
+
 std::string PresetDialog::full(const std::string &n) {
 	return folder_.empty() ? n : folder_ + "/" + n ;
 }
@@ -241,6 +260,24 @@ void PresetDialog::load() {
 	entries_.clear() ;
 	Entry e ;
 	e.ptype = -1 ; e.zones = 0 ;
+	if (InstrumentPresets::IsLib(folder_) && isSf2Name(folder_)) {   // dentro de un .sf2: sus sonidos
+		SF2File sf ;
+		if (sf.Open(InstrumentPresets::LibPath(folder_).GetPath().c_str())) {
+			const std::vector<SF2Preset> &ps = sf.Presets() ;
+			for (size_t i = 0; i < ps.size(); i++) {
+				char b[80] ;
+				snprintf(b, sizeof(b), "%03d %s", int(i), ps[i].name.c_str()) ;
+				e.kind = K_PRESET ;
+				e.name = b ;
+				e.ptype = InstrumentPresets::PK_MULTI ;
+				e.zones = 0 ;
+				entries_.push_back(e) ;
+			}
+		}
+		selected_ = 0 ;
+		top_ = 0 ;
+		return ;
+	}
 	if (InstrumentPresets::IsLib(folder_)) {   // trk2als: dentro de la samplelib
 		int what = pick_ ? pickWhat() : (int)InstrumentPresets::LIB_WAV ;
 		InstrumentPresets::ListLib(folder_, folders, presets, what) ;
@@ -258,6 +295,14 @@ void PresetDialog::load() {
 			bool sf2 = low.size() > 4 && low.compare(low.size() - 4, 4, ".sf2") == 0 ;
 			e.ptype = sf2 ? InstrumentPresets::PK_MULTI : InstrumentPresets::PK_SAMPLE ;
 			e.zones = 0 ;
+			if (sf2 && pick_) {   // un banco (varios sonidos): se entra como a una carpeta
+				SF2File sf ;
+				if (sf.Open(InstrumentPresets::LibPath(full(presets[i])).GetPath().c_str()) && sf.Presets().size() > 1) {
+					e.kind = K_FOLDER ;
+					e.name = presets[i] + "/" ;
+					e.zones = int(sf.Presets().size()) ;
+				}
+			}
 			entries_.push_back(e) ;
 		}
 		selected_ = 0 ;
@@ -558,6 +603,11 @@ static int noteHits(const InstrumentPresets::Info &info, std::vector<Hit> &hits)
 void PresetDialog::startPreview() {
 	if (entries_.empty() || entries_[selected_].kind != K_PRESET) return ;
 	if (pick_) {   // trk2als: el archivo (un loop, a tempo y en fase; un .sf2, su C3)
+		std::string sfFile ;
+		int sfIdx = 0 ;
+		if (splitSf2(full(entries_[selected_].name), sfFile, sfIdx))   // un sonido de un banco
+			SampleFilePreview(InstrumentPresets::LibPath(sfFile), viewData_, pickInstr_, false, sfIdx) ;
+		else
 		SampleFilePreview(InstrumentPresets::LibPath(full(entries_[selected_].name)), viewData_, pickInstr_,
 		                  pick_ == PICK_LOOP) ;
 		playing_ = entries_[selected_].name ;
@@ -755,7 +805,8 @@ void PresetDialog::drawShapes() {
 			else if (e.ptype == InstrumentPresets::PK_MULTI) snprintf(b, sizeof(b), "%d zonas", e.zones) ;
 			else b[0] = 0 ;   // un sample: ya lo dice su apartado
 			sub = b ;
-			if (InstrumentPresets::IsLib(folder_)) {   // un archivo de la samplelib
+			if (InstrumentPresets::IsLib(folder_) && isSf2Name(folder_)) sub = "" ;   // un sonido del banco: su nombre y ya
+			else if (InstrumentPresets::IsLib(folder_)) {   // un archivo de la samplelib
 				if (name.size() > 4) name = name.substr(0, name.size() - 4) ;
 				sub = e.ptype == InstrumentPresets::PK_MULTI ? "soundfont" : "" ;   // un sample: ya se sabe
 			}
@@ -1016,7 +1067,10 @@ void PresetDialog::ProcessButtonMask(unsigned short mask, bool pressed) {
 			if (pick_) {   // trk2als: se importa y listo
 				pickLast() = folder_ ;
 				std::string msg ;
-				if (SampleFileImport(InstrumentPresets::LibPath(chosen_), viewData_, pickInstr_, msg)) {
+				std::string sfFile ;
+				int sfIdx = 0 ;
+				bool inBank = splitSf2(chosen_, sfFile, sfIdx) ;
+				if (SampleFileImport(InstrumentPresets::LibPath(inBank ? sfFile : chosen_), viewData_, pickInstr_, msg, sfIdx)) {
 					if (!msg.empty()) View::SetNotification(msg.c_str()) ;
 					EndModal(1) ;
 				} else {

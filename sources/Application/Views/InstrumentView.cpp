@@ -733,10 +733,12 @@ void InstrumentView::fillSampleParameters() {
 			// envolvente) y MÁS (warp, rebanadas, glide, voces, guardar). La
 			// envolvente de volumen se edita sobre la onda (Select); solo un
 			// multicapa, que no tiene onda editable, conserva AMP
-			pageName_[pageCount_++]="SAMPLER" ;
+			// (un multicapa: AMP · FILTRO · ZONAS, que es su "SAMPLER" al final)
 			if (sfMode_) pageName_[pageCount_++]="AMP" ;
+			else pageName_[pageCount_++]="SAMPLER" ;
 			pageName_[pageCount_++]="FILTRO" ;
-			if (!sfMode_) pageName_[pageCount_++]="MÁS" ;
+			if (sfMode_) pageName_[pageCount_++]="SAMPLER" ;
+			else pageName_[pageCount_++]="MÁS" ;
 			int &pg=page_[1] ;
 			if (pg<0 || pg>=pageCount_) pg=0 ;
 			const char *pn=pageName_[pg] ;
@@ -2076,6 +2078,18 @@ void InstrumentView::drawGrid() {
 			DrawText(cx+48,cy+30,"glide",soft,1) ;
 			DrawText(cx+48,cy+48,gb,vc,1) ;
 		}
+		if (!f.IsStatic() && ((UIIntVarField &)f).GetVariableID()==SIP_S_FTYPE) {
+			// su forma, al lado: LP (plano y cae), BP (loma), HP (sube y plano)
+			int ft=((UIIntVarField &)f).GetVariable().GetInt() ;
+			const int ix=cx+74, iy=cy+34, iw=60, ih=26 ;
+			for (int k=0;k<=iw;k+=2) {
+				float t=float(k)/iw, yv ;
+				if (ft==0) yv=(t<0.55f)?1.0f:1.0f-(t-0.55f)/0.45f ;
+				else if (ft==2) yv=(t>0.45f)?1.0f:t/0.45f ;
+				else yv=(t<0.5f)?t/0.5f:1.0f-(t-0.5f)/0.5f ;
+				FillRect(ix+k,iy+int((1.0f-yv)*(ih-4)),4,4,vc,2) ;
+			}
+		}
 		// la rayita: cuánto va (solo los números con rango)
 		if (!f.IsStatic() && number) {
 			UIIntVarField &vf=(UIIntVarField &)f ;
@@ -2964,7 +2978,9 @@ void InstrumentView::drawZones(SampleInstrument *si,int X,int Y,int W,int H) {
 		}
 	}
 	const ZoneSource::Zone &sel=zones[zoneSel_] ;
-	const int WH=H-144 ;                       // la onda de la zona
+	// (el mapa solo en ZONAS; en AMP y FILTRO, la onda entera con su envolvente)
+	bool map=!strcmp(pageName_[page_[1]],"SAMPLER") ;
+	const int WH=map?H-144:H ;                 // la onda de la zona
 	const int IY=Y+WH+6, BY=IY+24, BH=30, KY=BY+BH+6, KH=Y+H-KY ;
 	SoundSource *zs=sel.src ;
 	if (zs) {
@@ -2985,6 +3001,7 @@ void InstrumentView::drawZones(SampleInstrument *si,int X,int Y,int W,int H) {
 			drawSimplerWave(si,X,Y,W,WH,size,zs) ;
 		}
 	}
+	if (!map) return ;
 	{   // qué zona es
 		char t[24] ;
 		snprintf(t,sizeof(t),"ZONA %d/%d",zoneSel_+1,int(zones.size())) ;
@@ -3023,29 +3040,29 @@ void InstrumentView::drawZones(SampleInstrument *si,int X,int Y,int W,int H) {
 	}
 	int litNote=sel.root ;
 	if (litNote<sel.lo || litNote>sel.hi) litNote=(sel.lo+sel.hi)/2 ;
-	for (int k=0;k<nWhite;k++) {
-		int x0=X+int(k*KW), x1=X+int((k+1)*KW) ;
-		FillRect(x0,KY,x1-x0-1,KH,bg,2) ;
-	}
+	// el teclado, simple: una tira clara, las negras encima y una rayita en
+	// cada do (sin contorno tecla por tecla)
+	FillRect(X,KY,W,KH,bg,4) ;
 	for (int k=0;k<nWhite;k++) {
 		int m=k%7 ;
 		if (m==2 || m==6) continue ;   // entre mi-fa y si-do no hay negra
 		int x0=X+int((k+0.68f)*KW), w=int(KW*0.64f) ;
-		FillRect(x0,KY,w<3?3:w,KH*6/10,fg,1) ;
+		FillRect(x0,KY,w<3?3:w,KH/2,fg,1) ;
 	}
+	for (int o=o0+1;o<=o1;o++) FillRect(X+int((o-o0)*7*KW)-1,KY,2,KH,Mix(bg,fg,35),0) ;
 	if (litNote>=o0*12 && litNote<=o1*12+11) {   // la nota que suena al probar
 		float p=keyPos(litNote)-base ;
 		bool black=(litNote%12==1 || litNote%12==3 || litNote%12==6 || litNote%12==8 || litNote%12==10) ;
 		int x0=X+int((black?p+0.18f:p)*KW)+2, w=int(KW*(black?0.64f:1.0f))-5 ;
 		if (w<3) w=3 ;
-		FillRect(x0,black?KY+KH*6/10-18:KY+KH-16,w,12,ColorOf(CD_PLAY),3) ;
+		FillRect(x0,black?KY+KH/2-16:KY+KH-16,w,12,ColorOf(CD_PLAY),3) ;
 	}
 	for (int o=o0;o<=o1;o++) {   // las octavas, con letra de la normal (muchas: una sí y una no)
 		if (o1-o0>3 && o%2!=0) continue ;
 		char t[8] ;
 		snprintf(t,sizeof(t),"C%d",o-2) ;   // 36 = C1, como en Live
 		int x0=X+int((o-o0)*7*KW)+2 ;
-		if (x0+32<=X+W) DrawText(x0,KY+KH-36,t,dim,1) ;
+		if (x0+36<=X+W) DrawText(x0+4,KY+KH-20,t,dim,1) ;
 	}
 }
 

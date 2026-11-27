@@ -157,12 +157,12 @@ bool SampleFilePreviewTick() {
 
 void SampleFilePreviewCancel() { cplxJob_=0 ; }
 
-void SampleFilePreview(Path element, ViewData *viewData_, int toInstr_, bool audioOnly_) {
+void SampleFilePreview(Path element, ViewData *viewData_, int toInstr_, bool audioOnly_, int sfPreset) {
 	cplxJob_=0 ;   // lo que se estaba estirando ya no
 	// trk2als: de un .sf2 se escucha su sample del C3 (se escribe aparte)
 	if (element.Matches("*.sf2")) {
 		Path tmp("root:sf2preview.wav") ;
-		if (SF2PreviewNote(element.GetPath().c_str(),0,60,tmp.GetPath().c_str())) {
+		if (SF2PreviewNote(element.GetPath().c_str(),sfPreset,60,tmp.GetPath().c_str())) {
 			Player::GetInstance()->StartStreaming(tmp) ;
 		}
 		return ;
@@ -240,13 +240,13 @@ void ImportSampleDialog::endPreview() {
 // trk2als: lo que hace "importar" (también desde el navegador nuevo): un .sf2
 // se convierte en zonas; un .wav entra al pool (por referencia) y queda como
 // el sample del instrumento. false con el porqué en err
-bool SampleFileImport(Path element, ViewData *viewData_, int toInstr_, std::string &err) {
+bool SampleFileImport(Path element, ViewData *viewData_, int toInstr_, std::string &err, int sfPreset) {
 	I_Instrument *instr=viewData_->project_->GetInstrumentBank()->GetInstrument(toInstr_) ;
 	if (!instr || instr->GetType()!=IT_SAMPLE) { err="no es un instrumento de samples" ; return false ; }
 	if (element.Matches("*.sf2")) {
 		std::string msg ;
 		Status::Set("Convirtiendo %s", element.GetName().c_str()) ;
-		bool ok=SF2Import(element.GetPath().c_str(),0,(SampleInstrument *)instr,msg) ;
+		bool ok=SF2Import(element.GetPath().c_str(),sfPreset,(SampleInstrument *)instr,msg) ;
 		if (ok) {
 			char buf[64] ;
 			snprintf(buf,sizeof(buf),"%s: %d zonas",msg.c_str(),((SampleInstrument *)instr)->ZoneCount()) ;
