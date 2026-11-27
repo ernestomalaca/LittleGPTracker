@@ -2796,7 +2796,7 @@ bool InstrumentView::processEnvEdit(unsigned short mask,bool pressed) {
 		if ((mask&(EPBM_LEFT|EPBM_RIGHT)) && envSel_!=2) {   // el tiempo de esa parte
 			Variable *v=si->FindVariable(envID(envSel_)) ;
 			int cur=v->GetInt() ;
-			int step=(cur>=2000)?100:(cur>=500)?50:(cur>=100)?10:5 ;
+			int step=(cur>=2000)?500:(cur>=500)?200:(cur>=100)?50:20 ;   // rápido: lo fino, en su caja
 			int nv=cur+((mask&EPBM_RIGHT)?step:-step) ;
 			int max=(envSel_==0)?5000:10000 ;
 			if (nv<0) nv=0 ;
@@ -2806,7 +2806,7 @@ bool InstrumentView::processEnvEdit(unsigned short mask,bool pressed) {
 			changed=true ;
 		} else if ((mask&(EPBM_UP|EPBM_DOWN)) && (mask&EPBM_A)) {
 			// el nivel: solo el sustain tiene altura
-			int d=(mask&EPBM_UP)?1:-1 ;
+			int d=(mask&EPBM_UP)?3:-3 ;
 			if (envSel_==2) {
 				Variable *v=si->FindVariable(envID(2)) ;
 				int was=v->GetInt() ;
@@ -3449,12 +3449,12 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 			int cur=v->GetInt(), nv=cur ;
 			if (id==SIP_S_SUS) {
 				if (!(mask&(EPBM_UP|EPBM_DOWN))) return true ;
-				nv=cur+((mask&EPBM_UP)?1:-1) ;
+				nv=cur+((mask&EPBM_UP)?3:-3) ;
 				if (nv<-60) nv=-60 ;
 				if (nv>0) nv=0 ;
 			} else {
 				if (!(mask&(EPBM_LEFT|EPBM_RIGHT))) return true ;
-				int fstep=(cur>=2000)?100:(cur>=500)?50:(cur>=100)?10:5 ;
+				int fstep=(cur>=2000)?500:(cur>=500)?200:(cur>=100)?50:20 ;   // rápido
 				// el fade out crece hacia adentro del sample (con ←); lo demás, con →
 				bool more=(id==SIP_S_FOUT)?((mask&EPBM_LEFT)!=0):((mask&EPBM_RIGHT)!=0) ;
 				nv=cur+(more?fstep:-fstep) ;
