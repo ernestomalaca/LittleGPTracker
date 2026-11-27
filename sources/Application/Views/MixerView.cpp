@@ -1,4 +1,5 @@
 #include "MixerView.h"
+#include "Application/Mixer/SendBus.h"
 #include "Application/Mixer/MixerService.h"
 #include "Application/Model/Mixer.h"
 #include "Application/Player/Player.h"
@@ -40,7 +41,7 @@ MixerView::MixerView(GUIWindow &w,ViewData *viewData):View(w,viewData) {
     mixerRow_ = 1; // start on volume row
     for (int i = 0; i < 9; i++) vuL_[i] = vuR_[i] = 0;
     for (int i = 0; i < 18; i++) vuShown_[i] = 0;
-    lastVu_ = 0; masterOn_ = false; tapKey_ = 0; gesture_ = 0;
+    lastVu_ = 0; masterOn_ = false; tapKey_ = 0; gesture_ = 0; fxRow_ = 2;
     previousViewType_ = VT_SONG; // Default to SongView
     for (int i = 0; i < 9; i++) {
         vuBarHeightsL_[i] = 0;
@@ -99,6 +100,54 @@ void MixerView::updateCursor(int dx,int dy) {
 	}
 }
 
+int MixerView::stripCols() {
+    int tc = viewData_->project_->TrackCount();
+    return tc > Project::MaxTracks() ? tc : Project::MaxTracks();
+}
+
+bool MixerView::masterShown() {
+    return masterOn_ || !viewData_->project_->TrackExists(stripCols() - 1);
+}
+
+// trk2als: A + flechas en las filas de arriba. En una pista: cuánto manda
+// (arriba / abajo de 5 en 5, a los lados de 1 en 1). En la columna del master:
+// el efecto mismo. ECO: a los lados cada cuánto repite, arriba / abajo cuánto
+// regresa. REVERB: arriba / abajo el tamaño, a los lados el brillo
+void MixerView::editSend(unsigned short mask) {
+    Mixer *m = Mixer::GetInstance();
+    int col = viewData_->mixerCol_;
+    int which = (fxRow_ == 0) ? Mixer::SEND_ECO : Mixer::SEND_REV;
+    int dv = (mask & EPBM_UP) ? 1 : (mask & EPBM_DOWN) ? -1 : 0;
+    int dh = (mask & EPBM_RIGHT) ? 1 : (mask & EPBM_LEFT) ? -1 : 0;
+    if (!dv && !dh) return;
+    if (col == stripCols() - 1 && masterShown()) {
+        if (fxRow_ == 0) {
+            if (dh) {
+                int t = m->GetFx(Mixer::FX_ECO_TIME) + dh;
+                if (t < 0) t = 0;
+                if (t > SendBus::ECO_TIMES - 1) t = SendBus::ECO_TIMES - 1;
+                m->SetFx(Mixer::FX_ECO_TIME, t);
+            }
+            if (dv) {
+                int b = m->GetFx(Mixer::FX_ECO_BACK) + dv * 5;
+                m->SetFx(Mixer::FX_ECO_BACK, b < 0 ? 0 : b > 100 ? 100 : b);
+            }
+        } else {
+            if (dv) {
+                int z = m->GetFx(Mixer::FX_REV_SIZE) + dv * 5;
+                m->SetFx(Mixer::FX_REV_SIZE, z < 0 ? 0 : z > 100 ? 100 : z);
+            }
+            if (dh) {
+                int t = m->GetFx(Mixer::FX_REV_TONE) + dh * 5;
+                m->SetFx(Mixer::FX_REV_TONE, t < 0 ? 0 : t > 100 ? 100 : t);
+            }
+        }
+    } else if (viewData_->project_->TrackExists(col)) {
+        m->SetSend(which, col, m->GetSend(which, col) + dv * 5 + dh);
+    }
+    isDirty_ = true;
+}
+
 void MixerView::toggleMute() {
     int col = viewData_->mixerCol_;
     UIController::GetInstance()->ToggleMute(col, col);
@@ -149,6 +198,17 @@ void MixerView::ProcessButtonMask(unsigned short mask, bool pressed) {
         // (los atajos de LGPT con R ya no van aquí; con flechas sí pasa: es
         // cambiar de pantalla)
         if ((mask & (EPBM_R | EPBM_L)) && !(mask & (EPBM_UP | EPBM_DOWN | EPBM_LEFT | EPBM_RIGHT))) return;
+        // las filas de los envíos: A + flechas (B + A: lo deja en cero)
+        if (fxRow_ < 2 && !(mask & (EPBM_R | EPBM_L))) {
+            if ((mask & EPBM_B) && (mask & EPBM_A)) {
+                int col = viewData_->mixerCol_;
+                if (!(col == stripCols() - 1 && masterShown()))
+                    Mixer::GetInstance()->SetSend(fxRow_ == 0 ? Mixer::SEND_ECO : Mixer::SEND_REV, col, 0);
+                isDirty_ = true;
+                return;
+            }
+            if (mask & EPBM_A) { editSend(mask); return; }
+        }
     }
 
     if (clipboard_.active_) {
@@ -338,6 +398,9 @@ void MixerView::processNormalButtonMask(unsigned int mask) {
 			updateCursor(0, -1);
 		if ((mask & EPBM_DOWN) && !strips)
 			updateCursor(0, 1);
+		// trk2als: arriba del volumen, los envíos: REVERB y, más arriba, ECO
+		if ((mask & EPBM_UP) && strips && fxRow_ > 0) { fxRow_--; isDirty_ = true; }
+		if ((mask & EPBM_DOWN) && strips && fxRow_ < 2) { fxRow_++; isDirty_ = true; }
 		if (mask & EPBM_LEFT)
 			updateCursor(-1, 0);
 		if (mask & EPBM_RIGHT)
@@ -415,7 +478,8 @@ void MixerView::DrawView() {
     else {   // trk2als: con figuras, la mixer es otra: tiras de volumen
         mixerRow_ = 1;
         drawStrips();
-        drawHelpBar("<>:elegir pista;A+^v:volumen;A+<>:volumen, fino;B+A:volumen a tope;B+SEL:mute;B+START:solo;B:quitar mutes y solos;R:ver el master;L:quitarlo;START:play / stop;SEL+<>:otra pantalla");
+        drawHelpBar(fxRow_ == 2 ? "<>:elegir pista;^:sus envíos (REV, ECO);A+^v:volumen;A+<>:volumen, fino;B+A:volumen a tope;B+SEL:mute;B+START:solo;B:quitar mutes y solos;R:ver el master;L:quitarlo;START:play / stop;SEL+^:a la Session"
+                               : "<>:elegir pista;^v:ECO, REV, volumen;A+^v:cuánto manda;A+<>:de 1 en 1;B+A:no manda nada;master, ECO:A+<> cada cuánto;master, ECO:A+^v cuánto regresa;master, REV:A+^v tamaño;master, REV:A+<> brillo;START:play / stop;SEL+^:a la Session");
         return;
     }
 
@@ -800,7 +864,21 @@ void MixerView::drawStrips() {
         bool muted = player->IsChannelMuted(i);
         GUIColor tc = TrackColor(i);
         FillRect(x, PY, w, PH, exists ? panel : Mix(bg, fg, 4), 8);
-        if (i == viewData_->mixerCol_) FrameRect(x - 3, PY - 3, w + 6, PH + 6, fg, 10, 3);
+        if (i == viewData_->mixerCol_ && fxRow_ == 2) FrameRect(x - 3, PY - 3, w + 6, PH + 6, fg, 10, 3);
+        // sus envíos: cuánto manda al ECO y a la REVERB
+        for (int r = 0; r < 2; r++) {
+            int cy = 44 + r * 76;
+            FillRect(x, cy, w, 70, exists ? panel : Mix(bg, fg, 4), 6);
+            if (exists) {
+                int v = mixer->GetSend(r == 0 ? Mixer::SEND_ECO : Mixer::SEND_REV, i);
+                char t[8];
+                if (v > 0) snprintf(t, sizeof(t), "%d", v); else strcpy(t, "--");
+                DrawText(x + (w - 24 * int(strlen(t))) / 2, cy + 10, t, v > 0 ? fg : Mix(bg, fg, 18), 2);
+                FillRect(x + 10, cy + 54, w - 20, 6, slot, 3);
+                if (v > 0) FillRect(x + 10, cy + 54, 6 + (w - 26) * v / 100, 6, tc, 3);
+            }
+            if (i == viewData_->mixerCol_ && fxRow_ == r) FrameRect(x - 3, cy - 3, w + 6, 76, fg, 8, 3);
+        }
         // el nombre: tres letras, en el color de la pista
         char nm[4] = "---";
         if (exists) {
@@ -855,8 +933,31 @@ void MixerView::drawStrips() {
         DrawText(6 + (60 - 16 * int(strlen(txt))) / 2, 442 + 8, txt,
                  (clip || load >= 80) ? ColorOf(CD_MUTE) : dim, 1);
     }
-    if (master) {   // el master: sus dos medidores
+    // las filas, con su nombre (donde la Session pone las escenas)
+    FillRect(6, 44, 60, 70, panel, 5);
+    DrawText(12, 71, "ECO", fxRow_ == 0 ? fg : dim, 1);
+    FillRect(6, 120, 60, 70, panel, 5);
+    DrawText(12, 147, "REV", fxRow_ == 1 ? fg : dim, 1);
+    if (master) {   // el master: arriba los dos efectos, abajo sus dos medidores
         int x = X0 + (NCOL - 1) * COLW;
+        for (int r = 0; r < 2; r++) {
+            int cy = 44 + r * 76;
+            FillRect(x, cy, w, 70, Mix(bg, fg, 14), 6);
+            char t[12];
+            int bar;
+            if (r == 0) {
+                snprintf(t, sizeof(t), "%s", SendBus::EcoName(mixer->GetFx(Mixer::FX_ECO_TIME)));
+                bar = mixer->GetFx(Mixer::FX_ECO_BACK);   // cuánto regresa
+            } else {
+                float secs = 0.5f * powf(20.0f, mixer->GetFx(Mixer::FX_REV_SIZE) / 100.0f);   // lo que dura
+                if (secs < 9.95f) snprintf(t, sizeof(t), "%.1fs", secs); else snprintf(t, sizeof(t), "%ds", int(secs + 0.5f));
+                bar = mixer->GetFx(Mixer::FX_REV_TONE);   // el brillo
+            }
+            DrawText(x + (w - 16 * int(strlen(t))) / 2, cy + 14, t, fg, 1);
+            FillRect(x + 10, cy + 46, w - 20, 6, Mix(bg, fg, 24), 3);
+            if (bar > 0) FillRect(x + 10, cy + 46, 6 + (w - 26) * bar / 100, 6, fg, 3);
+            if (viewData_->mixerCol_ == NCOL - 1 && fxRow_ == r) FrameRect(x - 3, cy - 3, w + 6, 76, fg, 8, 3);
+        }
         FillRect(x, PY, w, PH, panel, 8);
         if (!lastFree) FrameRect(x, PY, w, PH, dim, 8, 2);   // encima de una pista: se nota que es otra cosa
         DrawText(x + (w - 48) / 2, PY + 10, "MAS", dim, 1);

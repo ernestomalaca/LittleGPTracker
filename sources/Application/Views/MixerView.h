@@ -51,7 +51,11 @@ private:
     unsigned long lastVu_;
     bool masterOn_;             // con todas las pistas ocupadas: el master encima de la última (R / L)
     int tapKey_;
-    unsigned short gesture_;    // el gesto de mute / solo ya hecho (no se repite al sostener)
+    unsigned short gesture_;
+    int fxRow_;                 // trk2als: 0 = envío al ECO, 1 = a la REVERB, 2 = el volumen
+    int stripCols();            // cuántas columnas (las de la Session)
+    bool masterShown();         // el master a la vista (última columna libre, o encima con R)
+    void editSend(unsigned short mask);    // el gesto de mute / solo ya hecho (no se repite al sostener)
     void DrawVuBars();          // Draw VU bars - called from both DrawView and
                                 // AnimationUpdate
     int vuBarHeightsL_[9];  // Left channel smoothed bar heights with slew rate decay (8 channels + 1 master)
