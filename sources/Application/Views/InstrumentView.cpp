@@ -1321,14 +1321,6 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 		}
 	}
 	if (pressed && kitMode_ && processKit(mask)) { kitTrack() ; return ; }
-	// trk2als: en las cajas, Y + arriba / abajo: la misma caja en la pestaña de
-	// al lado (el mismo gesto que en el kit lleva al pad vecino). Sin dar la vuelta
-	if (pressed && gridMode_ && !kitMode_ && pageCount_>1 && !drawEditing() &&
-	    (mask==(EPBM_Y|EPBM_UP) || mask==(EPBM_Y|EPBM_DOWN))) {
-		int kind=audioMode_?0:1, d=(mask&EPBM_DOWN)?1:-1 ;
-		if (page_[kind]+d>=0 && page_[kind]+d<pageCount_) turnPage(d) ;
-		return ;
-	}
 	// A + flechas en un parámetro automatizado: se toma desde lo que suena
 	if (pressed && (mask&EPBM_A) && !(mask&EPBM_B) && !touching_) {   // para deshacer: cómo estaba la perilla
 		FourCC id=focusID(*this) ;
@@ -3161,9 +3153,9 @@ bool InstrumentView::processFiltEdit(unsigned short mask,bool pressed) {
 		return true ;
 	}
 	if ((mask&EPBM_A) && !(mask&EPBM_B)) {
-		if (mask&(EPBM_LEFT|EPBM_RIGHT)) {   // el corte, de a semitono
+		if (mask&(EPBM_LEFT|EPBM_RIGHT)) {   // el corte, de a tercera mayor (lo fino, en su caja)
 			Variable *v=si->FindVariable(SIP_S_FHZ) ;
-			float hz=float(v->GetInt())*((mask&EPBM_RIGHT)?1.0594631f:1.0f/1.0594631f) ;
+			float hz=float(v->GetInt())*((mask&EPBM_RIGHT)?1.2599210f:1.0f/1.2599210f) ;
 			int nv=int(hz+0.5f) ;
 			if (nv==v->GetInt()) nv+=(mask&EPBM_RIGHT)?1:-1 ;
 			if (nv<30) nv=30 ;
@@ -3176,7 +3168,7 @@ bool InstrumentView::processFiltEdit(unsigned short mask,bool pressed) {
 			envAudition() ;
 		} else if (mask&(EPBM_UP|EPBM_DOWN)) {   // la resonancia
 			Variable *v=si->FindVariable(SIP_S_FQ) ;
-			int nv=v->GetInt()+((mask&EPBM_UP)?5:-5) ;
+			int nv=v->GetInt()+((mask&EPBM_UP)?10:-10) ;
 			if (nv<0) nv=0 ;
 			if (nv>100) nv=100 ;
 			v->SetInt(nv) ;
