@@ -145,7 +145,9 @@ void MixerView::ProcessButtonMask(unsigned short mask, bool pressed) {
             if (any) { unMuteAll(); soloChannel_ = -1; }
             return;
         }
-        if (mask & (EPBM_R | EPBM_L)) return;   // (los atajos de LGPT con R ya no van aquí)
+        // (los atajos de LGPT con R ya no van aquí; con flechas sí pasa: es
+        // cambiar de pantalla)
+        if ((mask & (EPBM_R | EPBM_L)) && !(mask & (EPBM_UP | EPBM_DOWN | EPBM_LEFT | EPBM_RIGHT))) return;
     }
 
     if (clipboard_.active_) {
