@@ -161,16 +161,7 @@ void MixerView::processNormalButtonMask(unsigned int mask) {
             SetChanged();
             NotifyObservers(&ve);
         } else if (mask & EPBM_RIGHT) {
-            ViewType vt = VT_TABLE;
-            ViewEvent ve(VET_SWITCH_VIEW, &vt);
-            // Go back to the same column as in MixerView
-            viewData_->songX_ = viewData_->mixerCol_;
-            unsigned char *data = viewData_->GetCurrentSongPointer();
-            if (*data != 0xFF) { // el clip
-                viewData_->currentChain_ = *data;
-            }
-            SetChanged();
-            NotifyObservers(&ve);
+            // trk2als: las tablas de LGPT ya no tienen puerta
         } else if (mask & EPBM_START) {
             onStop();
         }
