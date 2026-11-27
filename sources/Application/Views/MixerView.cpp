@@ -37,6 +37,7 @@ MixerView::MixerView(GUIWindow &w,ViewData *viewData):View(w,viewData) {
 	invertBatt_=false;
     soloChannel_ = -1;
     mixerRow_ = 1; // start on volume row
+    for (int i = 0; i < 9; i++) vuL_[i] = vuR_[i] = 0;
     previousViewType_ = VT_SONG; // Default to SongView
     for (int i = 0; i < 9; i++) {
         vuBarHeightsL_[i] = 0;
@@ -256,11 +257,20 @@ void MixerView::processNormalButtonMask(unsigned int mask) {
             int newVol = currentVol;
 
             // Coarse adjustment (UP/DOWN)
+            if (SupportsShapes() && !View::miniLayout_ && (mask & (EPBM_UP | EPBM_DOWN))) {
+                // trk2als: con figuras se lee en dB: de 1 dB en 1 dB
+                float db = (currentVol > 0) ? 20.0f * log10f(currentVol / 255.0f) : -49.0f;
+                db = floorf(db + 0.5f) + ((mask & EPBM_UP) ? 1.0f : -1.0f);
+                newVol = (db < -48.0f) ? 0 : int(255.0f * powf(10.0f, db / 20.0f) + 0.5f);
+                if ((mask & EPBM_UP) && newVol <= currentVol) newVol = currentVol + 1;
+                if ((mask & EPBM_DOWN) && newVol >= currentVol) newVol = currentVol - 1;
+            } else {
             if (mask & EPBM_UP) {
                 newVol = currentVol + 16;
             }
             if (mask & EPBM_DOWN) {
                 newVol = currentVol - 16;
+            }
             }
 
             // Fine adjustment (RIGHT/LEFT)
@@ -285,9 +295,10 @@ void MixerView::processNormalButtonMask(unsigned int mask) {
     } else {
         // Normal cursor movement (no modifier)
 		// This works everywhere, including Master channel
-		if (mask & EPBM_UP)
+		bool strips = SupportsShapes() && !View::miniLayout_;   // trk2als: solo volúmenes: no hay filas
+		if ((mask & EPBM_UP) && !strips)
 			updateCursor(0, -1);
-		if (mask & EPBM_DOWN)
+		if ((mask & EPBM_DOWN) && !strips)
 			updateCursor(0, 1);
 		if (mask & EPBM_LEFT)
 			updateCursor(-1, 0);
@@ -295,7 +306,10 @@ void MixerView::processNormalButtonMask(unsigned int mask) {
 			updateCursor(1, 0);
 
 		if (mask & EPBM_START) {
-			onStart();
+			if (strips) {   // play / stop, como en las demás pantallas
+				Player::GetInstance()->EditorStart(viewData_->songX_, viewData_->songY_);
+				isDirty_ = true;
+			} else onStart();
 		}
     }
 }
@@ -358,8 +372,14 @@ void MixerView::DrawView() {
 
     std::string buffer(os.str());
 
-    if (!drawTopBar(TAB_MIX, (player->GetSequencerMode() == SM_SONG) ? "" : "LIVE"))
+    if (!drawTopBar(TAB_MIX, ""))
         DrawString(pos._x, pos._y, buffer.c_str(), props);
+    else {   // trk2als: con figuras, la mixer es otra: tiras de volumen
+        mixerRow_ = 1;
+        drawStrips();
+        drawHelpBar("<>:elegir pista;A+^v:volumen;A+<>:volumen, fino;B+A:volumen a tope;R+B:mute;R+A:solo;R+L:quitar los mutes;START:play / stop;SEL+<>:otra pantalla");
+        return;
+    }
 
     // Draw mixer grid with row labels
     pos = anchor;
@@ -510,6 +530,7 @@ void MixerView::DrawView() {
 void MixerView::OnPlayerUpdate(PlayerEventType, unsigned int tick) {
 
     Player *player = Player::GetInstance();
+    if (SupportsShapes() && !View::miniLayout_) return;   // trk2als: con figuras, solo las tiras
 
     // Draw clipping indicator & CPU usage
 
@@ -653,4 +674,105 @@ void MixerView::DrawVuBars() {
     SetColor(CD_NORMAL);
 }
 
-void MixerView::AnimationUpdate() { DrawVuBars(); }
+void MixerView::AnimationUpdate() {
+    if (SupportsShapes() && !View::miniLayout_) {   // los medidores: se repinta mientras algo se mueva
+        bool moving = Player::GetInstance()->IsRunning();
+        for (int i = 0; i < 9 && !moving; i++) if (vuL_[i] > 0.001f || vuR_[i] > 0.001f) moving = true;
+        if (moving && !HasModal()) DrawView();
+        return;
+    }
+    DrawVuBars();
+}
+
+// trk2als: de 0..1 (pico) a la altura de la barra: en dB, 48 dB de recorrido
+static float vuFrac(float p) {
+    if (p <= 0.004f) return 0;
+    float f = (20.0f * log10f(p) + 48.0f) / 48.0f;
+    return f < 0 ? 0 : (f > 1 ? 1 : f);
+}
+
+void MixerView::drawStrips() {
+    GUIColor bg = ColorOf(CD_BACKGROUND), fg = ColorOf(CD_NORMAL);
+    GUIColor panel = Mix(bg, fg, 9), slot = Mix(bg, fg, 16), dim = Mix(bg, fg, 50);
+    Player *player = Player::GetInstance();
+    Mixer *mixer = Mixer::GetInstance();
+    Project *project = viewData_->project_;
+    // los picos (antes del volumen de la pista; el master, ya con todo)
+    float pl[9], pr[9];
+    for (int i = 0; i < 9; i++) pl[i] = pr[i] = 0;
+    if (player->IsRunning()) {
+        MixerService *ms = MixerService::GetInstance();
+        for (int i = 0; i < 8; i++) {
+            MixBus *bus = ms->GetMixBus(i);
+            if (!bus) continue;
+            uint32_t level = bus->GetPreMasterVolumePeakLevel();
+            pl[i] = (float)((level >> 16) & 0xFFFF) / 32767.0f;
+            pr[i] = (float)(level & 0xFFFF) / 32767.0f;
+        }
+        uint32_t ml = ms->GetMasterPeakLevel();
+        pl[8] = (float)((ml >> 16) & 0xFFFF) / 32767.0f;
+        pr[8] = (float)(ml & 0xFFFF) / 32767.0f;
+    }
+    for (int i = 0; i < 9; i++) {   // suben de golpe, bajan suave
+        float l = vuFrac(pl[i]), r = vuFrac(pr[i]);
+        vuL_[i] = (l > vuL_[i]) ? l : vuL_[i] * 0.85f + l * 0.15f;
+        vuR_[i] = (r > vuR_[i]) ? r : vuR_[i] * 0.85f + r * 0.15f;
+    }
+    const int TOP = 84, HT = 350;
+    for (int i = 0; i < 8; i++) {
+        int x = 8 + i * 68, w = 62;
+        bool exists = project->TrackExists(i);
+        bool muted = player->IsChannelMuted(i);
+        GUIColor tc = TrackColor(i);
+        FillRect(x, 44, w, 428, exists ? panel : Mix(bg, fg, 4), 8);
+        if (i == viewData_->mixerCol_) FrameRect(x - 3, 41, w + 6, 434, fg, 10, 3);
+        // el nombre: tres letras, en el color de la pista
+        char nm[4] = "---";
+        if (exists) {
+            const char *tn = project->GetTrackName(i);
+            int n = 0;
+            for (const char *q = tn; q && *q && n < 3; q++)
+                if (*q != ' ' && (unsigned char)*q < 0x80) nm[n++] = toupper((unsigned char)*q);
+            nm[n] = 0;
+            // sin nombre propio ("MIDI 3", "AUDIO 5"): la letra y su número
+            if (tn && (!strncmp(tn, "MIDI ", 5) || !strncmp(tn, "AUDIO ", 6))) {
+                snprintf(nm, sizeof(nm), "%c%d", tn[0], (i + 1) % 10);
+                n = int(strlen(nm));
+            }
+            FillRect(x + 4, 50, w - 8, 24, tc, 5);
+            DrawText(x + (w - 16 * n) / 2 + 1, 54, nm, bg, 1);
+        } else DrawText(x + 7, 54, nm, Mix(bg, fg, 18), 1);
+        // el volumen (en dB: 48 dB de recorrido) y, al lado, el medidor
+        int vol = mixer->GetChannelVolume(i);
+        float db = (vol > 0) ? 20.0f * log10f(vol / 255.0f) : -99.0f;
+        float fr = (db + 48.0f) / 48.0f;
+        if (fr < 0) fr = 0;
+        FillRect(x + 12, TOP, 24, HT, slot, 5);
+        if (!exists) continue;
+        int h = int(HT * fr);
+        if (h > 0) FillRect(x + 12, TOP + HT - (h < 10 ? 10 : h), 24, h < 10 ? 10 : h, muted ? Mix(bg, fg, 35) : fg, 5);
+        FillRect(x + 42, TOP, 8, HT, slot, 3);
+        float v = vuL_[i] > vuR_[i] ? vuL_[i] : vuR_[i];
+        int vh = int(HT * v);
+        if (vh > 3) FillRect(x + 42, TOP + HT - vh, 8, vh, tc, 3);
+        if (muted || soloChannel_ == i) {
+            FillRect(x + 6, TOP + HT + 4, w - 12, 22, fg, 4);
+            DrawText(x + (w - 16) / 2 + 1, TOP + HT + 7, (soloChannel_ == i) ? "S" : "M", bg, 1);
+        } else {
+            char t[8];
+            if (vol <= 0) strcpy(t, "off");
+            else snprintf(t, sizeof(t), "%+d", int(db < 0 ? db - 0.5f : db + 0.5f));
+            DrawText(x + (w - 16 * int(strlen(t))) / 2 + 1, TOP + HT + 7, t, fg, 1);
+        }
+    }
+    // el master: sus dos medidores
+    int x = 8 + 8 * 68 + 4, w = 640 - 8 - x;
+    FillRect(x, 44, w, 428, panel, 8);
+    DrawText(x + (w - 48) / 2, 54, "MAS", dim, 1);
+    for (int k = 0; k < 2; k++) {
+        int mx = x + 12 + k * 30;
+        FillRect(mx, TOP, 22, HT, slot, 4);
+        int vh = int(HT * (k ? vuR_[8] : vuL_[8]));
+        if (vh > 3) FillRect(mx, TOP + HT - vh, 22, vh, player->Clipped() ? ColorOf(CD_HILITE2) : fg, 4);
+    }
+}
