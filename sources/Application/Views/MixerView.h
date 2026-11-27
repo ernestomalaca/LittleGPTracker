@@ -51,6 +51,7 @@ private:
     unsigned long lastVu_;
     bool masterOn_;             // con todas las pistas ocupadas: el master encima de la última (R / L)
     int tapKey_;
+    unsigned short gesture_;    // el gesto de mute / solo ya hecho (no se repite al sostener)
     void DrawVuBars();          // Draw VU bars - called from both DrawView and
                                 // AnimationUpdate
     int vuBarHeightsL_[9];  // Left channel smoothed bar heights with slew rate decay (8 channels + 1 master)

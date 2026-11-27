@@ -39,7 +39,7 @@ MixerView::MixerView(GUIWindow &w,ViewData *viewData):View(w,viewData) {
     mixerRow_ = 1; // start on volume row
     for (int i = 0; i < 9; i++) vuL_[i] = vuR_[i] = 0;
     for (int i = 0; i < 18; i++) vuShown_[i] = 0;
-    lastVu_ = 0; masterOn_ = false; tapKey_ = 0;
+    lastVu_ = 0; masterOn_ = false; tapKey_ = 0; gesture_ = 0;
     previousViewType_ = VT_SONG; // Default to SongView
     for (int i = 0; i < 9; i++) {
         vuBarHeightsL_[i] = 0;
@@ -122,12 +122,30 @@ void MixerView::ProcessButtonMask(unsigned short mask, bool pressed) {
     if (SupportsShapes() && !View::miniLayout_) {
         // trk2als: R sola (tocar y soltar): el master encima de la última
         // pista; L sola: de vuelta. Y al soltar una tecla no se hace nada más
-        if (pressed) tapKey_ = (mask == EPBM_R || mask == EPBM_L) ? mask : 0;
+        unsigned short p = View::physMask_;
+        if (!(p & EPBM_B)) gesture_ = 0;
+        if (pressed) tapKey_ = (p == EPBM_R || p == EPBM_L) ? p : 0;
         else {
-            if (mask == 0 && tapKey_) { masterOn_ = (tapKey_ == EPBM_R); isDirty_ = true; }
-            tapKey_ = 0;
+            if (p == 0 && tapKey_) { masterOn_ = (tapKey_ == EPBM_R); isDirty_ = true; }
+            if (p == 0) tapKey_ = 0;
             return;
         }
+        // mute y solo como en la Session (el gesto de LSDJ): B + Select mutea
+        // la pista elegida, B + Start la deja sola; B sola quita lo que haya
+        if (p == (EPBM_B | EPBM_SELECT) || p == (EPBM_B | EPBM_START)) {
+            if (gesture_ != p) {
+                gesture_ = p;
+                if (p & EPBM_SELECT) toggleMute(); else toggleSolo();
+            }
+            return;
+        }
+        if (p == EPBM_B) {
+            bool any = soloChannel_ >= 0;
+            for (int i = 0; i < SONG_CHANNEL_COUNT && !any; i++) any = Player::GetInstance()->IsChannelMuted(i);
+            if (any) { unMuteAll(); soloChannel_ = -1; }
+            return;
+        }
+        if (mask & (EPBM_R | EPBM_L)) return;   // (los atajos de LGPT con R ya no van aquí)
     }
 
     if (clipboard_.active_) {
@@ -394,7 +412,7 @@ void MixerView::DrawView() {
     else {   // trk2als: con figuras, la mixer es otra: tiras de volumen
         mixerRow_ = 1;
         drawStrips();
-        drawHelpBar("<>:elegir pista;A+^v:volumen;A+<>:volumen, fino;B+A:volumen a tope;R+B:mute;R+A:solo;R+L:quitar los mutes;START:play / stop;SEL+<>:otra pantalla");
+        drawHelpBar("<>:elegir pista;A+^v:volumen;A+<>:volumen, fino;B+A:volumen a tope;B+SEL:mute;B+START:solo;B:quitar mutes y solos;R:ver el master;L:quitarlo;START:play / stop;SEL+<>:otra pantalla");
         return;
     }
 
@@ -705,7 +723,7 @@ void MixerView::AnimationUpdate() {
             int l = int(vuL_[i] * 44), r = int(vuR_[i] * 44);   // escalones de ~8 px
             if (l != vuShown_[i * 2] || r != vuShown_[i * 2 + 1]) changed = true;
         }
-        if (changed) DrawView();
+        if (changed) { ClearShapes(); DrawView(); }   // (sin vaciar, las figuras se iban encimando sin fin)
         return;
     }
     DrawVuBars();
@@ -750,7 +768,8 @@ void MixerView::drawStrips() {
     Mixer *mixer = Mixer::GetInstance();
     Project *project = viewData_->project_;
     for (int i = 0; i < 9; i++) { vuShown_[i * 2] = int(vuL_[i] * 44); vuShown_[i * 2 + 1] = int(vuR_[i] * 44); }
-    const int TOP = 84, HT = 350;
+    // (la parte de arriba de la pantalla queda libre: ahí irán los envíos)
+    const int PY = 200, PH = 272, TOP = PY + 40, HT = PH - 78;
     // las mismas columnas que la Session (su columna de escenas queda libre)
     const int GAP = 4, X0 = 6 + 60 + GAP + 2;
     int trackCount = project->TrackCount();
@@ -768,8 +787,8 @@ void MixerView::drawStrips() {
         bool exists = project->TrackExists(i);
         bool muted = player->IsChannelMuted(i);
         GUIColor tc = TrackColor(i);
-        FillRect(x, 44, w, 428, exists ? panel : Mix(bg, fg, 4), 8);
-        if (i == viewData_->mixerCol_) FrameRect(x - 3, 41, w + 6, 434, fg, 10, 3);
+        FillRect(x, PY, w, PH, exists ? panel : Mix(bg, fg, 4), 8);
+        if (i == viewData_->mixerCol_) FrameRect(x - 3, PY - 3, w + 6, PH + 6, fg, 10, 3);
         // el nombre: tres letras, en el color de la pista
         char nm[4] = "---";
         if (exists) {
@@ -783,9 +802,9 @@ void MixerView::drawStrips() {
                 snprintf(nm, sizeof(nm), "%c%d", tn[0], (i + 1) % 10);
                 n = int(strlen(nm));
             }
-            FillRect(x + 4, 50, w - 8, 24, tc, 5);
-            DrawText(x + (w - 16 * n) / 2 + 1, 54, nm, bg, 1);
-        } else DrawText(x + (w - 48) / 2, 54, nm, Mix(bg, fg, 18), 1);
+            FillRect(x + 4, PY + 6, w - 8, 24, tc, 5);
+            DrawText(x + (w - 16 * n) / 2 + 1, PY + 10, nm, bg, 1);
+        } else DrawText(x + (w - 48) / 2, PY + 10, nm, Mix(bg, fg, 18), 1);
         // el volumen (en dB: 48 dB de recorrido) y, al lado, el medidor
         int vol = mixer->GetChannelVolume(i);
         float db = (vol > 0) ? 20.0f * log10f(vol / 255.0f) : -99.0f;
@@ -811,9 +830,9 @@ void MixerView::drawStrips() {
     }
     if (master) {   // el master: sus dos medidores
         int x = X0 + (NCOL - 1) * COLW;
-        FillRect(x, 44, w, 428, panel, 8);
-        if (!lastFree) FrameRect(x, 44, w, 428, dim, 8, 2);   // encima de una pista: se nota que es otra cosa
-        DrawText(x + (w - 48) / 2, 54, "MAS", dim, 1);
+        FillRect(x, PY, w, PH, panel, 8);
+        if (!lastFree) FrameRect(x, PY, w, PH, dim, 8, 2);   // encima de una pista: se nota que es otra cosa
+        DrawText(x + (w - 48) / 2, PY + 10, "MAS", dim, 1);
         int bw = (w - 30) / 2;
         for (int k = 0; k < 2; k++) {
             int mx = x + 12 + k * (bw + 6);
