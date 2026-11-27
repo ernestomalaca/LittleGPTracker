@@ -34,6 +34,24 @@ bool SampleInstrument::syncRequest_[SONG_CHANNEL_COUNT]= {false,false,false,fals
 
 unsigned long SampleInstrument::sliceClock_=0 ;
 
+// trk2als: el "sample" del sinte cuando el Sampler está vacío: silencio
+namespace {
+class SilentSource : public SoundSource {
+public:
+	SilentSource() { memset(buf_,0,sizeof(buf_)) ; }
+	virtual int GetSize(int) { return SIZE ; }
+	virtual int GetSampleRate(int) { return 44100 ; }
+	virtual int GetChannelCount(int) { return 1 ; }
+	virtual void *GetSampleBuffer(int) { return buf_ ; }
+	virtual bool IsMulti() { return false ; }
+	virtual int GetRootNote(int) { return 60 ; }
+private:
+	enum { SIZE=44100 } ;
+	short buf_[SIZE] ;
+} ;
+SilentSource silentSource ;
+}
+
 void SampleInstrument::SetChannelSync(int channel, bool sync) {
 	if (channel>=0 && channel<SONG_CHANNEL_COUNT) syncRequest_[channel]=sync ;
 }
@@ -376,6 +394,13 @@ bool SampleInstrument::Start(int channel, unsigned char midinote, int flags) {
 
   running_=true ;
 
+  // trk2als: el sinte no necesita sample: en un Sampler vacío suena sobre un
+  // segundo de silencio (lo que se oye lo escribe el sinte)
+  {
+      bool synthMode=!zoned_ && FindVariable(SIP_S_MODE) && FindVariable(SIP_S_MODE)->GetInt()==SM_SYNTH ;
+      if (source_==0 && synthMode) source_=&silentSource ;
+      else if (source_==&silentSource && !synthMode) source_=0 ;
+  }
   if (source_==0) return false ;
 
   // trk2als: kit: el golpe va a una voz libre del canal (no corta a los otros)
