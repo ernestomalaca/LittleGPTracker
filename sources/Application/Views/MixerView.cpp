@@ -16,6 +16,7 @@
 // trk2als: carga del audio (pico del último segundo) y su estimado en la
 // consola de referencia: CONSOLEFACTOR en config.xml (cuántas veces más lenta
 // es, 9 para la RG353V contra una Mac con Apple Silicon)
+static int loadShown = -1;   // la carga que se pintó en la mixer
 static void loadText(char *out) {
     static int factor = -1;
     if (factor < 0) {
@@ -725,6 +726,15 @@ void MixerView::AnimationUpdate() {
             int l = int(vuL_[i] * 10 + 0.5f), r = int(vuR_[i] * 10 + 0.5f);   // 10 escalones, como en la Session
             if (l != vuShown_[i * 2] || r != vuShown_[i * 2 + 1]) changed = true;
         }
+        {   // la carga: se revisa una vez por segundo
+            static int tick = 0;
+            if (++tick >= 12) {
+                tick = 0;
+                char lt[24];
+                loadText(lt);
+                if (atoi(lt + 2) != loadShown) changed = true;
+            }
+        }
         if (changed) { ClearShapes(); DrawView(); }   // (sin vaciar, las figuras se iban encimando sin fin)
         return;
     }
@@ -832,6 +842,18 @@ void MixerView::drawStrips() {
             else snprintf(t, sizeof(t), "%+d", int(db < 0 ? db - 0.5f : db + 0.5f));
             DrawText(x + (w - 16 * int(strlen(t))) / 2 + 1, TOP + HT + 7, t, fg, 1);
         }
+    }
+    {   // la carga del audio (lo que era "rg"), donde la pone la Session
+        char lt[24], ld[8];
+        loadText(lt);
+        int load = atoi(lt + 2);
+        loadShown = load;
+        if (load >= 100) snprintf(ld, sizeof(ld), "MAX"); else snprintf(ld, sizeof(ld), "%d%%", load);
+        bool clip = player->Clipped();
+        const char *txt = clip ? "CLP" : ld;
+        FillRect(6, 442, 60, 32, panel, 3);
+        DrawText(6 + (60 - 16 * int(strlen(txt))) / 2, 442 + 8, txt,
+                 (clip || load >= 80) ? ColorOf(CD_MUTE) : dim, 1);
     }
     if (master) {   // el master: sus dos medidores
         int x = X0 + (NCOL - 1) * COLW;

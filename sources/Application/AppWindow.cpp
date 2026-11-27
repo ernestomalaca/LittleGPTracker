@@ -545,6 +545,7 @@ void AppWindow::Flush() {
         _overlayDirty = false;
     }
     memcpy(_prevShapeCells, _shapeCells, sizeof(_shapeCells));
+    bool repainted = _shapesDirty;
     _shapesDirty = false;
     _prevShapesOn = anyOn;
     _prevViewShapesOn = shapesOn;
@@ -552,6 +553,26 @@ void AppWindow::Flush() {
     long flushEnd = System::GetInstance()->GetClock();
     GUIWindow::Flush();
     Unlock();
+    {   // trk2als: cuánto cuesta dibujar, al registro (log.txt) cada 10 s
+        // mientras suena: para ver en la consola si una pantalla tira de más
+        static unsigned long t0 = 0, ms = 0;
+        static int n = 0;
+        unsigned long now = System::GetInstance()->GetClock();
+        if (repainted) { n++; ms += now - (unsigned long)flushStart; }
+        if (!t0) t0 = now;
+        if (now - t0 >= 10000) {
+            Player *pl = Player::GetInstance();
+            if (pl && pl->IsRunning() && n > 0) {
+                const char *vn = (_currentView == (View *)_mixerView) ? "MIX" : (_currentView == (View *)_songView) ? "SES" :
+                                 (_currentView == (View *)_clipView) ? "CLP" : (_currentView == (View *)_instrumentView) ? "INS" : "otra";
+                printf("[DIBUJO] %s: %d repintadas en 10 s, %lu ms en total (%lu%% del tiempo)\n",
+                       vn, n, ms, ms / 100);
+                fflush(stdout);
+            }
+            t0 = now; n = 0; ms = 0;
+        }
+    }
+    (void)flushEnd;
     memcpy(_preScreen, _charScreen, 1200);
     memcpy(_preScreenProp, _charScreenProp, 1200);
 };
