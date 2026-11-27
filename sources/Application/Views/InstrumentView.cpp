@@ -395,6 +395,7 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data),
 	manualPending_=false ;
 	kitWfIndex_=-1 ; kitWfSize_=0 ;
 	padHoldAt_=0 ; padPlus_=false ; kitLitShown_=0 ; padEdit_=false ; boxMode_=false ;
+	drawRep_=0 ; drawRepMask_=0 ;
 	waveEdit_=false ;
 	waveZoom_=1 ;
 	waveSel_=0 ;
@@ -1298,6 +1299,13 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 	if (!pressed && mask==0 && drawEditing()) {   // soltó todo en un dibujo: termina el tramo
 		if (capping_) capEnd() ;
 		if (touching_) endTouch() ;
+	}
+	// cuántas veces seguidas va la misma tecla en un dibujo (mantenerla la
+	// repite): donde un gesto no tiene su par grueso, empieza fino y acelera
+	if (drawEditing()) {
+		if (!pressed) { if (mask==0) { drawRep_=0 ; drawRepMask_=0 ; } }
+		else if (mask==drawRepMask_) drawRep_++ ;
+		else { drawRepMask_=mask ; drawRep_=0 ; }
 	}
 	if (filtEdit_ && processFiltEdit(mask,pressed)) return ;
 	if (envEdit_ && processEnvEdit(mask,pressed)) return ;
@@ -2796,7 +2804,9 @@ bool InstrumentView::processEnvEdit(unsigned short mask,bool pressed) {
 		if ((mask&(EPBM_LEFT|EPBM_RIGHT)) && envSel_!=2) {   // el tiempo de esa parte
 			Variable *v=si->FindVariable(envID(envSel_)) ;
 			int cur=v->GetInt() ;
-			int step=(cur>=2000)?500:(cur>=500)?200:(cur>=100)?50:20 ;   // rápido: lo fino, en su caja
+			// las flechas solas: rápido; con A: fino
+			int step=(mask&EPBM_A)?((cur>=2000)?100:(cur>=500)?50:(cur>=100)?10:5)
+			                      :((cur>=2000)?500:(cur>=500)?200:(cur>=100)?50:20) ;
 			int nv=cur+((mask&EPBM_RIGHT)?step:-step) ;
 			int max=(envSel_==0)?5000:10000 ;
 			if (nv<0) nv=0 ;
@@ -2806,7 +2816,7 @@ bool InstrumentView::processEnvEdit(unsigned short mask,bool pressed) {
 			changed=true ;
 		} else if ((mask&(EPBM_UP|EPBM_DOWN)) && (mask&EPBM_A)) {
 			// el nivel: solo el sustain tiene altura
-			int d=(mask&EPBM_UP)?3:-3 ;
+			int d=((mask&EPBM_UP)?1:-1)*(drawRep_<4?1:3) ;   // fino, y al mantener acelera
 			if (envSel_==2) {
 				Variable *v=si->FindVariable(envID(2)) ;
 				int was=v->GetInt() ;
@@ -3188,10 +3198,27 @@ bool InstrumentView::processFiltEdit(unsigned short mask,bool pressed) {
 		envAudition() ;
 		return true ;
 	}
-	if ((mask&EPBM_A) && !(mask&EPBM_B) && (mask&(EPBM_UP|EPBM_DOWN))) {   // la resonancia
+	if ((mask&EPBM_A) && !(mask&EPBM_B) && (mask&(EPBM_LEFT|EPBM_RIGHT))) {   // el corte, fino (un semitono)
+		Variable *v=si->FindVariable(SIP_S_FHZ) ;
+		int wasHz=v->GetInt() ;
+		float hz=float(wasHz)*((mask&EPBM_RIGHT)?1.0594631f:1.0f/1.0594631f) ;
+		int nv=int(hz+0.5f) ;
+		if (nv==wasHz) nv+=(mask&EPBM_RIGHT)?1:-1 ;
+		if (nv<30) nv=30 ;
+		if (nv>22000) nv=22000 ;
+		v->SetInt(nv) ;
+		drawCapture(SIP_S_FHZ,wasHz) ;
+		filtBox_=SIP_S_FHZ ;
+		if (nv>=1000) snprintf(msg,sizeof(msg),"corte %d.%dkHz",nv/1000,(nv%1000)/100) ;
+		else snprintf(msg,sizeof(msg),"corte %dHz",nv) ;
+		View::SetNotification(msg) ;
+		envAudition() ;
+		return true ;
+	}
+	if ((mask&EPBM_A) && !(mask&EPBM_B) && (mask&(EPBM_UP|EPBM_DOWN))) {   // la resonancia: fino, y al mantener acelera
 		Variable *v=si->FindVariable(SIP_S_FQ) ;
 		int wasQ=v->GetInt() ;
-		int nv=wasQ+((mask&EPBM_UP)?10:-10) ;
+		int nv=wasQ+((mask&EPBM_UP)?1:-1)*(drawRep_<4?2:10) ;
 		if (nv<0) nv=0 ;
 		if (nv>100) nv=100 ;
 		v->SetInt(nv) ;
@@ -3449,12 +3476,14 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 			int cur=v->GetInt(), nv=cur ;
 			if (id==SIP_S_SUS) {
 				if (!(mask&(EPBM_UP|EPBM_DOWN))) return true ;
-				nv=cur+((mask&EPBM_UP)?3:-3) ;
+				nv=cur+((mask&EPBM_UP)?1:-1)*(drawRep_<4?1:3) ;
 				if (nv<-60) nv=-60 ;
 				if (nv>0) nv=0 ;
 			} else {
 				if (!(mask&(EPBM_LEFT|EPBM_RIGHT))) return true ;
-				int fstep=(cur>=2000)?500:(cur>=500)?200:(cur>=100)?50:20 ;   // rápido
+				// fino; al mantener, acelera (aquí las flechas solas son de la bandera)
+				int fstep=(drawRep_<4)?((cur>=2000)?100:(cur>=500)?50:(cur>=100)?10:5)
+				                      :((cur>=2000)?500:(cur>=500)?200:(cur>=100)?50:20) ;
 				// el fade out crece hacia adentro del sample (con ←); lo demás, con →
 				bool more=(id==SIP_S_FOUT)?((mask&EPBM_LEFT)!=0):((mask&EPBM_RIGHT)!=0) ;
 				nv=cur+(more?fstep:-fstep) ;

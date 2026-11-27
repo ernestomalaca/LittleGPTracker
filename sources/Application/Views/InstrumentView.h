@@ -146,6 +146,7 @@ private:
 	void hopDrawing(int dir) ;
 	void drawCapture(FourCC id,int before) ;
 	void beginTouchID(FourCC id) ;
+	int drawRep_ ; unsigned short drawRepMask_ ;   // repeticiones de la misma tecla en un dibujo
 	void autoDraw() ;
 	bool boxMode_ ;   // Sampler: Select abrió las cajas (si no, se está en el dibujo)
 	unsigned char kitWf_[80] ;   // la onda del pad elegido
