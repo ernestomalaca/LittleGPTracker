@@ -415,7 +415,7 @@ InstrumentView::InstrumentView(GUIWindow &w,ViewData *data):FieldView(w,data),
 	markTap_=false ;
 	manualPending_=false ;
 	kitWfIndex_=-1 ; kitWfSize_=0 ;
-	padHoldAt_=0 ; padPlus_=false ; kitLitShown_=0 ; padEdit_=false ; boxMode_=false ;
+	padHoldAt_=0 ; padPlus_=false ; kitLitShown_=0 ; padEdit_=false ; boxMode_=false ; curveFromDraw_=0 ;
 	drawRep_=0 ; drawRepMask_=0 ;
 	waveEdit_=false ;
 	waveZoom_=1 ;
@@ -657,21 +657,23 @@ void InstrumentView::fillSampleParameters() {
 				if (pg<0 || pg>=pageCount_) pg=0 ;
 				// PAD: las cajas se ven, pero la cruz solo anda por los pads;
 				// Select las desbloquea (y Select otra vez regresa a los pads)
-				if (pg!=0) padEdit_=false ;
+				// (FILTRO igual que PAD: se llega a los pads. KIT: solo sus cajas)
 				if (lastFocusID_==0) lastFocusID_=IV_PADSEL ;
-				if (pg==0 && padEdit_ && lastFocusID_==IV_PADSEL) lastFocusID_=IV_PADST ;
-				if (pg==0 && !padEdit_) lastFocusID_=IV_PADSEL ;
+				if (pg<2 && padEdit_ && lastFocusID_==IV_PADSEL) lastFocusID_=(pg==0)?IV_PADTUNE:(FourCC)SIP_S_FTYPE ;
+				if (pg<2 && !padEdit_) lastFocusID_=IV_PADSEL ;
+				if (pg==2 && lastFocusID_==IV_PADSEL) lastFocusID_=SIP_S_VOL ;
 				const int KX[4]={1,11,21,31}, KY[2]={20,26} ;
 				#define KAT(k) (pt=GUIPoint(KX[(k)%4],KY[(k)/4]))
 				pt=GUIPoint(1,12) ;
 				ADD(new UIPadField(pt,padSelVar_,UIPadField::PAD,instrument,0,15,1,4)) ;
 				if (pg==0) {
-					ADD(new UIIntVarField(KAT(1),padStartVar_,"INICIO: %d%%",0,99,1,10)) ;
-					ADD(new UILargoField(KAT(2),padDecayVar_)) ;
-					ADD(new UIIntVarField(KAT(3),padChokeVar_,"CHOKE: %d",0,16,1,1)) ;
-					ADD(new UIIntVarField(KAT(4),padTuneVar_,"AFINA: %+dst",-24,24,1,12)) ;
-					ADD(new UIIntVarField(KAT(5),padGainVar_,"VOLUMEN: %+ddB",-36,12,1,6)) ;
-					ADD(new UIIntVarField(KAT(6),padPanVar_,"PAN: %+d",-50,50,1,10)) ;
+					// arriba lo fuerte: PAD · AFINA · VOLUMEN · LARGO; abajito lo demás
+					ADD(new UIIntVarField(KAT(1),padTuneVar_,"AFINA: %+dst",-24,24,1,12)) ;
+					ADD(new UIIntVarField(KAT(2),padGainVar_,"VOLUMEN: %+ddB",-36,12,1,6)) ;
+					ADD(new UILargoField(KAT(3),padDecayVar_)) ;
+					ADD(new UIIntVarField(KAT(4),padStartVar_,"INICIO: %d%%",0,99,1,10)) ;
+					ADD(new UIIntVarField(KAT(5),padPanVar_,"PAN: %+d",-50,50,1,10)) ;
+					ADD(new UIIntVarField(KAT(6),padChokeVar_,"CHOKE: %d",0,16,1,1)) ;
 				} else if (pg==1) {
 					v=instrument->FindVariable(SIP_S_FTYPE) ;
 					ADD(new UIIntVarField(KAT(0),*v,"FILTRO: %s",0,2,1,1)) ;
@@ -686,7 +688,7 @@ void InstrumentView::fillSampleParameters() {
 					ADD(new UIIntVarField(KAT(1),*v,"AFINA: %+dst",-48,48,1,12)) ;
 					v=instrument->FindVariable(SIP_S_PAN) ;
 					ADD(new UIIntVarField(KAT(2),*v,"PAN: %+d",-50,50,1,10)) ;
-					ADD(new UIIntVarField(KAT(7),presetSaveVar_,"PRESET: guardar",0,0,1,1)) ;
+					ADD(new UIIntVarField(KAT(3),presetSaveVar_,"PRESET: guardar",0,0,1,1)) ;
 				}
 				#undef KAT
 				return ;
@@ -1353,6 +1355,8 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 		else if (mask==drawRepMask_) drawRep_++ ;
 		else { drawRepMask_=mask ; drawRep_=0 ; }
 	}
+	// A + L en un dibujo: la curva de lo que ahí se está moviendo
+	if (pressed && mask==(EPBM_A|EPBM_L) && drawEditing()) { openCurve() ; return ; }
 	if (filtEdit_ && processFiltEdit(mask,pressed)) return ;
 	if (envEdit_ && processEnvEdit(mask,pressed)) return ;
 	// trk2als: automatización
@@ -1836,7 +1840,7 @@ static const int GRID_TABS_Y0=250, GRID_Y0=284, GRID_W=150, GRID_H=92, GRID_GAP=
 #define GRID_Y (oneRow()?380:GRID_Y0)
 
 bool InstrumentView::oneRow() {
-	return gridMode_ && simplerView_ && !kitMode_ && !audioMode_ ;
+	return gridMode_ && !audioMode_ && (simplerView_ || kitMode_) ;
 }
 
 // la fila que se ve: en el dibujo, la de sus parámetros (la envolvente del
@@ -1874,7 +1878,7 @@ void InstrumentView::gridBox(int k,int &x,int &y,int &w,int &h) {
 
 void InstrumentView::turnPage(int dir) {
 	int kind=audioMode_?0:1 ;
-	int slot=GetFocus()?gridSlot(*GetFocus()):0 ;
+	int slot=(GetFocus() && GetFocus()->GetPosition()._y>=20)?gridSlot(*GetFocus()):0 ;
 	page_[kind]=(page_[kind]+dir+pageCount_)%pageCount_ ;
 	lastFocusID_=0 ;
 	onInstrumentChange() ;
@@ -1884,6 +1888,12 @@ void InstrumentView::turnPage(int dir) {
 	for (it->Begin();!it->IsDone();it->Next()) {
 		UIField &f=it->CurrentItem() ;
 		if (f.IsStatic()) continue ;
+		if (kitMode_) {   // kit: PAD y FILTRO, en los pads (o sus cajas si están abiertas); KIT, sus cajas
+			bool pads=(f.GetPosition()._y<20) ;
+			bool wantPads=(page_[kind]<2 && !padEdit_) ;
+			if (pads!=wantPads) continue ;
+			if (pads) { best=&f ; break ; }
+		}
 		if (!best) best=&f ;
 		if (gridSlot(f)==slot) { best=&f ; break ; }
 	}
@@ -2018,7 +2028,7 @@ void InstrumentView::drawGrid() {
 			if (off) { ink=Mix(bg,fg,45) ; soft=Mix(bg,fg,32) ; }   // se leen, pero en gris (como las del kit)
 		}
 		// kit, pestaña PAD sin desbloquear (Select): se leen, pero en gris
-		if (kitMode_ && page_[1]==0 && !padEdit_ && !moving) { ink=Mix(bg,fg,45) ; soft=Mix(bg,fg,32) ; }
+		if (kitMode_ && page_[1]<2 && !padEdit_ && !moving) { ink=Mix(bg,fg,45) ; soft=Mix(bg,fg,32) ; }
 		if (moving) FillRect(cx,cy,cw,ch,box,7) ;
 		if (here && !moving) FrameRect(cx,cy,cw,ch,fg,7,3) ;
 		DrawText(cx+12,cy+10,name.c_str(),soft,1) ;
@@ -2123,19 +2133,19 @@ void InstrumentView::drawWaveform() {
 			bool onPad=kf && !kf->IsStatic() && ((UIIntVarField *)kf)->GetVariableID()==IV_PADSEL ;
 			if (onPad) gh=(page_[1]==0)
 				? "flechas:de pad en pad;A:tocar el pad;A larga:cambiar su sonido;A+^v:volumen del pad;A+<>:largo del pad;B:copiar el pad;B+A:cortarlo;SEL+A:pegarlo;SEL:las cajas del pad;L/R:otra pestaña;SEL+<>:otra pantalla"
-				: "flechas:de pad en pad;A:tocar el pad;A larga:cambiar su sonido;A+^v:volumen del pad;A+<>:largo del pad;B:copiar el pad;B+A:cortarlo;SEL+A:pegarlo;v:a las cajas;L/R:otra pestaña;SEL+<>:otra pantalla" ;
-			else gh=(page_[1]==0)
-				? "flechas:mover la cruz;A+<>:cambia el valor;A+^v:lo cambia de a mucho;Y+<>^v:otro pad, misma caja;SEL:de vuelta a los pads;L/R:otra pestaña;SEL+<>:otra pantalla"
-				: "flechas:mover la cruz;A+<>:cambia el valor;A+^v:lo cambia de a mucho;Y+<>^v:otro pad;^:de vuelta a los pads;L/R:otra pestaña;SEL+<>:otra pantalla" ;
+				: "flechas:de pad en pad;A:tocar el pad;A larga:cambiar su sonido;A+^v:volumen del pad;A+<>:largo del pad;B:copiar el pad;B+A:cortarlo;SEL+A:pegarlo;SEL:las cajas del filtro;L/R:otra pestaña;SEL+<>:otra pantalla" ;
+			else gh=(page_[1]<2)
+				? "flechas:mover la cruz;^v:la otra fila;A+<>:cambia el valor;A+^v:lo cambia de a mucho;Y+<>^v:otro pad, misma caja;SEL:de vuelta a los pads;L/R:otra pestaña;SEL+<>:otra pantalla"
+				: "flechas:mover la cruz;A+<>:cambia el valor;A+^v:lo cambia de a mucho;L/R:otra pestaña;SEL+<>:otra pantalla" ;
 		} else if (waveEdit_ && canMark()) {
 			gh="<>:mover el cursor;L/R:de rebanada en rebanada;A:pone o agarra la marca;A+<>:mueve la marca (suena);B+A:borra la marca;SEL,B:marcar varias;B+L/R:inicio / fin aquí;B+^v:zoom;START:tocar todo;L+START:rebanar al vuelo;^v:otro dibujo;SEL:a las cajas;SEL+L/R:deshacer / rehacer" ;
 		} else if (waveEdit_) {
-			gh="L/R:elige la bandera;<>:mueve la bandera;A+<>:fade o envolvente;A+^v:sustain;B+<>:salto grande;B+^v:zoom;B+A:bandera a su lugar;^v:otro dibujo;START:tocar;R2:capturar lo movido;SEL:a las cajas;SEL+L/R:deshacer / rehacer;SEL+<>:otra pantalla" ;
+			gh="L/R:elige la bandera;<>:mueve la bandera;A+<>:fade o envolvente;A+^v:sustain;B+<>:salto grande;B+^v:zoom;B+A:bandera a su lugar;^v:otro dibujo;START:tocar;A+L:su curva en el clip;R2:capturar lo movido;SEL:a las cajas;SEL+L/R:deshacer / rehacer" ;
 		} else if (filtEdit_) {
 			gh=rec ? "<>:corte (se graba);A+<>:corte, fino;A+^v:resonancia;L/R:tipo: LP, BP, HP;^v:otro dibujo;Y+START:dejar de grabar;SEL:a las cajas"
-			       : "<>:corte;A+<>:corte, fino;A+^v:resonancia;L/R:tipo: LP, BP, HP;^v:otro dibujo;START:tocar;R2:capturar lo movido;Y+START:grabar;SEL:a las cajas;SEL+<>:otra pantalla" ;
+			       : "<>:corte;A+<>:corte, fino;A+^v:resonancia;L/R:tipo: LP, BP, HP;^v:otro dibujo;START:tocar;A+L:su curva en el clip;R2:capturar lo movido;Y+START:grabar;SEL:a las cajas;SEL+<>:otra pantalla" ;
 		} else if (envEdit_) {
-			gh="L/R:elige la parte;<>:su tiempo;A+<>:su tiempo, fino;A+^v:sustain;^v:otro dibujo;START:tocar;R2:capturar lo movido;Y+START:grabar;SEL:a las cajas;SEL+<>:otra pantalla" ;
+			gh="L/R:elige la parte;<>:su tiempo;A+<>:su tiempo, fino;A+^v:sustain;^v:otro dibujo;START:tocar;A+L:su curva en el clip;R2:capturar lo movido;Y+START:grabar;SEL:a las cajas;SEL+<>:otra pantalla" ;
 		} else {
 			gh=rec ? "flechas:mover la cruz;A+<>:mantenida, se graba;L/R:otra pestaña;Y+START:dejar de grabar;SEL:al dibujo"
 			       : "flechas:mover la cruz;A+<>:cambia el valor;A+^v:lo cambia de a mucho;L/R:otra pestaña;A+L:su curva en el clip;B+A:de fábrica / sin curva;R2:capturar lo movido;Y+START:grabar;SEL:al dibujo;SEL+<>:otra pantalla" ;
@@ -2176,7 +2186,7 @@ void InstrumentView::drawWaveformBody() {
 	}
 
 	const int X=16, Y=gridMode_?48:(kitMode_?56:34), W=WF_BARS*8,
-	          H=gridMode_?(oneRow()?282:186):(kitMode_?144:(simplerView_?80:112)) ;
+	          H=gridMode_?((oneRow() && !kitMode_)?282:186):(kitMode_?144:(simplerView_?80:112)) ;
 	if (!(kitMode_ && gridMode_)) FillRect(X-8,Y-4,W+16,H+8,Mix(bg,fg,9),8) ;
 	if (gridMode_ && drawEditing()) FrameRect(X-8,Y-4,W+16,H+8,fg,8,3) ;   // dibujando: el marco pasa aquí
 
@@ -3016,8 +3026,15 @@ void InstrumentView::OnFocus() {
 	// trk2als: al Sampler se llega parado en su dibujo (la onda, o la
 	// envolvente de la pestaña): lo fuerte se edita ahí; Select abre las cajas.
 	// (De regreso de una curva se queda en la caja de ese parámetro)
-	boxMode_=fromCurve ;
+	int back=fromCurve?curveFromDraw_:0 ;
+	curveFromDraw_=0 ;
+	boxMode_=fromCurve && !back ;   // (si se fue desde el dibujo, vuelve al dibujo)
 	autoDraw() ;
+	if (back>=10 && filtEdit_) {   // era la envolvente del filtro
+		filtEdit_=false ;
+		envEdit_=true ; envFilter_=true ; envSel_=back-10 ;
+	} else if (back>=10 && envEdit_) envSel_=back-10 ;
+	else if (back==2 && filtEdit_ && (lastFocusID_==SIP_S_FQ || lastFocusID_==SIP_S_FTYPE)) filtBox_=lastFocusID_ ;
 }
 
 void InstrumentView::autoDraw() {
@@ -3201,9 +3218,9 @@ void InstrumentView::toggleDraw() {
 	if (!current_ || current_->GetType()!=IT_SAMPLE) return ;
 	SampleInstrument *si=(SampleInstrument *)current_ ;
 	if (kitMode_ && gridMode_) {   // kit, pestaña PAD: las cajas del pad <-> los pads
-		if (page_[1]!=0) return ;
+		if (page_[1]>=2) return ;   // KIT: solo cajas
 		padEdit_=!padEdit_ ;
-		lastFocusID_=padEdit_?IV_PADST:IV_PADSEL ;
+		lastFocusID_=padEdit_?((page_[1]==0)?IV_PADTUNE:(FourCC)SIP_S_FTYPE):IV_PADSEL ;
 		onInstrumentChange() ;
 		return ;
 	}
@@ -4222,7 +4239,7 @@ bool InstrumentView::processKit(unsigned short mask) {
 		}
 	}
 	// editando las cajas del pad: de la fila de arriba no se sube a los pads
-	if (gridMode_ && padEdit_ && mask==EPBM_UP && f->GetPosition()._y<=20) return true ;
+	if (gridMode_ && id!=IV_PADSEL && mask==EPBM_UP && f->GetPosition()._y<=20) return true ;
 	if (!isPadField(id)) return false ;
 	SampleInstrument *si=(SampleInstrument *)current_ ;
 	int note=padNote() ;
@@ -4265,7 +4282,8 @@ bool InstrumentView::processKit(unsigned short mask) {
 			else if (dir==EPBM_RIGHT && c<3) c++ ;
 			else if (dir==EPBM_UP && r<3) r++ ;        // el pad 1 está abajo
 			else if (dir==EPBM_DOWN && r>0) r-- ;
-			else if (mask==EPBM_DOWN) return gridMode_ && page_[1]==0 ;   // la orilla de abajo: a los campos (en PAD no: Select)
+			else if (gridMode_) return true ;   // con cajas: de los pads no se sale con las flechas (Select)
+			else if (mask==EPBM_DOWN) return false ;   // la orilla de abajo: a los campos
 			else if (mask==EPBM_UP && !ownedByTrack()) return false ;   // arriba, el kit (si se puede cambiar aquí)
 			else return true ;
 			padSelVar_.SetInt(r*4+c) ;
@@ -4445,7 +4463,7 @@ void InstrumentView::drawKit(SampleInstrument *si) {
 	bool onGrid=GetFocus() && !GetFocus()->IsStatic() &&
 	            ((UIIntVarField *)GetFocus())->GetVariableID()==IV_PADSEL ;
 	unsigned long now=System::GetInstance()->GetClock() ;
-	const int PW=52, PH=46, G=4, PX=8, PY=40 ;
+	const int PW=52, PH=70, G=4, PX=8, PY=40 ;
 	for (int r=0;r<4;r++) for (int c=0;c<4;c++) {
 		int idx=r*4+c, note=base+idx ;
 		int x=PX+c*(PW+G), y=PY+(3-r)*(PH+G) ;
@@ -4457,7 +4475,7 @@ void InstrumentView::drawKit(SampleInstrument *si) {
 		if (name.empty()) FrameRect(x,y,PW,PH,Mix(bg,fg,22),5,2) ;
 		else {
 			FillRect(x,y,PW,PH,lit?play:panel,5) ;
-			DrawText(x+2,y+15,padAbbrev(name).c_str(),lit?bg:fg,1) ;
+			DrawText(x+2,y+(PH-16)/2,padAbbrev(name).c_str(),lit?bg:fg,1) ;
 		}
 		if (on) FrameRect(x,y,PW,PH,fg,5,3) ;
 		if (on && onGrid) FrameRect(x-4,y-4,PW+8,PH+8,fg,8,2) ;
@@ -4470,7 +4488,7 @@ void InstrumentView::drawKit(SampleInstrument *si) {
 	}
 	// en el hueco de la primera caja de PAD: de qué pad son los valores
 	// (su número y sus 3 letras)
-	if (page_[1]==0) {
+	if (page_[1]==0 && shownRow()==0) {
 		int cx,cy,cw,ch ;
 		gridBox(0,cx,cy,cw,ch) ;
 		(void)cw ; (void)ch ;
@@ -4482,7 +4500,7 @@ void InstrumentView::drawKit(SampleInstrument *si) {
 		DrawText(cx+16+24*int(strlen(num)),cy+48,nm.empty()?"--":padAbbrev(nm).c_str(),fg,1) ;
 	}
 	// la onda del pad elegido
-	const int WX=236, WY=40, WW=396, WH=198 ;
+	const int WX=236, WY=40, WW=396, WH=294 ;
 	FillRect(WX,WY,WW,WH,panel,8) ;
 	int note=base+sel ;
 	std::string wav=si->PadSample(note) ;
@@ -4682,8 +4700,36 @@ void InstrumentView::applyCurveMeta(const CurveMeta &m) {
 }
 
 // A + L: al clip, a la curva del parámetro del foco
+// el parámetro del dibujo donde se está (0: ninguno)
+FourCC InstrumentView::drawParam() {
+	if (!current_ || current_->GetType()!=IT_SAMPLE) return 0 ;
+	if (envEdit_) return envID(envSel_) ;
+	if (filtEdit_) return filtBox_ ;
+	if (!waveEdit_) return 0 ;
+	SampleInstrument *si=(SampleInstrument *)current_ ;
+	int ra,rb ;
+	if (!si->SimplerRegion(ra,rb)) return 0 ;
+	int c=markVar_.GetInt() ;
+	if (!canMark()) return (waveStop_==0)?SIP_S_START:(waveStop_==3)?(FourCC)SIP_S_END:0 ;
+	if (waveFlag_==1 || c==si->RegionPoint(true)) return SIP_S_START ;
+	if (waveFlag_==2 || c==si->RegionPoint(false)) return SIP_S_END ;
+	return 0 ;
+}
+
 bool InstrumentView::openCurve() {
 	UIField *f=GetFocus() ;
+	int fromDraw=0 ;
+	if (drawEditing()) {   // desde el dibujo: la caja de lo que ahí se mueve
+		FourCC want=drawParam() ;
+		f=0 ;
+		IteratorPtr<UIField> it(T_SimpleList<UIField>::GetIterator()) ;
+		for (it->Begin();!it->IsDone();it->Next()) {
+			UIField &c=it->CurrentItem() ;
+			if (!c.IsStatic() && want && ((UIIntVarField &)c).GetVariableID()==want) { f=&c ; break ; }
+		}
+		if (!f) { View::SetNotification("aquí no hay qué automatizar") ; isDirty_=true ; return false ; }
+		fromDraw=envEdit_?(10+envSel_):filtEdit_?2:1 ;
+	}
 	if (!f || f->IsStatic() || !current_ || current_->GetType()!=IT_SAMPLE) return false ;
 	UIIntVarField *fld=(UIIntVarField *)f ;
 	FourCC id=fld->GetVariableID() ;
@@ -4701,6 +4747,12 @@ bool InstrumentView::openCurve() {
 	vd->currentChain_=clip ;
 	vd->songX_=ch ;
 	lastFocusID_=id ;
+	curveFromDraw_=fromDraw ;
+	if (fromDraw) {   // sale del dibujo en limpio (al volver se entra otra vez)
+		if (waveEdit_) exitWaveEdit() ;
+		envNoteOff() ;
+		envEdit_=false ; filtEdit_=false ;
+	}
 	ViewType vt=VT_CLIP ;
 	ViewEvent ve(VET_SWITCH_VIEW,&vt) ;
 	SetChanged() ;

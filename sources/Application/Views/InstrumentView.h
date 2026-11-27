@@ -71,6 +71,8 @@ private:
 	int gridSlot(UIField &f) ;
 	void gridBox(int k,int &x,int &y,int &w,int &h) ;
 	bool oneRow() ;
+	FourCC drawParam() ;
+	int curveFromDraw_ ;   // la curva se abrió desde un dibujo (1 onda, 2 filtro, 10+ parte de la envolvente)
 	int shownRow() ;
 	bool simplerView_ ;      // Sampler estilo Simpler (pistas MIDI)
 	int ampLabelRow_ ;       // dónde va el dibujo de la envolvente

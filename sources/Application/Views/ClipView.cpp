@@ -2572,6 +2572,13 @@ void ClipView::drawCurves() {
         DrawText(w + 16 + 16 * int(strlen(vb)) + 16, 39, info, dim, 0);
     }
     drawPages(page, npages);
+    {   // donde iban las velocidades: qué se está editando
+        std::string nm = d->curveName_;
+        for (size_t i = 0; i < nm.size(); i++) nm[i] = toupper(nm[i]);
+        std::string t = std::string("editando automatización de ") + nm;
+        FillRect(GRID_X, VEL_Y, 16 * STEP_W, VEL_H, Mix(bg, fg, GridPct(5)), 4);
+        DrawText(GRID_X + 12, VEL_Y + VEL_H / 2 - 8, t.c_str(), fg, 1);
+    }
 
     // la rejilla con las notas de fondo
     const int gw = 16 * STEP_W, gh = ROWS * ROW_H;
