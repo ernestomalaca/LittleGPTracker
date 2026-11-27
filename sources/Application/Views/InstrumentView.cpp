@@ -3124,7 +3124,7 @@ void InstrumentView::hopDrawing(int dir) {
 }
 
 // trk2als: el dibujo del filtro: su curva de respuesta. Izq / der cambia el
-// tipo; A + izq / der el corte; A + arriba / abajo la resonancia
+// corte; A + arriba / abajo la resonancia; L / R el tipo
 bool InstrumentView::processFiltEdit(unsigned short mask,bool pressed) {
 	bool ok=current_ && current_->GetType()==IT_SAMPLE && gridMode_ && !kitMode_ && !audioMode_ ;
 	if (!ok) { envNoteOff() ; filtEdit_=false ; return false ; }
@@ -3136,47 +3136,54 @@ bool InstrumentView::processFiltEdit(unsigned short mask,bool pressed) {
 	}
 	if (mask&EPBM_SELECT) return false ;   // Select solo (o deshacer): lo de siempre
 	SampleInstrument *si=(SampleInstrument *)current_ ;
-	if (!pressed) { pageTap_=0 ; isDirty_=true ; return true ; }
+	char msg[48] ;
+	if (!pressed) {
+		// L o R solos (tocar y soltar): el tipo de filtro anterior / siguiente
+		if (pageTap_ && mask==0) {
+			Variable *v=si->FindVariable(SIP_S_FTYPE) ;
+			int t=v->GetInt()+pageTap_ ;
+			if (t<0) t=0 ;
+			if (t>2) t=2 ;
+			v->SetInt(t) ;
+			filtBox_=SIP_S_FTYPE ;
+			View::SetNotification(v->GetString()) ;
+			pageTap_=0 ;
+			envAudition() ;
+		}
+		isDirty_=true ;
+		return true ;
+	}
+	pageTap_=(mask==EPBM_L)?-1:(mask==EPBM_R)?1:0 ;
 	isDirty_=true ;
 	if (mask==EPBM_UP || mask==EPBM_DOWN) { hopDrawing(mask==EPBM_DOWN?1:-1) ; return true ; }
 	if (mask==EPBM_START) { envAudition() ; return true ; }
-	char msg[48] ;
-	if (mask==EPBM_LEFT || mask==EPBM_RIGHT) {   // el tipo de filtro
-		Variable *v=si->FindVariable(SIP_S_FTYPE) ;
-		int t=v->GetInt()+((mask==EPBM_RIGHT)?1:-1) ;
-		if (t<0) t=0 ;
-		if (t>2) t=2 ;
-		v->SetInt(t) ;
-		filtBox_=SIP_S_FTYPE ;
-		View::SetNotification(v->GetString()) ;
+	// como en la onda: las flechas mueven lo que se ve (el corte), A + flechas
+	// le da forma (la resonancia) y L / R eligen cuál (el tipo)
+	if (mask==EPBM_LEFT || mask==EPBM_RIGHT) {   // el corte, de a tercera mayor (lo fino, en su caja)
+		Variable *v=si->FindVariable(SIP_S_FHZ) ;
+		float hz=float(v->GetInt())*((mask==EPBM_RIGHT)?1.2599210f:1.0f/1.2599210f) ;
+		int nv=int(hz+0.5f) ;
+		if (nv==v->GetInt()) nv+=(mask==EPBM_RIGHT)?1:-1 ;
+		if (nv<30) nv=30 ;
+		if (nv>22000) nv=22000 ;
+		v->SetInt(nv) ;
+		filtBox_=SIP_S_FHZ ;
+		if (nv>=1000) snprintf(msg,sizeof(msg),"corte %d.%dkHz",nv/1000,(nv%1000)/100) ;
+		else snprintf(msg,sizeof(msg),"corte %dHz",nv) ;
+		View::SetNotification(msg) ;
 		envAudition() ;
 		return true ;
 	}
-	if ((mask&EPBM_A) && !(mask&EPBM_B)) {
-		if (mask&(EPBM_LEFT|EPBM_RIGHT)) {   // el corte, de a tercera mayor (lo fino, en su caja)
-			Variable *v=si->FindVariable(SIP_S_FHZ) ;
-			float hz=float(v->GetInt())*((mask&EPBM_RIGHT)?1.2599210f:1.0f/1.2599210f) ;
-			int nv=int(hz+0.5f) ;
-			if (nv==v->GetInt()) nv+=(mask&EPBM_RIGHT)?1:-1 ;
-			if (nv<30) nv=30 ;
-			if (nv>22000) nv=22000 ;
-			v->SetInt(nv) ;
-			filtBox_=SIP_S_FHZ ;
-			if (nv>=1000) snprintf(msg,sizeof(msg),"corte %d.%dkHz",nv/1000,(nv%1000)/100) ;
-			else snprintf(msg,sizeof(msg),"corte %dHz",nv) ;
-			View::SetNotification(msg) ;
-			envAudition() ;
-		} else if (mask&(EPBM_UP|EPBM_DOWN)) {   // la resonancia
-			Variable *v=si->FindVariable(SIP_S_FQ) ;
-			int nv=v->GetInt()+((mask&EPBM_UP)?10:-10) ;
-			if (nv<0) nv=0 ;
-			if (nv>100) nv=100 ;
-			v->SetInt(nv) ;
-			filtBox_=SIP_S_FQ ;
-			snprintf(msg,sizeof(msg),"resonancia %d%%",nv) ;
-			View::SetNotification(msg) ;
-			envAudition() ;
-		}
+	if ((mask&EPBM_A) && !(mask&EPBM_B) && (mask&(EPBM_UP|EPBM_DOWN))) {   // la resonancia
+		Variable *v=si->FindVariable(SIP_S_FQ) ;
+		int nv=v->GetInt()+((mask&EPBM_UP)?10:-10) ;
+		if (nv<0) nv=0 ;
+		if (nv>100) nv=100 ;
+		v->SetInt(nv) ;
+		filtBox_=SIP_S_FQ ;
+		snprintf(msg,sizeof(msg),"resonancia %d%%",nv) ;
+		View::SetNotification(msg) ;
+		envAudition() ;
 		return true ;
 	}
 	return true ;
