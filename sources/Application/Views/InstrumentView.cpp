@@ -2167,12 +2167,12 @@ void InstrumentView::drawWaveform() {
 		} else if (waveEdit_ && canMark()) {
 			gh="<>:mover el cursor;L/R:de rebanada en rebanada;A:pone o agarra la marca;A+<>:mueve la marca (suena);B+A:borra la marca;SEL,B:marcar varias;B+L/R:inicio / fin aquí;B+^v:zoom;START:tocar todo;L+START:rebanar al vuelo;^v:otro dibujo;SEL:a las cajas;SEL+L/R:deshacer / rehacer" ;
 		} else if (waveEdit_) {
-			gh="L/R:elige la bandera;<>:mueve la bandera;A+<>:fade o envolvente;A+^v:sustain;B+<>:salto grande;B+^v:zoom;B+A:bandera a su lugar;^v:otro dibujo;START:tocar;R2:capturar lo movido;SEL:a las cajas;SEL+L/R:deshacer / rehacer;SEL+<>:otra pantalla" ;
+			gh="L/R:elige la bandera;<>:mueve la bandera;A+<>:fade o envolvente;A+^v:sustain;B+<>:salto grande;B+^v:zoom;B+A:bandera a su lugar;^v:otro dibujo;START:play / stop;R2:capturar lo movido;SEL:a las cajas;SEL+L/R:deshacer / rehacer;SEL+<>:otra pantalla" ;
 		} else if (filtEdit_) {
 			gh=rec ? "<>:corte (se graba);A+<>:corte, fino;A+^v:resonancia;L/R:tipo: LP, BP, HP;^v:otro dibujo;Y+START:dejar de grabar;SEL:a las cajas"
-			       : "<>:corte;A+<>:corte, fino;A+^v:resonancia;L/R:tipo: LP, BP, HP;^v:otro dibujo;START:tocar;A+L:su curva en el clip;R2:capturar lo movido;Y+START:grabar;SEL:a las cajas;SEL+<>:otra pantalla" ;
+			       : "<>:corte;A+<>:corte, fino;A+^v:resonancia;L/R:tipo: LP, BP, HP;^v:otro dibujo;START:play / stop;A+L:su curva en el clip;R2:capturar lo movido;Y+START:grabar;SEL:a las cajas;SEL+<>:otra pantalla" ;
 		} else if (envEdit_) {
-			gh="L/R:elige la parte;<>:su tiempo;A+<>:su tiempo, fino;A+^v:sustain;^v:otro dibujo;START:tocar;A+L:su curva en el clip;R2:capturar lo movido;Y+START:grabar;SEL:a las cajas;SEL+<>:otra pantalla" ;
+			gh="L/R:elige la parte;<>:su tiempo;A+<>:su tiempo, fino;A+^v:sustain;^v:otro dibujo;START:play / stop;A+L:su curva en el clip;R2:capturar lo movido;Y+START:grabar;SEL:a las cajas;SEL+<>:otra pantalla" ;
 		} else {
 			gh=rec ? "flechas:mover la cruz;A+<>:mantenida, se graba;L/R:otra pestaña;Y+START:dejar de grabar;SEL:al dibujo"
 			       : "flechas:mover la cruz;A+<>:cambia el valor;A+^v:lo cambia de a mucho;L/R:otra pestaña;A+L:su curva en el clip;B+A:de fábrica / sin curva;R2:capturar lo movido;Y+START:grabar;SEL:al dibujo;SEL+<>:otra pantalla" ;
@@ -2955,7 +2955,7 @@ bool InstrumentView::processEnvEdit(unsigned short mask,bool pressed) {
 	}
 	pageTap_=(mask==EPBM_L)?-1:(mask==EPBM_R)?1:0 ;
 	isDirty_=true ;
-	if (mask==EPBM_START) { envAudition() ; return true ; }
+	if (mask==EPBM_START) { envNoteOff() ; Player::GetInstance()->EditorStart(viewData_->songX_,viewData_->songY_) ; isDirty_=true ; return true ; }   // play / stop, como en todas las pantallas
 	// (aquí no hay B + L / B + R: L y R ya eligen la parte y A la mueve)
 	// como en la onda y el filtro: las flechas mueven lo que se ve (el tiempo
 	// de la parte elegida); A + arriba / abajo le da forma (el sustain)
@@ -3345,7 +3345,7 @@ bool InstrumentView::processFiltEdit(unsigned short mask,bool pressed) {
 	pageTap_=(mask==EPBM_L)?-1:(mask==EPBM_R)?1:0 ;
 	isDirty_=true ;
 	if (mask==EPBM_UP || mask==EPBM_DOWN) { hopDrawing(mask==EPBM_DOWN?1:-1) ; return true ; }
-	if (mask==EPBM_START) { envAudition() ; return true ; }
+	if (mask==EPBM_START) { envNoteOff() ; Player::GetInstance()->EditorStart(viewData_->songX_,viewData_->songY_) ; isDirty_=true ; return true ; }   // play / stop, como en todas las pantallas
 	// como en la onda: las flechas mueven lo que se ve (el corte), A + flechas
 	// le da forma (la resonancia) y L / R eligen cuál (el tipo)
 	if (mask==EPBM_LEFT || mask==EPBM_RIGHT) {   // el corte, de a tercera mayor (lo fino, en su caja)
@@ -3576,6 +3576,12 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 		return true ;
 	}
 	// Start: tocar / parar la región desde el cursor (y la canción)
+	if (mask==EPBM_START && !canMark()) {   // play / stop (rebanando a mano, Start sigue tocando el sample)
+		stopTapPlay() ;
+		Player::GetInstance()->EditorStart(viewData_->songX_,viewData_->songY_) ;
+		isDirty_=true ;
+		return true ;
+	}
 	if (mask==EPBM_START) {
 		if (tapPlay_ || tapPending_>=0) { tapPending_=-1 ; stopTapPlay() ; }
 		else startTapPlay((c<a || c>=b-step)?a:c) ;

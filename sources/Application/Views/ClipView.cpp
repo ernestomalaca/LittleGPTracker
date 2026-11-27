@@ -1545,12 +1545,8 @@ void ClipView::DrawView() {
                 const char *t = "TODO EL CLIP";
                 int sx = 634 - 16 * 17 - 10 - 8 * int(strlen(t));
                 if (sx > used + 8) DrawText(sx, 38, t, TrackColor(viewData_->songX_), 0);
-            } else if (scale > 0) {   // la escala, como en Live (si cabe)
-                std::string sc = std::string(viewData_->project_->GetFold() ? "FOLD " : "") + scaleNotes[root] + " " + scaleNames[scale];
-                if (sc.size() > 18) sc = sc.substr(0, 18);
-                int sx = 634 - 16 * 17 - 10 - 8 * int(sc.size());
-                if (sx > used + 8) DrawText(sx, 38, sc.c_str(), hi, 0);
             }
+            (void)used; (void)scale; (void)root; (void)hi;   // (la escala ya no se escribe aquí)
         }
         drawPages(page, npages);
     }
@@ -1768,13 +1764,16 @@ void ClipView::OnPlayerUpdate(PlayerEventType, unsigned int) {
         // trk2als: follow (como en Live): la página sigue a lo que suena; si
         // te vas a otra página, se pausa hasta que vuelves a la que suena
         Variable *fv = viewData_->project_->FindVariable(VAR_FOLLOW);
-        if (step >= 0 && fv && fv->GetBool() && !marking_ && !pasting_ && !curveOn()) {
+        // (en la curva también, salvo con un nodo agarrado o marcando)
+        bool curveBusy = curveOn() && (curveGrab_ || curveStand_ || curveMarking_ || curvePasting_);
+        if (step >= 0 && fv && fv->GetBool() && !marking_ && !pasting_ && !curveBusy) {
             int pp = step / 16, cp = cursorStep_ / 16;
             if (cp == pp) followPage_ = pp;
             else if (cp == followPage_) {
                 cursorStep_ += (pp - cp) * 16;
                 if (cursorStep_ >= total()) cursorStep_ = total() - 1;
                 followPage_ = pp;
+                if (curveOn()) { curveSel_ = -1; curveSyncCursor(); }   // el punto: el valor de la curva ahí
             }
         }
         DrawView();
