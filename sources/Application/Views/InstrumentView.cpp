@@ -1295,6 +1295,7 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 		}
 	}
 	if (fadeEdit_ && processFadeEdit(mask,pressed)) return ;
+	if (!pressed && mask==0 && capping_ && drawEditing()) capEnd() ;
 	if (filtEdit_ && processFiltEdit(mask,pressed)) return ;
 	if (envEdit_ && processEnvEdit(mask,pressed)) return ;
 	// trk2als: automatización
@@ -2785,7 +2786,9 @@ bool InstrumentView::processEnvEdit(unsigned short mask,bool pressed) {
 	isDirty_=true ;
 	if (mask==EPBM_START) { envAudition() ; return true ; }
 	// (aquí no hay B + L / B + R: L y R ya eligen la parte y A la mueve)
-	if ((mask&EPBM_A) && !(mask&EPBM_B)) {
+	// como en la onda y el filtro: las flechas mueven lo que se ve (el tiempo
+	// de la parte elegida); A + arriba / abajo le da forma (el sustain)
+	if (mask==EPBM_LEFT || mask==EPBM_RIGHT || ((mask&EPBM_A) && !(mask&EPBM_B))) {
 		bool changed=false ;
 		if ((mask&(EPBM_LEFT|EPBM_RIGHT)) && envSel_!=2) {   // el tiempo de esa parte
 			Variable *v=si->FindVariable(envID(envSel_)) ;
@@ -2796,16 +2799,19 @@ bool InstrumentView::processEnvEdit(unsigned short mask,bool pressed) {
 			if (nv<0) nv=0 ;
 			if (nv>max) nv=max ;
 			v->SetInt(nv) ;
+			drawCapture(envID(envSel_),cur) ;
 			changed=true ;
 		} else if ((mask&(EPBM_UP|EPBM_DOWN)) && (mask&EPBM_A)) {
 			// el nivel: solo el sustain tiene altura
 			int d=(mask&EPBM_UP)?1:-1 ;
 			if (envSel_==2) {
 				Variable *v=si->FindVariable(envID(2)) ;
-				int nv=v->GetInt()+d ;
+				int was=v->GetInt() ;
+				int nv=was+d ;
 				if (nv<-60) nv=-60 ;
 				if (nv>0) nv=0 ;
 				v->SetInt(nv) ;
+				drawCapture(envID(2),was) ;
 				changed=true ;
 			}   // (ENV, cuánto mueve la envolvente al filtro, se queda en su caja)
 		}
@@ -3141,10 +3147,13 @@ bool InstrumentView::processFiltEdit(unsigned short mask,bool pressed) {
 		// L o R solos (tocar y soltar): el tipo de filtro anterior / siguiente
 		if (pageTap_ && mask==0) {
 			Variable *v=si->FindVariable(SIP_S_FTYPE) ;
-			int t=v->GetInt()+pageTap_ ;
+			int wasT=v->GetInt() ;
+			int t=wasT+pageTap_ ;
 			if (t<0) t=0 ;
 			if (t>2) t=2 ;
 			v->SetInt(t) ;
+			drawCapture(SIP_S_FTYPE,wasT) ;
+			if (capping_) capEnd() ;
 			filtBox_=SIP_S_FTYPE ;
 			View::SetNotification(v->GetString()) ;
 			pageTap_=0 ;
@@ -3166,7 +3175,9 @@ bool InstrumentView::processFiltEdit(unsigned short mask,bool pressed) {
 		if (nv==v->GetInt()) nv+=(mask==EPBM_RIGHT)?1:-1 ;
 		if (nv<30) nv=30 ;
 		if (nv>22000) nv=22000 ;
+		int wasHz=v->GetInt() ;
 		v->SetInt(nv) ;
+		drawCapture(SIP_S_FHZ,wasHz) ;
 		filtBox_=SIP_S_FHZ ;
 		if (nv>=1000) snprintf(msg,sizeof(msg),"corte %d.%dkHz",nv/1000,(nv%1000)/100) ;
 		else snprintf(msg,sizeof(msg),"corte %dHz",nv) ;
@@ -3176,10 +3187,12 @@ bool InstrumentView::processFiltEdit(unsigned short mask,bool pressed) {
 	}
 	if ((mask&EPBM_A) && !(mask&EPBM_B) && (mask&(EPBM_UP|EPBM_DOWN))) {   // la resonancia
 		Variable *v=si->FindVariable(SIP_S_FQ) ;
-		int nv=v->GetInt()+((mask&EPBM_UP)?10:-10) ;
+		int wasQ=v->GetInt() ;
+		int nv=wasQ+((mask&EPBM_UP)?10:-10) ;
 		if (nv<0) nv=0 ;
 		if (nv>100) nv=100 ;
 		v->SetInt(nv) ;
+		drawCapture(SIP_S_FQ,wasQ) ;
 		filtBox_=SIP_S_FQ ;
 		snprintf(msg,sizeof(msg),"resonancia %d%%",nv) ;
 		View::SetNotification(msg) ;
@@ -3461,7 +3474,9 @@ bool InstrumentView::processWaveEdit(unsigned short mask,bool pressed) {
 			int p=(st?fs:fe)+((mask&EPBM_RIGHT)?jump:-jump) ;
 			if (p<0) p=0 ;
 			if (p>size) p=size ;
+			int wasPct=si->GetSimpler(st?SIP_S_START:SIP_S_END) ;
 			si->SetRegionPoint(st,p) ;
+			drawCapture(st?SIP_S_START:(FourCC)SIP_S_END,wasPct) ;
 			markVar_.SetInt(si->RegionPoint(st)) ;
 			if (oneShot) { fadeSel_=st?0:1 ; fadeAudition() ; }   // la nota, con sus fades
 			else { waveFlag_=st?1:2 ; waveARelease() ; }           // el sample: desde el inicio, o el último segundo
@@ -4630,6 +4645,37 @@ void InstrumentView::endTouch() {
 /************************************************************
  trk2als: captura de automatización (R2)
  ************************************************************/
+
+// trk2als: lo que se mueve desde un dibujo (la bandera, el corte, la
+// resonancia, la envolvente) también se anota para la captura, igual que lo
+// que se mueve en su caja. Hace falta que su caja esté en la página (de ahí
+// sale su escala)
+void InstrumentView::drawCapture(FourCC id,int before) {
+	if (kitMode_ || !current_ || current_->GetType()!=IT_SAMPLE || !automatable(id)) return ;
+	if (Player::GetInstance()->IsAutoRec()) return ;
+	if (capping_ && capCur_.id!=id) capEnd() ;
+	if (!capping_) {
+		int ch=autoChannel() ;
+		int clip=autoClip(ch) ;
+		if (clip<0 || Player::GetInstance()->ClipTickPos(ch)<0) return ;
+		UIIntVarField *fld=0 ;
+		IteratorPtr<UIField> it(T_SimpleList<UIField>::GetIterator()) ;
+		for (it->Begin();!it->IsDone();it->Next()) {
+			UIField &f=it->CurrentItem() ;
+			if (!f.IsStatic() && ((UIIntVarField &)f).GetVariableID()==id) { fld=(UIIntVarField *)&f ; break ; }
+		}
+		if (!fld) return ;
+		capCur_.id=id ;
+		capCur_.ch=ch ;
+		capCur_.clip=clip ;
+		capCur_.base=before ;
+		curveMeta(fld,capCur_.meta) ;
+		capCur_.pts.clear() ;
+		capLast_=-1 ;
+		capping_=true ;
+	}
+	capTick() ;
+}
 
 void InstrumentView::capBegin() {
 	if (kitMode_ || !current_ || current_->GetType()!=IT_SAMPLE) return ;
