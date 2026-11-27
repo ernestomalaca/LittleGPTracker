@@ -38,6 +38,8 @@ MixerView::MixerView(GUIWindow &w,ViewData *viewData):View(w,viewData) {
     soloChannel_ = -1;
     mixerRow_ = 1; // start on volume row
     for (int i = 0; i < 9; i++) vuL_[i] = vuR_[i] = 0;
+    for (int i = 0; i < 18; i++) vuShown_[i] = 0;
+    lastVu_ = 0; masterOn_ = false; tapKey_ = 0;
     previousViewType_ = VT_SONG; // Default to SongView
     for (int i = 0; i < 9; i++) {
         vuBarHeightsL_[i] = 0;
@@ -86,6 +88,11 @@ void MixerView::updateCursor(int dx,int dy) {
 		x += dx;
 		if (x < 0) x = 0;
 		if (x > 7) x = 7;
+		{   // trk2als: solo las columnas que hay (las de la Session)
+			int tc = viewData_->project_->TrackCount();
+			int n = tc > Project::MaxTracks() ? tc : Project::MaxTracks();
+			if (x > n - 1) x = n - 1;
+		}
 		viewData_->mixerCol_ = x;
 		isDirty_ = true;
 	}
@@ -112,6 +119,16 @@ void MixerView::unMuteAll() {
 }
 
 void MixerView::ProcessButtonMask(unsigned short mask, bool pressed) {
+    if (SupportsShapes() && !View::miniLayout_) {
+        // trk2als: R sola (tocar y soltar): el master encima de la última
+        // pista; L sola: de vuelta. Y al soltar una tecla no se hace nada más
+        if (pressed) tapKey_ = (mask == EPBM_R || mask == EPBM_L) ? mask : 0;
+        else {
+            if (mask == 0 && tapKey_) { masterOn_ = (tapKey_ == EPBM_R); isDirty_ = true; }
+            tapKey_ = 0;
+            return;
+        }
+    }
 
     if (clipboard_.active_) {
 		viewMode_=VM_SELECTION ;
@@ -675,10 +692,20 @@ void MixerView::DrawVuBars() {
 }
 
 void MixerView::AnimationUpdate() {
-    if (SupportsShapes() && !View::miniLayout_) {   // los medidores: se repinta mientras algo se mueva
-        bool moving = Player::GetInstance()->IsRunning();
-        for (int i = 0; i < 9 && !moving; i++) if (vuL_[i] > 0.001f || vuR_[i] > 0.001f) moving = true;
-        if (moving && !HasModal()) DrawView();
+    if (SupportsShapes() && !View::miniLayout_) {
+        // los medidores: ~12 veces por segundo y solo si alguno cambió a la
+        // vista (repintar toda la pantalla a cada paso ahogaba al audio)
+        if (HasModal()) return;
+        unsigned long now = System::GetInstance()->GetClock();
+        if (now - lastVu_ < 80) return;
+        lastVu_ = now;
+        updateVu();
+        bool changed = false;
+        for (int i = 0; i < 9; i++) {
+            int l = int(vuL_[i] * 44), r = int(vuR_[i] * 44);   // escalones de ~8 px
+            if (l != vuShown_[i * 2] || r != vuShown_[i * 2 + 1]) changed = true;
+        }
+        if (changed) DrawView();
         return;
     }
     DrawVuBars();
@@ -691,12 +718,8 @@ static float vuFrac(float p) {
     return f < 0 ? 0 : (f > 1 ? 1 : f);
 }
 
-void MixerView::drawStrips() {
-    GUIColor bg = ColorOf(CD_BACKGROUND), fg = ColorOf(CD_NORMAL);
-    GUIColor panel = Mix(bg, fg, 9), slot = Mix(bg, fg, 16), dim = Mix(bg, fg, 50);
+void MixerView::updateVu() {
     Player *player = Player::GetInstance();
-    Mixer *mixer = Mixer::GetInstance();
-    Project *project = viewData_->project_;
     // los picos (antes del volumen de la pista; el master, ya con todo)
     float pl[9], pr[9];
     for (int i = 0; i < 9; i++) pl[i] = pr[i] = 0;
@@ -718,9 +741,30 @@ void MixerView::drawStrips() {
         vuL_[i] = (l > vuL_[i]) ? l : vuL_[i] * 0.85f + l * 0.15f;
         vuR_[i] = (r > vuR_[i]) ? r : vuR_[i] * 0.85f + r * 0.15f;
     }
+}
+
+void MixerView::drawStrips() {
+    GUIColor bg = ColorOf(CD_BACKGROUND), fg = ColorOf(CD_NORMAL);
+    GUIColor panel = Mix(bg, fg, 9), slot = Mix(bg, fg, 16), dim = Mix(bg, fg, 50);
+    Player *player = Player::GetInstance();
+    Mixer *mixer = Mixer::GetInstance();
+    Project *project = viewData_->project_;
+    for (int i = 0; i < 9; i++) { vuShown_[i * 2] = int(vuL_[i] * 44); vuShown_[i * 2 + 1] = int(vuR_[i] * 44); }
     const int TOP = 84, HT = 350;
-    for (int i = 0; i < 8; i++) {
-        int x = 8 + i * 68, w = 62;
+    // las mismas columnas que la Session (su columna de escenas queda libre)
+    const int GAP = 4, X0 = 6 + 60 + GAP + 2;
+    int trackCount = project->TrackCount();
+    const int NCOL = trackCount > Project::MaxTracks() ? trackCount : Project::MaxTracks();
+    const int COLW = (640 - 6 - X0 + GAP) / NCOL;
+    const int w = COLW - GAP;
+    // el master: en la última columna si está libre; si no, encima de ella con R (L lo quita)
+    bool lastFree = !project->TrackExists(NCOL - 1);
+    bool master = lastFree || masterOn_;
+    const int fw = (w >= 80) ? 32 : 24, mw = (w >= 80) ? 12 : 8;
+    const int fx0 = (w - fw - 6 - mw) / 2;
+    for (int i = 0; i < NCOL && i < 8; i++) {
+        if (master && i == NCOL - 1) break;
+        int x = X0 + i * COLW;
         bool exists = project->TrackExists(i);
         bool muted = player->IsChannelMuted(i);
         GUIColor tc = TrackColor(i);
@@ -741,20 +785,20 @@ void MixerView::drawStrips() {
             }
             FillRect(x + 4, 50, w - 8, 24, tc, 5);
             DrawText(x + (w - 16 * n) / 2 + 1, 54, nm, bg, 1);
-        } else DrawText(x + 7, 54, nm, Mix(bg, fg, 18), 1);
+        } else DrawText(x + (w - 48) / 2, 54, nm, Mix(bg, fg, 18), 1);
         // el volumen (en dB: 48 dB de recorrido) y, al lado, el medidor
         int vol = mixer->GetChannelVolume(i);
         float db = (vol > 0) ? 20.0f * log10f(vol / 255.0f) : -99.0f;
         float fr = (db + 48.0f) / 48.0f;
         if (fr < 0) fr = 0;
-        FillRect(x + 12, TOP, 24, HT, slot, 5);
+        FillRect(x + fx0, TOP, fw, HT, slot, 5);
         if (!exists) continue;
         int h = int(HT * fr);
-        if (h > 0) FillRect(x + 12, TOP + HT - (h < 10 ? 10 : h), 24, h < 10 ? 10 : h, muted ? Mix(bg, fg, 35) : fg, 5);
-        FillRect(x + 42, TOP, 8, HT, slot, 3);
+        if (h > 0) FillRect(x + fx0, TOP + HT - (h < 10 ? 10 : h), fw, h < 10 ? 10 : h, muted ? Mix(bg, fg, 35) : fg, 5);
+        FillRect(x + fx0 + fw + 6, TOP, mw, HT, slot, 3);
         float v = vuL_[i] > vuR_[i] ? vuL_[i] : vuR_[i];
         int vh = int(HT * v);
-        if (vh > 3) FillRect(x + 42, TOP + HT - vh, 8, vh, tc, 3);
+        if (vh > 3) FillRect(x + fx0 + fw + 6, TOP + HT - vh, mw, vh, tc, 3);
         if (muted || soloChannel_ == i) {
             FillRect(x + 6, TOP + HT + 4, w - 12, 22, fg, 4);
             DrawText(x + (w - 16) / 2 + 1, TOP + HT + 7, (soloChannel_ == i) ? "S" : "M", bg, 1);
@@ -765,14 +809,17 @@ void MixerView::drawStrips() {
             DrawText(x + (w - 16 * int(strlen(t))) / 2 + 1, TOP + HT + 7, t, fg, 1);
         }
     }
-    // el master: sus dos medidores
-    int x = 8 + 8 * 68 + 4, w = 640 - 8 - x;
-    FillRect(x, 44, w, 428, panel, 8);
-    DrawText(x + (w - 48) / 2, 54, "MAS", dim, 1);
-    for (int k = 0; k < 2; k++) {
-        int mx = x + 12 + k * 30;
-        FillRect(mx, TOP, 22, HT, slot, 4);
-        int vh = int(HT * (k ? vuR_[8] : vuL_[8]));
-        if (vh > 3) FillRect(mx, TOP + HT - vh, 22, vh, player->Clipped() ? ColorOf(CD_HILITE2) : fg, 4);
+    if (master) {   // el master: sus dos medidores
+        int x = X0 + (NCOL - 1) * COLW;
+        FillRect(x, 44, w, 428, panel, 8);
+        if (!lastFree) FrameRect(x, 44, w, 428, dim, 8, 2);   // encima de una pista: se nota que es otra cosa
+        DrawText(x + (w - 48) / 2, 54, "MAS", dim, 1);
+        int bw = (w - 30) / 2;
+        for (int k = 0; k < 2; k++) {
+            int mx = x + 12 + k * (bw + 6);
+            FillRect(mx, TOP, bw, HT, slot, 4);
+            int vh = int(HT * (k ? vuR_[8] : vuL_[8]));
+            if (vh > 3) FillRect(mx, TOP + HT - vh, bw, vh, player->Clipped() ? ColorOf(CD_HILITE2) : fg, 4);
+        }
     }
 }

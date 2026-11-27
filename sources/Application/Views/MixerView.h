@@ -44,8 +44,13 @@ private:
 	bool invertBatt_ ;
     ViewType previousViewType_; // Track which view we came from for easy
                                 // navigation back
+    void updateVu();
     void drawStrips();          // trk2als: la mixer con figuras: una tira por pista (solo volumen)
     float vuL_[9], vuR_[9];
+    int vuShown_[18];           // lo que se pintó (para no repintar de más)
+    unsigned long lastVu_;
+    bool masterOn_;             // con todas las pistas ocupadas: el master encima de la última (R / L)
+    int tapKey_;
     void DrawVuBars();          // Draw VU bars - called from both DrawView and
                                 // AnimationUpdate
     int vuBarHeightsL_[9];  // Left channel smoothed bar heights with slew rate decay (8 channels + 1 master)
