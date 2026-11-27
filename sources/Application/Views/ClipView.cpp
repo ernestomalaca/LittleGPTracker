@@ -1592,7 +1592,7 @@ void ClipView::DrawView() {
             int used = 10 + 16 * int(strlen(info));
             if (marking_ && markLevel_ >= 4) {   // trk2als: todo el clip, aunque no se vea
                 const char *t = "TODO EL CLIP";
-                int sx = 634 - 16 * 17 - 10 - 8 * int(strlen(t));
+                int sx = 634 - 16 * 17 - 30 - 8 * int(strlen(t));   // (deja sitio al candado)
                 if (sx > used + 8) DrawText(sx, 38, t, TrackColor(viewData_->songX_), 0);
             }
             (void)used; (void)scale; (void)root; (void)hi;   // (la escala ya no se escribe aquí)
@@ -1857,6 +1857,12 @@ void ClipView::drawPages(int page, int npages) {
         selRect(s0, s1, q0, q1);
         ma = std::max(0, s0 / 16);
         mb = std::min(npages - 1, s1 / 16);
+    }
+    if (hasLoop && npages > 0) {   // trk2als: el candadito: el clip no suena entero
+        int lx = bx - 20;
+        FrameRect(lx + 2, 32, 8, 10, hi2, 2, 3);   // el arco
+        FillRect(lx, 38, 12, 9, hi2, 2);           // el cuerpo
+        FillRect(lx + 5, 41, 2, 3, bg);            // el ojo
     }
     for (int i = 0; i < 16; i++) {
         int x = bx + i * CW;
