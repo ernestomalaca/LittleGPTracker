@@ -129,6 +129,7 @@ SDLGUIWindowImp::SDLGUIWindowImp(GUICreateWindowParams &p) {
     // escritorio: KMSDRM). La ventana ocupa toda la pantalla y la app se
     // amplía centrada. HDMISCALE=NO en config.xml lo apaga (queda en la esquina)
     real_ = 0;
+    realTex_ = 0;
     realK_ = 1;
     bool big = windowed_ && (screenWidth > appWidth * mult_ || screenHeight > appHeight * mult_) &&
                screenWidth >= appWidth * mult_ && screenHeight >= appHeight * mult_;
@@ -158,36 +159,46 @@ SDLGUIWindowImp::SDLGUIWindowImp(GUICreateWindowParams &p) {
     appAnchorY_ = (screenRect_.Height() - appHeight * mult_) / 2;
 
     SDL_SetWindowIcon(window_, SDL_LoadBMP("lgpt_icon.bmp"));
-    surface_ = SDL_GetWindowSurface(window_);
-
-    NAssert(surface_);
+    surface_ = 0;
+    realTex_ = 0;
     if (big) {
-        SDL_Surface *off = SDL_CreateRGBSurfaceWithFormat(0, screenRect_.Width(), screenRect_.Height(),
-                                                          surface_->format->BitsPerPixel,
-                                                          surface_->format->format);
-        if (off) {
-            real_ = surface_;
+        // la app se dibuja en su superficie de siempre (640x480) y la gráfica de
+        // la consola la amplía: cuesta lo mismo que en la pantalla chica
+        int w = screenRect_.Width(), h = screenRect_.Height();
+        int k = MIN(screenWidth / w, screenHeight / h);
+        bool whole = k >= 1 && h * k * 10 >= screenHeight * 8;   // entera, si llena bastante (1080p: x2)
+        SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, whole ? "0" : "1");
+        real_ = SDL_CreateRenderer(window_, -1, 0);
+        SDL_Surface *off = real_ ? SDL_CreateRGBSurfaceWithFormat(0, w, h, 32, SDL_PIXELFORMAT_ARGB8888) : 0;
+        if (off) realTex_ = SDL_CreateTexture(real_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, w, h);
+        if (realTex_) {
             surface_ = off;
-            int w = screenRect_.Width(), h = screenRect_.Height();
-            int k = MIN(real_->w / w, real_->h / h);
-            if (k >= 1 && h * k * 10 >= real_->h * 8) {   // entera, si llena bastante (1080p: x2)
+            int rw = screenWidth, rh = screenHeight;
+            SDL_GetRendererOutputSize(real_, &rw, &rh);
+            if (whole) {
                 realK_ = k;
                 realDst_.w = w * k;
                 realDst_.h = h * k;
             } else {                                      // si no, lo más grande que quepa
                 realK_ = 0;
-                realDst_.h = real_->h;
-                realDst_.w = w * real_->h / h;
-                if (realDst_.w > real_->w) { realDst_.w = real_->w; realDst_.h = h * real_->w / w; }
+                realDst_.h = rh;
+                realDst_.w = w * rh / h;
+                if (realDst_.w > rw) { realDst_.w = rw; realDst_.h = h * rw / w; }
             }
-            realDst_.x = (real_->w - realDst_.w) / 2;
-            realDst_.y = (real_->h - realDst_.h) / 2;
-            SDL_FillRect(real_, 0, SDL_MapRGB(real_->format, 0, 0, 0));
-            SDL_UpdateWindowSurface(window_);
-            Trace::Log("DISPLAY", "Pantalla (%d,%d): la app en (%d,%d) de %dx%d", real_->w, real_->h,
+            realDst_.x = (rw - realDst_.w) / 2;
+            realDst_.y = (rh - realDst_.h) / 2;
+            Trace::Log("DISPLAY", "Pantalla (%d,%d): la app en (%d,%d) de %dx%d", rw, rh,
                        realDst_.x, realDst_.y, realDst_.w, realDst_.h);
+        } else {   // no se pudo: como antes (en la esquina)
+            Trace::Log("DISPLAY", "No se pudo ampliar: %s", SDL_GetError());
+            if (off) SDL_FreeSurface(off);
+            if (real_) SDL_DestroyRenderer(real_);
+            real_ = 0;
         }
     }
+    if (!surface_) surface_ = SDL_GetWindowSurface(window_);
+
+    NAssert(surface_);
 
     Uint32 rmask, gmask, bmask, amask;
 
@@ -804,7 +815,7 @@ void SDLGUIWindowImp::Flush() {
     }
     if (real_) {   // trk2als: HDMI: ampliar lo que cambió
         if (updateCount_ != 0) {
-            if (updateCount_ < MAX_OVERLAYS && realK_ > 0) presentScaled(updateRects_, updateCount_);
+            if (updateCount_ < MAX_OVERLAYS) presentScaled(updateRects_, updateCount_);
             else presentScaled(0, 0);
         }
         updateCount_ = 0;
@@ -829,38 +840,31 @@ void SDLGUIWindowImp::Flush() {
 // trk2als: la app (dibujada aparte) a la pantalla grande, ampliada y centrada
 void SDLGUIWindowImp::presentScaled(const SDL_Rect *rects, int n) {
     if (!rects || n <= 0) {
-        SDL_Rect src = {0, 0, surface_->w, surface_->h};
-        SDL_Rect dst = realDst_;
-        SDL_BlitScaled(surface_, &src, real_, &dst);
-        SDL_UpdateWindowSurfaceRects(window_, &realDst_, 1);
-        return;
+        SDL_UpdateTexture(realTex_, 0, surface_->pixels, surface_->pitch);
+    } else {
+        int bpp = surface_->format->BytesPerPixel;
+        for (int i = 0; i < n; i++) {
+            SDL_Rect src = rects[i];
+            if (src.x < 0) { src.w += src.x; src.x = 0; }
+            if (src.y < 0) { src.h += src.y; src.y = 0; }
+            if (src.x + src.w > surface_->w) src.w = surface_->w - src.x;
+            if (src.y + src.h > surface_->h) src.h = surface_->h - src.y;
+            if (src.w <= 0 || src.h <= 0) continue;
+            SDL_UpdateTexture(realTex_, &src,
+                              (unsigned char *)surface_->pixels + src.y * surface_->pitch + src.x * bpp,
+                              surface_->pitch);
+        }
     }
-    SDL_Rect out[MAX_OVERLAYS];
-    int m = 0;
-    for (int i = 0; i < n && m < MAX_OVERLAYS; i++) {
-        SDL_Rect src = rects[i];
-        if (src.x < 0) { src.w += src.x; src.x = 0; }
-        if (src.y < 0) { src.h += src.y; src.y = 0; }
-        if (src.x + src.w > surface_->w) src.w = surface_->w - src.x;
-        if (src.y + src.h > surface_->h) src.h = surface_->h - src.y;
-        if (src.w <= 0 || src.h <= 0) continue;
-        SDL_Rect dst = {realDst_.x + src.x * realK_, realDst_.y + src.y * realK_, src.w * realK_, src.h * realK_};
-        out[m] = dst;
-        SDL_BlitScaled(surface_, &src, real_, &dst);
-        m++;
-    }
-    if (m) SDL_UpdateWindowSurfaceRects(window_, out, m);
+    SDL_SetRenderDrawColor(real_, 0, 0, 0, 255);
+    SDL_RenderClear(real_);
+    SDL_RenderCopy(real_, realTex_, 0, &realDst_);
+    SDL_RenderPresent(real_);
 }
 
 void SDLGUIWindowImp::ProcessExpose() {
     // Expose and resize events will cause a new surface to be needed.
-    if (real_) {   // trk2als: HDMI: la de la ventana; la app sigue en la suya
-        real_ = SDL_GetWindowSurface(window_);
-        if (real_) {
-            SDL_FillRect(real_, 0, SDL_MapRGB(real_->format, 0, 0, 0));
-            presentScaled(0, 0);
-            SDL_UpdateWindowSurface(window_);
-        }
+    if (real_) {   // trk2als: HDMI: la app sigue en su superficie
+        presentScaled(0, 0);
         _window->Update();
         return;
     }
