@@ -70,6 +70,8 @@ private:
 	void turnPage(int dir) ;
 	int gridSlot(UIField &f) ;
 	void gridBox(int k,int &x,int &y,int &w,int &h) ;
+	bool oneRow() ;
+	int shownRow() ;
 	bool simplerView_ ;      // Sampler estilo Simpler (pistas MIDI)
 	int ampLabelRow_ ;       // dónde va el dibujo de la envolvente
 	void drawSimplerWave(SampleInstrument *si,int X,int Y,int W,int H,int size,SoundSource *zsrc=0) ;

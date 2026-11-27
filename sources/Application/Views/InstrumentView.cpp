@@ -179,6 +179,27 @@ private:
 } ;
 Variable *UIModeField::fresh_=0 ;
 
+// trk2als: VOCES: A + ← → cuántas notas a la vez; con 1 (mono) A + ↑ ↓ mueve
+// ahí mismo el glide (como las rebanadas dentro de MODO)
+class UIVoicesField : public UIIntVarField {
+public:
+	UIVoicesField(GUIPoint &p, Variable &poly, Variable &glide) :
+		UIIntVarField(p,poly,"VOCES: %d",1,4,1,1), glide_(glide) {}
+	virtual void ProcessArrow(unsigned short mask) {
+		if (mask!=EPBM_UP && mask!=EPBM_DOWN) { UIIntVarField::ProcessArrow(mask) ; return ; }
+		if (src_.GetInt()!=1) return ;
+		int g=glide_.GetInt() ;
+		int st=(g>=200)?50:10 ;
+		if (mask==EPBM_DOWN && g==200) st=10 ;
+		g+=(mask==EPBM_UP)?st:-st ;
+		if (g<0) g=0 ;
+		if (g>2000) g=2000 ;
+		glide_.SetInt(g) ;
+	}
+private:
+	Variable &glide_ ;
+} ;
+
 class UIFreqVarField : public UIIntVarField {
 public:
 	UIFreqVarField(GUIPoint &p, Variable &v) : UIIntVarField(p,v,"freq: %d",30,22000,1,12) {}
@@ -737,19 +758,32 @@ void InstrumentView::fillSampleParameters() {
 						v=instrument->FindVariable(SIP_S_TRIG) ;
 						ADD(new UIIntVarField(GAT(1),*v,"TRIGGER: %s",0,1,1,1)) ;
 					}
+					// una fila a la vez: arriba lo fuerte (MODO · LOOP · VOLUMEN ·
+					// TRANSP); abajito INICIO · FIN · DETUNE · PAN
+					v=instrument->FindVariable(SIP_S_VOL) ;
+					ADD(new UIIntVarField(GAT(2),*v,"VOLUMEN: %+ddB",-36,6,1,6)) ;
+					v=instrument->FindVariable(SIP_S_TRANSP) ;
+					ADD(new UIIntVarField(GAT(3),*v,"TRANSP: %+dst",-48,48,1,12)) ;
 					v=instrument->FindVariable(SIP_S_START) ;
-					ADD(new UIIntVarField(GAT(2),*v,"INICIO: %d%%",0,99,1,10)) ;
+					ADD(new UIIntVarField(GAT(4),*v,"INICIO: %d%%",0,99,1,10)) ;
 					v=instrument->FindVariable(SIP_S_END) ;
-					ADD(new UIIntVarField(GAT(3),*v,"FIN: %d%%",1,100,1,10)) ;
-				} else r2=0 ;   // multicapa: el tono arriba
-				v=instrument->FindVariable(SIP_S_TRANSP) ;
-				ADD(new UIIntVarField(GAT(r2),*v,"TRANSP: %+dst",-48,48,1,12)) ;
-				v=instrument->FindVariable(SIP_S_DETUNE) ;
-				ADD(new UIIntVarField(GAT(r2+1),*v,"DETUNE: %+dct",-50,50,1,10)) ;
-				v=instrument->FindVariable(SIP_S_VOL) ;
-				ADD(new UIIntVarField(GAT(r2+2),*v,"VOLUMEN: %+ddB",-36,6,1,6)) ;
-				v=instrument->FindVariable(SIP_S_PAN) ;
-				ADD(new UIIntVarField(GAT(r2+3),*v,"PAN: %+d",-50,50,1,10)) ;
+					ADD(new UIIntVarField(GAT(5),*v,"FIN: %d%%",1,100,1,10)) ;
+					v=instrument->FindVariable(SIP_S_DETUNE) ;
+					ADD(new UIIntVarField(GAT(6),*v,"DETUNE: %+dct",-50,50,1,10)) ;
+					v=instrument->FindVariable(SIP_S_PAN) ;
+					ADD(new UIIntVarField(GAT(7),*v,"PAN: %+d",-50,50,1,10)) ;
+				} else {   // multicapa: el tono arriba
+					r2=0 ;
+					v=instrument->FindVariable(SIP_S_TRANSP) ;
+					ADD(new UIIntVarField(GAT(r2),*v,"TRANSP: %+dst",-48,48,1,12)) ;
+					v=instrument->FindVariable(SIP_S_DETUNE) ;
+					ADD(new UIIntVarField(GAT(r2+1),*v,"DETUNE: %+dct",-50,50,1,10)) ;
+					v=instrument->FindVariable(SIP_S_VOL) ;
+					ADD(new UIIntVarField(GAT(r2+2),*v,"VOLUMEN: %+ddB",-36,6,1,6)) ;
+					v=instrument->FindVariable(SIP_S_PAN) ;
+					ADD(new UIIntVarField(GAT(r2+3),*v,"PAN: %+d",-50,50,1,10)) ;
+				}
+				(void)r2 ;
 				if (sfMode_) {
 					v=instrument->FindVariable(SIP_S_GLIDE) ;
 					ADD(new UIIntVarField(GAT(4),*v,"GLIDE: %dms",0,2000,10,100)) ;
@@ -758,35 +792,33 @@ void InstrumentView::fillSampleParameters() {
 					ADD(new UIIntVarField(GAT(7),presetSaveVar_,"PRESET: guardar",0,0,1,1)) ;
 				}
 			} else if (!strcmp(pn,"MÁS")) {
-				// cada cosa siempre en su caja: arriba WARP · BPM · GLIDE · VOCES;
-				// abajo lo del modo (el largo del loop, o los fades de las
-				// rebanadas) y, al final, guardar
+				// arriba: WARP · SNAP · VOCES (con 1, ahí mismo el glide) · guardar.
+				// Abajito lo que sobra: el bpm del warp y lo del modo (el largo
+				// del loop, o los fades de las rebanadas)
 				v=instrument->FindVariable(SIP_S_WARP) ;
 				ADD(new UIIntVarField(GAT(0),*v,"WARP: %s",0,2,1,1)) ;
+				v=instrument->FindVariable(SIP_S_SNAP) ;
+				ADD(new UIIntVarField(GAT(1),*v,"SNAP: %s",0,1,1,1)) ;
+				if (mode!=SM_SLICE) {   // VOCES: notas a la vez; con 1 es mono y actúa el glide
+					v=instrument->FindVariable(SIP_S_POLY) ;
+					ADD(new UIVoicesField(GAT(2),*v,*instrument->FindVariable(SIP_S_GLIDE))) ;
+				}
+				ADD(new UIIntVarField(GAT(3),presetSaveVar_,"PRESET: guardar",0,0,1,1)) ;
 				if (warped) {
 					if (instrument->GetSimpler(SIP_S_BPM)<=0)
 						instrument->FindVariable(SIP_S_BPM)->SetInt(instrument->GuessSimplerBpm()) ;
 					v=instrument->FindVariable(SIP_S_BPM) ;
-					ADD(new UIIntVarField(GAT(1),*v,"BPM: %d",40,300,1,10)) ;
-				}   // sin warp no hay bpm: la caja queda vacía (el cursor no se atora)
-				if (mode!=SM_SLICE) {   // VOCES: notas a la vez; con 1 es mono y actúa el glide
-					v=instrument->FindVariable(SIP_S_GLIDE) ;
-					ADD(new UIIntVarField(GAT(2),*v,"GLIDE: %dms",0,2000,10,100)) ;
-					v=instrument->FindVariable(SIP_S_POLY) ;
-					ADD(new UIIntVarField(GAT(3),*v,"VOCES: %d",1,4,1,1)) ;
+					ADD(new UIIntVarField(GAT(4),*v,"BPM: %d",40,300,1,10)) ;
 				}
 				if (mode==SM_CLASSIC && instrument->GetSimpler(SIP_S_LOOP)) {
 					v=instrument->FindVariable(SIP_S_LLEN) ;
-					ADD(new UIIntVarField(GAT(4),*v,"LARGO: %d%%",1,100,1,10)) ;
+					ADD(new UIIntVarField(GAT(5),*v,"LARGO: %d%%",1,100,1,10)) ;
 				} else if (mode==SM_SLICE) {   // los fades de las rebanadas (los mismos para todas)
 					v=instrument->FindVariable(SIP_S_FIN) ;
-					ADD(new UIIntVarField(GAT(4),*v,"FADE IN: %dms",0,2000,5,50)) ;
+					ADD(new UIIntVarField(GAT(5),*v,"FADE IN: %dms",0,2000,5,50)) ;
 					v=instrument->FindVariable(SIP_S_FOUT) ;
-					ADD(new UIIntVarField(GAT(5),*v,"FADE OUT: %dms",0,2000,5,50)) ;
+					ADD(new UIIntVarField(GAT(6),*v,"FADE OUT: %dms",0,2000,5,50)) ;
 				}
-				v=instrument->FindVariable(SIP_S_SNAP) ;
-				ADD(new UIIntVarField(GAT(6),*v,"SNAP: %s",0,1,1,1)) ;
-				ADD(new UIIntVarField(GAT(7),presetSaveVar_,"PRESET: guardar",0,0,1,1)) ;
 			} else if (fpage) {
 				v=instrument->FindVariable(SIP_S_FTYPE) ;
 				ADD(new UIIntVarField(GAT(0),*v,"FILTRO: %s",0,2,1,1)) ;
@@ -1244,8 +1276,22 @@ void InstrumentView::ProcessButtonMask(unsigned short mask,bool pressed) {
 		// (Sampler: del dibujo a las cajas, y ahí se queda hasta otro Select)
 		selTap_=false ;
 		bool was=drawEditing() ;
+		FourCC land=0 ;
+		if (oneRow() && was) land=envEdit_?envID(envSel_):filtEdit_?filtBox_:(FourCC)SIP_S_MODE ;
 		toggleDraw() ;
 		if (!kitMode_) boxMode_=was ;
+		if (land) {   // a la fila que se estaba viendo
+			UIField *first=0, *hit=0 ;
+			IteratorPtr<UIField> it(T_SimpleList<UIField>::GetIterator()) ;
+			for (it->Begin();!it->IsDone();it->Next()) {
+				UIField &f=it->CurrentItem() ;
+				if (f.IsStatic() || f.GetPosition()._y<20) continue ;
+				if (!first || gridSlot(f)<gridSlot(*first)) first=&f ;
+				if (((UIIntVarField &)f).GetVariableID()==land) hit=&f ;
+			}
+			if (!hit) hit=first ;
+			if (hit) { ClearFocus() ; SetFocus(hit) ; lastFocusID_=((UIIntVarField *)hit)->GetVariableID() ; }
+		}
 		isDirty_=true ;
 		return ;
 	}
@@ -1783,7 +1829,33 @@ void InstrumentView::drawArc(int cx,int cy,int r,float from,float to,GUIColor c,
 	}
 }
 
-static const int GRID_TABS_Y=250, GRID_Y=284, GRID_W=150, GRID_H=92, GRID_GAP=4, GRID_X=8 ;
+static const int GRID_TABS_Y0=250, GRID_Y0=284, GRID_W=150, GRID_H=92, GRID_GAP=4, GRID_X=8 ;
+// trk2als: el Sampler enseña UNA fila de cajas (la del dibujo donde se está)
+// y la onda crece: las pestañas y las cajas bajan
+#define GRID_TABS_Y (oneRow()?346:GRID_TABS_Y0)
+#define GRID_Y (oneRow()?380:GRID_Y0)
+
+bool InstrumentView::oneRow() {
+	return gridMode_ && simplerView_ && !kitMode_ && !audioMode_ ;
+}
+
+// la fila que se ve: en el dibujo, la de sus parámetros (la envolvente del
+// filtro: su ADSR); en las cajas, la del cursor
+int InstrumentView::shownRow() {
+	if (!oneRow()) return -1 ;
+	if (envEdit_) {
+		IteratorPtr<UIField> it(T_SimpleList<UIField>::GetIterator()) ;
+		for (it->Begin();!it->IsDone();it->Next()) {
+			UIField &f=it->CurrentItem() ;
+			if (!f.IsStatic() && ((UIIntVarField &)f).GetVariableID()==envID(0)) return gridSlot(f)/4 ;
+		}
+		return 0 ;
+	}
+	if (drawEditing()) return 0 ;
+	UIField *f=GetFocus() ;
+	return (f && f->GetPosition()._y>=20)?gridSlot(*f)/4:0 ;
+}
+
 
 int InstrumentView::gridSlot(UIField &f) {
 	GUIPoint p=f.GetPosition() ;
@@ -1797,7 +1869,7 @@ void InstrumentView::gridBox(int k,int &x,int &y,int &w,int &h) {
 	w=GRID_W ;
 	h=GRID_H ;
 	x=GRID_X+(k%4)*(GRID_W+GRID_GAP) ;
-	y=GRID_Y+(k/4)*(GRID_H+GRID_GAP) ;
+	y=GRID_Y+(oneRow()?0:(k/4)*(GRID_H+GRID_GAP)) ;
 }
 
 void InstrumentView::turnPage(int dir) {
@@ -1869,12 +1941,22 @@ void InstrumentView::drawGrid() {
 		tx+=w+8 ;
 	}
 	if (pageCount_>1 && !drawEditing()) DrawText(640-10-16*3,GRID_TABS_Y+6,"L·R",dim,1) ;
+	// la bandera donde se está: su valor aquí (su caja queda en la fila de abajito)
+	if (oneRow() && waveEdit_ && flagID) {
+		char fn[24] ;
+		snprintf(fn,sizeof(fn),"%s %d%%",flagID==SIP_S_START?"INICIO":"FIN",current_->FindVariable(flagID)->GetInt()) ;
+		DrawText(640-10-14-12-16*int(strlen(fn)),GRID_TABS_Y+6,fn,fg,1) ;
+	}
 	bool used[8]={false,false,false,false,false,false,false,false} ;
+	int row=shownRow() ;
+	bool rows[2]={false,false} ;
 	IteratorPtr<UIField> it(T_SimpleList<UIField>::GetIterator()) ;
 	for (it->Begin();!it->IsDone();it->Next()) {
 		UIField &f=it->CurrentItem() ;
 		if (f.GetPosition()._y<20) continue ;   // (los pads del kit: los dibuja drawKit)
 		int k=gridSlot(f) ;
+		rows[k/4]=true ;
+		if (row>=0 && k/4!=row) continue ;   // una fila a la vez
 		used[k]=true ;
 		int cx,cy,cw,ch ;
 		gridBox(k,cx,cy,cw,ch) ;
@@ -1960,6 +2042,16 @@ void InstrumentView::drawGrid() {
 		} else {
 			DrawText(cx+12,cy+42,value.c_str(),vc,1) ;
 		}
+		if (!f.IsStatic() && ((UIIntVarField &)f).GetVariableID()==SIP_S_POLY && oneRow() && !sfMode_
+		    && ((UIIntVarField &)f).GetVariable().GetInt()==1) {   // mono: ahí mismo su glide (A + ↑ ↓)
+			int g=current_->FindVariable(SIP_S_GLIDE)->GetInt() ;
+			char gb[16] ;
+			if (g<=0) snprintf(gb,sizeof(gb),"off") ;
+			else if (g>=1000) snprintf(gb,sizeof(gb),"%d.%ds",g/1000,(g%1000)/100) ;
+			else snprintf(gb,sizeof(gb),"%dms",g) ;
+			DrawText(cx+48,cy+30,"glide",soft,1) ;
+			DrawText(cx+48,cy+48,gb,vc,1) ;
+		}
 		// la rayita: cuánto va (solo los números con rango)
 		if (!f.IsStatic() && number) {
 			UIIntVarField &vf=(UIIntVarField &)f ;
@@ -1976,6 +2068,12 @@ void InstrumentView::drawGrid() {
 		}
 	}
 	(void)used ;
+	// hay otra fila abajito (o arriba): dos rayitas, encendida la que se ve
+	if (row>=0 && rows[0] && rows[1]) {
+		int ix=drawEditing()?640-10-14:640-10-16*3-26 ;
+		for (int r=0;r<2;r++)
+			FillRect(ix,GRID_TABS_Y+7+r*9,14,5,(r==row)?fg:Mix(bg,fg,30),2) ;
+	}
 }
 
 /************************************************************
@@ -2078,7 +2176,7 @@ void InstrumentView::drawWaveformBody() {
 	}
 
 	const int X=16, Y=gridMode_?48:(kitMode_?56:34), W=WF_BARS*8,
-	          H=gridMode_?186:(kitMode_?144:(simplerView_?80:112)) ;
+	          H=gridMode_?(oneRow()?282:186):(kitMode_?144:(simplerView_?80:112)) ;
 	if (!(kitMode_ && gridMode_)) FillRect(X-8,Y-4,W+16,H+8,Mix(bg,fg,9),8) ;
 	if (gridMode_ && drawEditing()) FrameRect(X-8,Y-4,W+16,H+8,fg,8,3) ;   // dibujando: el marco pasa aquí
 
@@ -5085,6 +5183,7 @@ void InstrumentView::drawAutoMarks() {
 		if (!c.FindLane(vf.GetVariableID(),-1)) continue ;
 		if (gridMode_) {
 			int bx,by,bw,bh ;
+			if (shownRow()>=0 && gridSlot(f)/4!=shownRow()) continue ;
 			gridBox(gridSlot(f),bx,by,bw,bh) ;
 			FillRect(bx+bw-18,by+10,8,8,hi,4) ;
 			continue ;
