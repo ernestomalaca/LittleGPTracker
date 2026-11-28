@@ -1468,7 +1468,8 @@ void Player::LaunchScene(int row) {
     for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
         if (!project_->TrackExists(i)) continue;
         if (hasClip(viewData_, i, row)) { QueueChannel(i, QM_PHRASESTART, row, 0); any = true; }
-        else StopTrack(i, row);   // como en Live: la escena detiene las pistas sin clip
+        else if (viewData_->song_->HasStop(i, row)) StopTrack(i, row);   // como en Live: la escena detiene las pistas sin clip
+        // (sin botón de stop en ese slot, la pista sigue con lo que sonaba)
     }
     // trk2als: una escena vacía con vueltas es un silencio que cuenta (un
     // compás por vuelta) y luego sigue o se detiene; sin vueltas, se acaba
@@ -1496,7 +1497,7 @@ void Player::LaunchGroup(int row, int from, int to) {
             clipFolRow_[i] = -1;
             clipFolPend_[i] = row;
         }
-        else StopTrack(i, row);
+        else if (viewData_->song_->HasStop(i, row)) StopTrack(i, row);
     }
 }
 

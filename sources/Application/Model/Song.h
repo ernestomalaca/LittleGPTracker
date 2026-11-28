@@ -38,6 +38,11 @@ public:
 	// abajo). El mismo formato en las escenas y en cada clip (Clip::follow)
 	enum { FOLLOW_COUNT=0x1F, FOLLOW_STOP=0x80 } ;
 	unsigned char sceneRep_[SONG_ROW_COUNT] ;
+	// trk2als: los slots vacíos traen un botón de stop (lanzar la escena detiene
+	// esa pista); 1 = se le quitó: la pista sigue con lo que sonaba (como
+	// "Remove Stop Button" de Live). Solo cuenta en las celdas vacías
+	unsigned char noStop_[SONG_CHANNEL_COUNT*SONG_ROW_COUNT] ;
+	bool HasStop(int ch,int row) { return !noStop_[ch+SONG_CHANNEL_COUNT*row] ; }
 	int SceneReps(int row) { return sceneRep_[row]&FOLLOW_COUNT ; }
 	bool SceneStops(int row) { return (sceneRep_[row]&FOLLOW_STOP)!=0 ; }
 	// B + Y en la columna de escenas: las repeticiones (xN) apagadas, para

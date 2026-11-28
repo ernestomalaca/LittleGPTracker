@@ -415,6 +415,20 @@ void SongView::updateCursor(int dx, int dy) {
 
 void SongView::cutPosition() {
 
+    // trk2als: en un slot vacío, B + A le quita el botón de stop: al lanzar la
+    // escena esa pista sigue con lo que sonaba (A se lo vuelve a poner)
+    {
+        int ci = viewData_->songX_ + SONG_CHANNEL_COUNT * (viewData_->songY_ + viewData_->songOffset_);
+        if (viewData_->song_->data_[ci] == 0xFF) {
+            if (!viewData_->song_->noStop_[ci]) {
+                viewData_->song_->noStop_[ci] = 1;
+                View::SetNotification("sin botón de stop: la pista sigue sonando");
+            }
+            isDirty_ = true;
+            return;
+        }
+    }
+
     // trk2als: lo que borras queda listo para pegar (Select + A), como si lo
     // hubieras marcado y cortado
     {
@@ -1014,6 +1028,7 @@ void SongView::takeSesSnap(SesSnap &s) {
     Song *song = viewData_->song_;
     s.grid.assign(song->data_, song->data_ + SONG_CHANNEL_COUNT * SONG_ROW_COUNT);
     s.reps.assign(song->sceneRep_, song->sceneRep_ + SONG_ROW_COUNT);
+    s.nostop.assign(song->noStop_, song->noStop_ + SONG_CHANNEL_COUNT * SONG_ROW_COUNT);
     s.clips.clear();
     for (int c = 0; c < SONG_CHANNEL_COUNT; c++) {
         if (isAudioColumn(c)) continue;
@@ -1028,6 +1043,7 @@ void SongView::restoreSesSnap(const SesSnap &s) {
     Song *song = viewData_->song_;
     memcpy(song->data_, &s.grid[0], s.grid.size());
     if (s.reps.size() == SONG_ROW_COUNT) memcpy(song->sceneRep_, &s.reps[0], SONG_ROW_COUNT);
+    if (s.nostop.size() == SONG_CHANNEL_COUNT * SONG_ROW_COUNT) memcpy(song->noStop_, &s.nostop[0], s.nostop.size());
     for (std::map<int, Clip>::const_iterator it = s.clips.begin(); it != s.clips.end(); ++it)
         song->clips_->Get(it->first) = it->second;
     // trk2als: el sonido de la pista, como estaba
@@ -1318,6 +1334,9 @@ bool SongView::scnInsert(int at, int n) {
     memmove(song->data_ + SONG_CHANNEL_COUNT * (at + n), song->data_ + SONG_CHANNEL_COUNT * at,
             SONG_CHANNEL_COUNT * (SONG_ROW_COUNT - at - n));
     memset(song->data_ + SONG_CHANNEL_COUNT * at, 0xFF, SONG_CHANNEL_COUNT * n);
+    memmove(song->noStop_ + SONG_CHANNEL_COUNT * (at + n), song->noStop_ + SONG_CHANNEL_COUNT * at,
+            SONG_CHANNEL_COUNT * (SONG_ROW_COUNT - at - n));
+    memset(song->noStop_ + SONG_CHANNEL_COUNT * at, 0, SONG_CHANNEL_COUNT * n);
     memmove(song->sceneRep_ + at + n, song->sceneRep_ + at, SONG_ROW_COUNT - at - n);
     memset(song->sceneRep_ + at, 0, n);
     for (int c = 0; c < SONG_CHANNEL_COUNT; c++)   // lo que suena se va con su fila
@@ -1332,6 +1351,9 @@ void SongView::scnDelete(int top, int bot) {
     memmove(song->data_ + SONG_CHANNEL_COUNT * top, song->data_ + SONG_CHANNEL_COUNT * (bot + 1),
             SONG_CHANNEL_COUNT * (SONG_ROW_COUNT - bot - 1));
     memset(song->data_ + SONG_CHANNEL_COUNT * (SONG_ROW_COUNT - n), 0xFF, SONG_CHANNEL_COUNT * n);
+    memmove(song->noStop_ + SONG_CHANNEL_COUNT * top, song->noStop_ + SONG_CHANNEL_COUNT * (bot + 1),
+            SONG_CHANNEL_COUNT * (SONG_ROW_COUNT - bot - 1));
+    memset(song->noStop_ + SONG_CHANNEL_COUNT * (SONG_ROW_COUNT - n), 0, SONG_CHANNEL_COUNT * n);
     memmove(song->sceneRep_ + top, song->sceneRep_ + bot + 1, SONG_ROW_COUNT - bot - 1);
     memset(song->sceneRep_ + SONG_ROW_COUNT - n, 0, n);
     for (int c = 0; c < SONG_CHANNEL_COUNT; c++)
@@ -1834,8 +1856,15 @@ void SongView::processNormalButtonMask(unsigned int mask) {
                 if (*cell != 0xFF) {
                     aOpenPending_ = true;      // trk2als: se lanza al soltar A
                 } else {
-                    // trk2als: como el botoncito de stop de Live en los slots vacíos
-                    Player::GetInstance()->StopTrack(viewData_->songX_, viewData_->songY_ + viewData_->songOffset_);
+                    // trk2als: como el botoncito de stop de Live en los slots vacíos;
+                    // si se lo habías quitado (B + A), A se lo vuelve a poner
+                    int ci = viewData_->songX_ + SONG_CHANNEL_COUNT * (viewData_->songY_ + viewData_->songOffset_);
+                    if (viewData_->song_->noStop_[ci]) {
+                        viewData_->song_->noStop_[ci] = 0;
+                        View::SetNotification("botón de stop puesto");
+                    } else {
+                        Player::GetInstance()->StopTrack(viewData_->songX_, viewData_->songY_ + viewData_->songOffset_);
+                    }
                     isDirty_ = true;
                 }
             }
@@ -2638,7 +2667,7 @@ void SongView::DrawView() {
             drawHelpBar("suelta A:pegar;flechas:acomodar;B:cancelar");
         else
             drawHelpBar(headerMode_ ? "A:sonido / agregar;B+A:borrar pista;<>:pista;v:a los clips"
-                                    : "A:poner/abrir;A+<>:elegir;L+START:lanzar la escena;Y+^v:vueltas del clip;Y+<:y se detiene;Y+>:sin stop;B+A:borrar;SEL,B:marcar;SEL+A:pegar;SEL+<>:pantalla;SEL+L:deshacer;SEL+R:rehacer");
+                                    : "A:poner/abrir;A+<>:elegir;L+START:lanzar la escena;Y+^v:vueltas del clip;Y+<:y se detiene;Y+>:sin stop;B+A:borrar (vacío: quita su stop);SEL,B:marcar;SEL+A:pegar;SEL+<>:pantalla;SEL+L:deshacer;SEL+R:rehacer");
         return;
     }
 
@@ -2785,7 +2814,7 @@ void SongView::DrawView() {
         drawHelpBar("A:lanzar la escena;Y+^v:vueltas;Y+<:y se detiene;Y+>:sin stop;SEL+START:detener todo;B+Y:vueltas sí / no;>:a las pistas");
     else
     drawHelpBar(headerMode_ ? "A:sonido / agregar;B+A:borrar pista;<>:pista;v:a los clips"
-                            : "A:poner/abrir;A+<>:elegir;L+START:lanzar la escena;Y+^v:vueltas del clip;Y+<:y se detiene;Y+>:sin stop;B+A:borrar;SEL+<>:pantalla;SEL+L:deshacer;SEL+R:rehacer");
+                            : "A:poner/abrir;A+<>:elegir;L+START:lanzar la escena;Y+^v:vueltas del clip;Y+<:y se detiene;Y+>:sin stop;B+A:borrar (vacío: quita su stop);SEL+<>:pantalla;SEL+L:deshacer;SEL+R:rehacer");
 };
 
 /******************************************************
@@ -3230,7 +3259,9 @@ void SongView::drawBlockGrid() {
                 FillRect(x + w / 2 - 4, y + h / 2 - 4, 8, 8, bg, 1);   // el cuadrito de stop
             } else if (empty) {
                 FillRect(x, y, w, h, lit ? Mix(bg, fg, gridPct(lightBg, 11)) : cellBg, 3);
-                FillRect(x + w / 2 - 2, y + h / 2 - 2, 4, 4, Mix(bg, fg, gridPct(lightBg, 18)));
+                // trk2als: el botoncito de stop del slot vacío; sin él (B + A), nada
+                if (viewData_->song_->HasStop(i, row))
+                    FillRect(x + w / 2 - 3, y + h / 2 - 3, 6, 6, Mix(bg, fg, gridPct(lightBg, 18)), 1);
             } else {
                 FillRect(x, y, w, h, tc, 3);
                 // número grande y nombre chico
