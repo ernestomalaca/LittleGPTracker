@@ -14,6 +14,10 @@ SendFx::SendFx() {
 	revMem_=new unsigned short[32768] ;
 	memset(revMem_,0,32768*sizeof(unsigned short)) ;
 	rev_=new rings::Reverb ;
+	// trk2als: el reverb de Rings no pone en cero sus filtros internos (en el
+	// módulo original nace en memoria limpia); aquí nacía con basura y la
+	// primera vez que sonaba soltaba una ráfaga de agudos
+	memset(rev_,0,sizeof(rings::Reverb)) ;
 	rev_->Init(revMem_) ;
 	rev_->set_amount(1.0f) ;            // sale solo lo mojado: lo seco ya va por su pista
 	rev_->set_input_gain(0.2f) ;
