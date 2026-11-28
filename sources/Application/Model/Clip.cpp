@@ -143,6 +143,7 @@ void ClipBank::Save(TiXmlNode *node) {
 		e.SetAttribute("ID",id) ;
 		e.SetAttribute("PAGES",c.pages) ;
 		if (!c.name.empty()) e.SetAttribute("NAME",c.name.c_str()) ;
+		if (c.follow) e.SetAttribute("FOLLOW",int(c.follow)) ;
 		if (c.loopStart>=0) {
 			e.SetAttribute("LOOPSTART",c.loopStart) ;
 			e.SetAttribute("LOOPEND",c.loopEnd) ;
@@ -198,6 +199,7 @@ void ClipBank::Restore(TiXmlElement *element) {
 		if (pages>CLIP_MAX_PAGES) pages=CLIP_MAX_PAGES ;
 		clip.pages=pages ;
 		if (const char *nm=e->Attribute("NAME")) clip.name=nm ;
+		if (const char *fo=e->Attribute("FOLLOW")) clip.follow=(unsigned char)atoi(fo) ;
 		// ojo: este TinyXML pone 0 si el atributo no está
 		const char *lsa=e->Attribute("LOOPSTART"),*lea=e->Attribute("LOOPEND") ;
 		int ls=lsa?atoi(lsa):-1,le=lea?atoi(lea):-1 ;

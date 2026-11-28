@@ -66,6 +66,7 @@ enum SampleInstrumentLoopMode {
 #define SIP_TRANSPOSE MAKE_FOURCC('T', 'R', 'N', 'S')
 // trk2als: cuántos compases dura la celda en la Song (0 = los mismos que el loop)
 #define SIP_CLIPBARS MAKE_FOURCC('C', 'L', 'E', 'N')
+#define SIP_A_FOLLOW MAKE_FOURCC('C', 'F', 'O', 'L')   // trk2als: clip de audio: vueltas y stop (Song::FOLLOW_*)
 // trk2als: Sampler estilo Simpler (instrumentos de pistas MIDI)
 #define SIP_S_INIT  MAKE_FOURCC('S', 'I', 'N', 'I')
 #define SIP_S_MODE  MAKE_FOURCC('S', 'M', 'O', 'D')

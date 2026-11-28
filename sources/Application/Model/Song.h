@@ -33,7 +33,13 @@ public:
 	ClipBank *clips_ ;
 	// trk2als: cuántas veces suena cada escena antes de pasar a la de abajo
 	// (como las follow actions de escena de Live); 0 = se queda ahí
+	// trk2als: qué pasa después de sonar: cuántas vueltas (0 = nada: se queda
+	// sonando) y, con FOLLOW_STOP, al acabarlas se detiene (si no, sigue lo de
+	// abajo). El mismo formato en las escenas y en cada clip (Clip::follow)
+	enum { FOLLOW_COUNT=0x1F, FOLLOW_STOP=0x80 } ;
 	unsigned char sceneRep_[SONG_ROW_COUNT] ;
+	int SceneReps(int row) { return sceneRep_[row]&FOLLOW_COUNT ; }
+	bool SceneStops(int row) { return (sceneRep_[row]&FOLLOW_STOP)!=0 ; }
 	// B + Y en la columna de escenas: las repeticiones (xN) apagadas, para
 	// tocar las escenas a mano; los números se quedan guardados
 	bool followOff_ ;

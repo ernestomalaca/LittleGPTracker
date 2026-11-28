@@ -56,7 +56,7 @@ private:
   // trk2als: el Proyecto como las Settings de Live: secciones a la izquierda,
   // sus ajustes a la derecha, todo con letra grande
   struct MItem { const char *label; Variable *v; int kind, min, max, small, big, action; };
-  enum { MK_VAR, MK_ACTION, MK_WARP, MK_WEB };
+  enum { MK_VAR, MK_ACTION, MK_WARP, MK_WEB, MK_SCENENEXT };
   enum { MSECS = 9, MITEMS = 8 };
   MItem mItem_[MSECS][MITEMS];
   int mCount_[MSECS];

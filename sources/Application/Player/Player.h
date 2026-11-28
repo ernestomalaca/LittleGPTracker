@@ -257,12 +257,20 @@ private:
 	int stopCell_[SONG_CHANNEL_COUNT] ;   // trk2als: ver StopCell
 	// trk2als: la escena que suena y sus repeticiones (song->sceneRep_)
 	int sceneRow_, scenePending_, sceneStart_ ;
+	// trk2als: lo mismo por pista, para el clip que lanzaste solo (la escena
+	// manda: al lanzar una escena esto se apaga)
+	int clipFolRow_[SONG_CHANNEL_COUNT], clipFolPend_[SONG_CHANNEL_COUNT], clipFolStart_[SONG_CHANNEL_COUNT] ;
+	int cellBars(int ch, int row) ;
+	bool clipFollowDue(int ch, int ahead) ;
 	void sceneTick() ;
 	void preFadeBar(SyncMaster *sync) ;   // trk2als
 	int sceneBars(int row) ;
 public:
 	// trk2als: la escena que sigue sola (xN): cuál entra y cuántos compases faltan
 	bool SceneFollow(int &next, int &barsLeft) ;
+	// trk2als: vueltas y stop del clip de una celda (MIDI: en el clip; audio: en su instrumento)
+	int CellFollow(int ch, int row) ;
+	void SetCellFollow(int ch, int row, int f) ;
 	// trk2als: editando un clip o un instrumento las escenas no avanzan
 	void SetFollowHold(bool h) { followHold_ = h ; }
 	bool followActive() ;

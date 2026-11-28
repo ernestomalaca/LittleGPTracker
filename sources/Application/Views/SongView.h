@@ -123,6 +123,11 @@ class SongView : public View, public LaunchHost {
     bool headerMode_; // .el cursor está en la cabecera de las columnas
     bool rowMode_;   // trk2als: el cursor en la columna de filas (como LSDJ)
     void processRowButtonMask(unsigned int mask);
+    // trk2als: Y + flechas: las vueltas (↑ ↓) y el stop (← lo pone, → lo quita)
+    bool followEdit(int &f, unsigned int mask);
+    void followNotice(int f);
+    void drawFollow(int x, int y, int room, int f, GUIColor c);
+    void sceneLaunched();
     void processHeaderButtonMask(unsigned int mask);
     void prepareClip(unsigned char clip); // .pone el instrumento en looper sync
     unsigned char freeClip(); // .primer instrumento que no usa ninguna phrase ni pista de audio
