@@ -863,10 +863,13 @@ void SongView::onStart() {
     player->Transport();   // trk2als: Start = el transporte (como la barra espaciadora de Live)
 };
 
+// trk2als: L + Start (el atajo de LGPT/LSDJ para "tocar la fila"): lanza la
+// escena de la fila del cursor desde cualquier pista, igual que A en la
+// columna de escenas
 void SongView::startCurrentRow() {
     Player *player = Player::GetInstance();
-    player->SetSequencerMode(SM_LIVE);
-    player->OnSongStartButton(0, 7, false, false);
+    player->LaunchScene(viewData_->songY_ + viewData_->songOffset_);
+    View::SetNotification("escena lanzada");
 }
 
 void SongView::startImmediate() {
@@ -2562,7 +2565,7 @@ void SongView::DrawView() {
             drawHelpBar("suelta A:pegar;flechas:acomodar;B:cancelar");
         else
             drawHelpBar(headerMode_ ? "A:sonido / agregar;B+A:borrar pista;<>:pista;v:a los clips"
-                                    : "A:poner/abrir;A+<>:elegir;B+A:borrar;SEL,B:marcar;SEL+A:pegar;SEL+<>:pantalla;SEL+L:deshacer;SEL+R:rehacer");
+                                    : "A:poner/abrir;A+<>:elegir;L+START:lanzar la escena;B+A:borrar;SEL,B:marcar;SEL+A:pegar;SEL+<>:pantalla;SEL+L:deshacer;SEL+R:rehacer");
         return;
     }
 
@@ -2709,7 +2712,7 @@ void SongView::DrawView() {
         drawHelpBar("START:lanzar la fila;SEL+START:detener todo;B+Y:repeticiones sí / no;>:a las pistas");
     else
     drawHelpBar(headerMode_ ? "A:sonido / agregar;B+A:borrar pista;<>:pista;v:a los clips"
-                            : "A:poner/abrir;A+<>:elegir;B+A:borrar;SEL+<>:pantalla;SEL+L:deshacer;SEL+R:rehacer");
+                            : "A:poner/abrir;A+<>:elegir;L+START:lanzar la escena;B+A:borrar;SEL+<>:pantalla;SEL+L:deshacer;SEL+R:rehacer");
 };
 
 /******************************************************
