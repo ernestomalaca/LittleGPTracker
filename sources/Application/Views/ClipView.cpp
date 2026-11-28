@@ -1653,7 +1653,11 @@ void ClipView::DrawView() {
             bool darkKey = black && pitch != cursorPitch_ && !isRoot;
             GUIColor tc = darkKey ? Mix(bg, fg, 75) : bg;
             if (scale > 0 && !in && pitch != cursorPitch_) tc = darkKey ? Mix(bg, fg, 40) : Mix(bg, fg, 8);
-            DrawText(12, y + (RH - 16) / 2, noteName(pitch).c_str(), tc, 1);
+            // trk2als: los nombres de 4 letras (octavas bajo cero: "Bb-1") no
+            // caben en la tecla con la letra grande: esos, con la chica
+            std::string kn = noteName(pitch);
+            if (kn.size() > 3) DrawText(10, y + (RH - 8) / 2, kn.c_str(), tc, 0);
+            else DrawText(12, y + (RH - 16) / 2, kn.c_str(), tc, 1);
         }
     }
     for (int s = 0; s <= 16; s++) {
