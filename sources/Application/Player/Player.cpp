@@ -1611,6 +1611,20 @@ void Player::sceneTick() {
             clipFolPend_[i] = -1;
             clipFolStart_[i] = metroStep_;
         }
+        // trk2als: y el clip que ya suena sin haberlo lanzado solo (le pusiste
+        // las vueltas mientras sonaba, entró con una escena sin vueltas, o
+        // volvió con Start): empieza a contar. Con una escena con vueltas
+        // sonando en esa fila, manda la escena
+        else if (liveQueueingMode_[i] == QM_NONE) {
+            int playing = (mixer_->IsChannelPlaying(i) && viewData_->currentPlayChain_[i] != 0xFF)
+                              ? viewData_->songPlayPos_[i] : -1;
+            bool governed = sceneRow_ >= 0 && playing == sceneRow_ && viewData_->song_->SceneReps(sceneRow_) > 0;
+            if (governed || playing < 0) clipFolRow_[i] = -1;
+            else if (clipFolRow_[i] != playing && (CellFollow(i, playing) & Song::FOLLOW_COUNT)) {
+                clipFolRow_[i] = playing;
+                clipFolStart_[i] = metroStep_ >= 16 ? metroStep_ - 16 : 0;   // (se ve un compás después de entrar)
+            }
+        }
     }
 }
 
