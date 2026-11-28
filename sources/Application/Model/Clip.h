@@ -63,19 +63,20 @@ struct AutoLane {
 
 class Clip {
 public:
-	Clip():pages(0),loopStart(-1),loopEnd(-1) {}
-	void Clear() { pages=0 ; notes.clear() ; lanes.clear() ; name.clear() ; loopStart=loopEnd=-1 ; }
+	Clip():pages(0),loopStart(-1),loopEnd(-1),follow(0) {}
+	void Clear() { pages=0 ; notes.clear() ; lanes.clear() ; name.clear() ; loopStart=loopEnd=-1 ; follow=0 ; }
 	bool IsEmpty() const { return pages==0 ; }
 	int Steps() const { return pages*CLIP_STEPS_PER_PAGE ; }
 	bool operator==(const Clip &o) const {
 		return pages==o.pages && notes==o.notes && lanes==o.lanes &&
-		       loopStart==o.loopStart && loopEnd==o.loopEnd ;
+		       loopStart==o.loopStart && loopEnd==o.loopEnd && follow==o.follow ;
 	}
 	bool operator!=(const Clip &o) const { return !(*this==o) ; }
 	int pages ;                    // 0 = clip vacío (sin crear)
 	std::vector<ClipNote> notes ;  // ordenadas por inicio
 	std::string name ;             // "woodblock 1"; vacío = sin nombre
 	int loopStart,loopEnd ;        // compases; -1 = sin loop (suena entero)
+	unsigned char follow ;         // vueltas y stop al lanzarlo solo (ver Song::FOLLOW_*)
 	std::vector<AutoLane> lanes ;  // automatización
 	AutoLane *FindLane(unsigned int target,int pad) ;
 	AutoLane &GetLane(unsigned int target,int pad) ;   // la crea si no existe

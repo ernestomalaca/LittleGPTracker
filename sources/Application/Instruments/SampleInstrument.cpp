@@ -222,6 +222,7 @@ SampleInstrument::SampleInstrument() {
 	 Insert(transpose_) ;
 	 clipBars_=new Variable("length",SIP_CLIPBARS,0) ;
 	 Insert(clipBars_) ;
+	 Insert(new Variable("follow",SIP_A_FOLLOW,0)) ;   // trk2als: vueltas y stop del clip de audio
 
 	 // trk2als: Sampler estilo Simpler (pistas MIDI). Se guardan aparte de los
 	 // de LGPT; InitSimpler() los deduce de ellos la primera vez

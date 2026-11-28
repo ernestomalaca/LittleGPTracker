@@ -761,6 +761,7 @@ void ProjectView::buildMenu() {
     add(0, "Metrónomo", p->FindVariable(VAR_METRONOME), MK_VAR, 0, 1, 1, 1);
     add(1, "Follow", p->FindVariable(VAR_FOLLOW), MK_VAR, 0, 1, 1, 1);
     add(1, "Fold", p->FindVariable(VAR_FOLD), MK_VAR, 0, 1, 1, 1);
+    add(1, "Escena siguiente", 0, MK_SCENENEXT, 0, 1, 1, 1);   // trk2als: al lanzar una escena, el cursor baja a la que sigue
     add(1, "Fuente", fontVar_, MK_VAR, 0, fontCount_ - 1, 1, 1);
     add(2, "Tema", themeVar_, MK_VAR, 0, themeCount_ - 1, 1, 1);
     add(3, "Latencia", latVar_, MK_VAR, 0, 2, 1, 1);
@@ -784,6 +785,10 @@ std::string ProjectView::menuValue(const MItem &it) {
     if (it.kind == MK_WARP) {
         const char *lw = Config::GetInstance()->GetValue("LOOPWARP");
         return (lw && !strcasecmp(lw, "complex")) ? "complex" : "re-pitch";
+    }
+    if (it.kind == MK_SCENENEXT) {
+        const char *sn = Config::GetInstance()->GetValue("SCENENEXT");
+        return (sn && !strcasecmp(sn, "YES")) ? "sí" : "no";
     }
 #ifdef WEBSERVER
     if (it.kind == MK_WEB) return WebServer::GetInstance()->IsRunning() ? "prendido" : "apagado";
@@ -812,6 +817,13 @@ void ProjectView::menuChange(MItem &it, int delta) {
         const char *lw = Config::GetInstance()->GetValue("LOOPWARP");
         bool cplx = lw && !strcasecmp(lw, "complex");
         Config::GetInstance()->SetPersistent("LOOPWARP", cplx ? "re-pitch" : "complex");
+        isDirty_ = true;
+        return;
+    }
+    if (it.kind == MK_SCENENEXT) {   // se guarda en config.xml: vale para todos los proyectos
+        const char *sn = Config::GetInstance()->GetValue("SCENENEXT");
+        bool on = sn && !strcasecmp(sn, "YES");
+        Config::GetInstance()->SetPersistent("SCENENEXT", on ? "NO" : "YES");
         isDirty_ = true;
         return;
     }
@@ -866,7 +878,7 @@ bool ProjectView::menuInput(unsigned short mask) {
         if (d) menuChange(it, d);
         else if (mask == EPBM_A) {
             if (it.kind == MK_ACTION || it.kind == MK_WEB) menuAction(it.action);
-            else if (it.kind == MK_WARP) menuChange(it, 1);
+            else if (it.kind == MK_WARP || it.kind == MK_SCENENEXT) menuChange(it, 1);
         }
         return true;
     }

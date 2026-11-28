@@ -54,6 +54,7 @@ Player::Player() {
     countInRec_ = true;
     for (int i = 0; i < SONG_CHANNEL_COUNT; i++) { launched_[i] = -1; stopCell_[i] = -1; }
     sceneRow_ = scenePending_ = -1; sceneStart_ = 0;
+    for (int i = 0; i < SONG_CHANNEL_COUNT; i++) { clipFolRow_[i] = clipFolPend_[i] = -1; clipFolStart_[i] = 0; }
     followHold_ = false;
     countIn_ = false;
     countStep_ = 0;
@@ -261,6 +262,7 @@ void Player::Stop() {
     mixer_->OnPlayerStop();
     autoRec_ = false;   // trk2als: parar también deja de grabar
     sceneRow_ = scenePending_ = -1;   // trk2als: se acaba la secuencia de escenas
+    for (int i = 0; i < SONG_CHANNEL_COUNT; i++) clipFolRow_[i] = clipFolPend_[i] = -1;
     autoRecPending_ = false;
     countIn_ = false;
 
@@ -1000,13 +1002,13 @@ void Player::preFadeBar(SyncMaster *sync) {
     // adelanta aquí la misma cuenta para apagar a tiempo lo que va a cambiar
     bool sceneNext = false;
     if (sceneRow_ >= 0) {
-        int rep = viewData_->song_->sceneRep_[sceneRow_];
+        int rep = viewData_->song_->SceneReps(sceneRow_);
         sceneNext = rep > 0 && followActive() && (metroStep_ + 1 - sceneStart_) / 16 >= rep * sceneBars(sceneRow_);
     }
     for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
         QueueingMode q = liveQueueingMode_[i];
         bool queued = q == QM_PHRASESTART || q == QM_PHRASESTOP || q == QM_CHAINSTART || q == QM_CHAINSTOP;
-        if (!queued && !sceneNext) continue;
+        if (!queued && !sceneNext && !clipFollowDue(i, 1)) continue;
         if (!mixer_->IsChannelPlaying(i)) continue;
         mixer_->PreFade(i, delay, len);
     }
@@ -1425,13 +1427,18 @@ void Player::LaunchClip(int channel, int row) {
         for (int i = 0; i < SONG_CHANNEL_COUNT; i++) if (i != channel) QueueChannel(i, QM_NONE, 0, 0);
         QueueChannel(channel, QM_TICKSTART, row, 0);
         Start(PM_LIVE, false);
+        clipFolRow_[channel] = -1;
+        clipFolPend_[channel] = row;   // (Start lo borra todo: va después)
         return;
     }
     QueueChannel(channel, QM_PHRASESTART, row, 0);   // en el siguiente compás
+    clipFolRow_[channel] = -1;
+    clipFolPend_[channel] = row;       // sus vueltas cuentan desde que entra
 }
 
 void Player::StopTrack(int channel, int cell) {
     stopCell_[channel] = cell;
+    clipFolRow_[channel] = clipFolPend_[channel] = -1;
     if (!isRunning_) { launched_[channel] = -1; return; }
     if (mixer_->IsChannelPlaying(channel)) QueueChannel(channel, QM_PHRASESTOP, viewData_->songPlayPos_[channel], 0);
     else QueueChannel(channel, QM_NONE, 0, 0);
@@ -1444,6 +1451,8 @@ void Player::StopAllClips() {
 
 void Player::LaunchScene(int row) {
     SetSequencerMode(SM_LIVE);
+    // la escena manda: los clips de sus pistas ya no llevan su propia cuenta
+    for (int i = 0; i < SONG_CHANNEL_COUNT; i++) clipFolRow_[i] = clipFolPend_[i] = -1;
     if (!isRunning_) {
         bool any = false;
         for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
@@ -1451,8 +1460,8 @@ void Player::LaunchScene(int row) {
             QueueChannel(i, c ? QM_TICKSTART : QM_NONE, row, 0);
             any |= c;
         }
-        scenePending_ = any ? row : -1;
         if (any) Start(PM_LIVE, false);
+        scenePending_ = any ? row : -1;   // (Start lo borra: va después)
         return;
     }
     bool any = false;
@@ -1461,8 +1470,11 @@ void Player::LaunchScene(int row) {
         if (hasClip(viewData_, i, row)) { QueueChannel(i, QM_PHRASESTART, row, 0); any = true; }
         else StopTrack(i, row);   // como en Live: la escena detiene las pistas sin clip
     }
-    scenePending_ = any ? row : -1;
-    if (!any) sceneRow_ = -1;   // escena vacía: se acaba la secuencia
+    // trk2als: una escena vacía con vueltas es un silencio que cuenta (un
+    // compás por vuelta) y luego sigue o se detiene; sin vueltas, se acaba
+    bool counts = any || viewData_->song_->SceneReps(row) > 0;
+    scenePending_ = counts ? row : -1;
+    if (!counts) sceneRow_ = -1;
 }
 
 void Player::LaunchGroup(int row, int from, int to) {
@@ -1479,7 +1491,11 @@ void Player::LaunchGroup(int row, int from, int to) {
     }
     for (int i = from; i <= to && i < SONG_CHANNEL_COUNT; i++) {
         if (!project_->TrackExists(i)) continue;
-        if (hasClip(viewData_, i, row)) QueueChannel(i, QM_PHRASESTART, row, 0);
+        if (hasClip(viewData_, i, row)) {
+            QueueChannel(i, QM_PHRASESTART, row, 0);
+            clipFolRow_[i] = -1;
+            clipFolPend_[i] = row;
+        }
         else StopTrack(i, row);
     }
 }
@@ -1487,8 +1503,9 @@ void Player::LaunchGroup(int row, int from, int to) {
 // trk2als: una vuelta de la escena = lo que dura su clip más largo
 bool Player::SceneFollow(int &next, int &barsLeft) {
     if (!isRunning_ || sceneRow_ < 0 || !followActive()) return false;
-    int rep = viewData_->song_->sceneRep_[sceneRow_];
+    int rep = viewData_->song_->SceneReps(sceneRow_);
     if (rep <= 0) return false;
+    if (viewData_->song_->SceneStops(sceneRow_)) return false;   // se detiene: no hay "la que sigue"
     next = sceneRow_ + 1;
     if (next >= SONG_ROW_COUNT) return false;
     barsLeft = rep * sceneBars(sceneRow_) - (metroStep_ - sceneStart_) / 16;
@@ -1496,21 +1513,57 @@ bool Player::SceneFollow(int &next, int &barsLeft) {
     return true;
 }
 
+// cuántos compases dura una vuelta del clip de esa celda (0 = no hay)
+int Player::cellBars(int ch, int row) {
+    if (!project_->TrackExists(ch) || !hasClip(viewData_, ch, row)) return 0;
+    uchar c = viewData_->song_->data_[ch + SONG_CHANNEL_COUNT * row];
+    if (isAudio(ch)) return audioBars(c);
+    int ls, le;
+    if (viewData_->song_->GetClipLoop(c, ls, le)) return le - ls + 1;
+    return viewData_->song_->clips_->Get(c).pages;
+}
+
 int Player::sceneBars(int row) {
     int bars = 0;
     for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
-        if (!project_->TrackExists(i) || !hasClip(viewData_, i, row)) continue;
-        uchar c = viewData_->song_->data_[i + SONG_CHANNEL_COUNT * row];
-        int b;
-        if (isAudio(i)) b = audioBars(c);
-        else {
-            int ls, le;
-            if (viewData_->song_->GetClipLoop(c, ls, le)) b = le - ls + 1;
-            else b = viewData_->song_->clips_->Get(c).pages;
-        }
+        int b = cellBars(i, row);
         if (b > bars) bars = b;
     }
     return bars > 0 ? bars : 1;
+}
+
+int Player::CellFollow(int ch, int row) {
+    if (!project_->TrackExists(ch) || !hasClip(viewData_, ch, row)) return 0;
+    uchar c = viewData_->song_->data_[ch + SONG_CHANNEL_COUNT * row];
+    if (isAudio(ch)) {
+        if (c >= MAX_SAMPLEINSTRUMENT_COUNT) return 0;
+        I_Instrument *in = project_->GetInstrumentBank()->GetInstrument(c);
+        Variable *v = in ? in->FindVariable(SIP_A_FOLLOW) : 0;
+        return v ? v->GetInt() : 0;
+    }
+    return viewData_->song_->clips_->Get(c).follow;
+}
+
+void Player::SetCellFollow(int ch, int row, int f) {
+    if (!project_->TrackExists(ch) || !hasClip(viewData_, ch, row)) return;
+    uchar c = viewData_->song_->data_[ch + SONG_CHANNEL_COUNT * row];
+    if (isAudio(ch)) {
+        if (c >= MAX_SAMPLEINSTRUMENT_COUNT) return;
+        I_Instrument *in = project_->GetInstrumentBank()->GetInstrument(c);
+        Variable *v = in ? in->FindVariable(SIP_A_FOLLOW) : 0;
+        if (v) v->SetInt(f);
+        return;
+    }
+    viewData_->song_->clips_->Get(c).follow = (unsigned char)f;
+}
+
+// el clip que lanzaste solo ya sonó sus vueltas ('ahead' = 1: en el compás que viene)
+bool Player::clipFollowDue(int ch, int ahead) {
+    if (clipFolRow_[ch] < 0 || !followActive()) return false;
+    int rep = CellFollow(ch, clipFolRow_[ch]) & Song::FOLLOW_COUNT;
+    int bars = cellBars(ch, clipFolRow_[ch]);
+    if (rep <= 0 || bars <= 0) return false;
+    return (metroStep_ + ahead - clipFolStart_[ch]) / 16 >= rep * bars;
 }
 
 // trk2als: en cada uno del compás: si la escena ya sonó sus repeticiones,
@@ -1523,18 +1576,41 @@ void Player::sceneTick() {
     // en pausa (editando, o apagadas): la cuenta no avanza
     if (sceneRow_ >= 0 && !followActive()) sceneStart_ += 16;
     else if (sceneRow_ >= 0) {
-        int rep = viewData_->song_->sceneRep_[sceneRow_];
+        int rep = viewData_->song_->SceneReps(sceneRow_);
         if (rep > 0 && (metroStep_ - sceneStart_) / 16 >= rep * sceneBars(sceneRow_)) {
             int next = sceneRow_ + 1;
-            liveLog("scene-next", 0, next);
+            bool stop = viewData_->song_->SceneStops(sceneRow_);
+            liveLog(stop ? "scene-stop" : "scene-next", 0, next);
             sceneRow_ = -1;
-            if (next < SONG_ROW_COUNT) LaunchScene(next);
+            if (stop) StopAllClips();   // trk2als: xN y stop: sonó sus vueltas y todo se detiene
+            else if (next < SONG_ROW_COUNT) LaunchScene(next);
         }
     }
     if (scenePending_ >= 0) {
         sceneRow_ = scenePending_;
         scenePending_ = -1;
         sceneStart_ = metroStep_;
+    }
+    // trk2als: lo mismo para cada clip lanzado solo: al acabar sus vueltas se
+    // detiene (stop) o entra el clip de abajo (si no hay, se detiene)
+    for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
+        if (clipFolRow_[i] >= 0 && !followActive()) clipFolStart_[i] += 16;
+        else if (clipFollowDue(i, 0)) {
+            int row = clipFolRow_[i];
+            bool stop = (CellFollow(i, row) & Song::FOLLOW_STOP) != 0;
+            liveLog(stop ? "clip-stop" : "clip-next", i, row + 1);
+            if (stop || !hasClip(viewData_, i, row + 1)) StopTrack(i);
+            else {
+                QueueChannel(i, QM_PHRASESTART, row + 1, 0);
+                clipFolRow_[i] = -1;
+                clipFolPend_[i] = row + 1;
+            }
+        }
+        if (clipFolPend_[i] >= 0) {
+            clipFolRow_[i] = clipFolPend_[i];
+            clipFolPend_[i] = -1;
+            clipFolStart_[i] = metroStep_;
+        }
     }
 }
 

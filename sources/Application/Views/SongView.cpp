@@ -863,6 +863,55 @@ void SongView::onStart() {
     player->Transport();   // trk2als: Start = el transporte (como la barra espaciadora de Live)
 };
 
+// trk2als: lo que pasa después de sonar (escena o clip): Y + ↑ ↓ las vueltas
+// (0 = nada: se queda sonando), Y + ← pone el stop y Y + → lo quita. Devuelve
+// si cambió
+bool SongView::followEdit(int &f, unsigned int mask) {
+    int count = f & Song::FOLLOW_COUNT;
+    bool stop = (f & Song::FOLLOW_STOP) != 0;
+    int was = f;
+    if (mask & EPBM_UP) count++;
+    if (mask & EPBM_DOWN) count--;
+    if (count < 0) count = 0;
+    if (count > 16) count = 16;
+    if (mask & EPBM_LEFT) { stop = true; if (count < 1) count = 1; }   // stop sin vueltas no dice nada: x1
+    if (mask & EPBM_RIGHT) stop = false;
+    if (count == 0) stop = false;
+    f = count | (stop ? Song::FOLLOW_STOP : 0);
+    return f != was;
+}
+
+void SongView::followNotice(int f) {
+    int count = f & Song::FOLLOW_COUNT;
+    char b[48];
+    if (count == 0) snprintf(b, sizeof(b), "sin vueltas: se queda sonando");
+    else if (f & Song::FOLLOW_STOP) snprintf(b, sizeof(b), "x%d y se detiene", count);
+    else snprintf(b, sizeof(b), "x%d y sigue lo de abajo", count);
+    View::SetNotification(b);
+}
+
+// "x4" y, con stop, un cuadrito; con la letra grande si cabe en 'room'
+void SongView::drawFollow(int x, int y, int room, int f, GUIColor c) {
+    int count = f & Song::FOLLOW_COUNT;
+    if (count <= 0) return;
+    bool stop = (f & Song::FOLLOW_STOP) != 0;
+    char rb[8];
+    if (viewData_->song_->followOff_) strcpy(rb, "--");   // apagadas: guardadas, sin número
+    else snprintf(rb, sizeof(rb), "x%d", count);
+    int len = int(strlen(rb));
+    int scale = (16 * len + (stop ? 12 : 0) <= room) ? 1 : 0;
+    int cw = scale ? 16 : 8;
+    DrawText(x, y + (scale ? 0 : 4), rb, c, scale);
+    if (stop) FillRect(x + cw * len + 2, y + (scale ? 3 : 5), scale ? 9 : 7, scale ? 9 : 7, c, 1);
+}
+
+// trk2als: "posarse en la escena siguiente" (menú, SCENENEXT en config.xml):
+// al lanzar una escena el cursor baja a la que sigue, lista para lanzarse
+void SongView::sceneLaunched() {
+    const char *v = Config::GetInstance()->GetValue("SCENENEXT");
+    if (v && !strcasecmp(v, "YES")) updateCursor(0, 1);
+}
+
 // trk2als: L + Start (el atajo de LGPT/LSDJ para "tocar la fila"): lanza la
 // escena de la fila del cursor desde cualquier pista, igual que A en la
 // columna de escenas
@@ -870,6 +919,7 @@ void SongView::startCurrentRow() {
     Player *player = Player::GetInstance();
     player->LaunchScene(viewData_->songY_ + viewData_->songOffset_);
     View::SetNotification("escena lanzada");
+    sceneLaunched();
 }
 
 void SongView::startImmediate() {
@@ -1720,6 +1770,28 @@ void SongView::handleButtonMask(unsigned short mask, bool pressed) {
 
 void SongView::processNormalButtonMask(unsigned int mask) {
 
+    // trk2als: Y + flechas sobre un clip: sus vueltas y su stop, para cuando lo
+    // lanzas solo (lanzado con su escena, manda la escena)
+    if ((mask & EPBM_Y) && !headerMode_ && !rowMode_ &&
+        !(mask & (EPBM_START | EPBM_A | EPBM_B | EPBM_L | EPBM_R))) {
+        if (mask & (EPBM_UP | EPBM_DOWN | EPBM_LEFT | EPBM_RIGHT)) {
+            Player *pl = Player::GetInstance();
+            int col = viewData_->songX_;
+            int row = viewData_->songY_ + viewData_->songOffset_;
+            if (viewData_->song_->data_[col + SONG_CHANNEL_COUNT * row] == 0xFF) {
+                View::SetNotification("aquí no hay clip");
+            } else {
+                int f = pl->CellFollow(col, row);
+                if (followEdit(f, mask)) {
+                    pl->SetCellFollow(col, row, f);
+                    followNotice(f);
+                }
+            }
+            isDirty_ = true;
+        }
+        return;
+    }
+
     // B Modifier
 
     if (mask & EPBM_B) {
@@ -2192,19 +2264,12 @@ void SongView::processRowButtonMask(unsigned int mask) {
         isDirty_ = true;
         return;
     }
-    if (mask & EPBM_Y) {   // trk2als: Y + ↑ ↓ (como dividir en el clip): cuántas veces suena la escena (∞, x1 … x16)
-        int dir = (mask & EPBM_UP) ? 1 : (mask & EPBM_DOWN) ? -1 : 0;
+    if (mask & EPBM_Y) {   // trk2als: Y + ↑ ↓: cuántas vueltas suena la escena (x1 … x16; nada = se queda); Y + ←: y se detiene; Y + →: sin stop
         int srow = viewData_->songY_ + viewData_->songOffset_;
-        bool has = false;
-        for (int i = 0; i < SONG_CHANNEL_COUNT; i++)
-            if (viewData_->project_->TrackExists(i) && viewData_->song_->data_[i + SONG_CHANNEL_COUNT * srow] != 0xFF) has = true;
-        if (dir && !has) View::SetNotification("escena vacía: sin repeticiones");
-        if (dir && has) {
-            unsigned char &r = viewData_->song_->sceneRep_[srow];
-            int v = r + dir;
-            if (v < 0) v = 0;
-            if (v > 16) v = 16;
-            r = (unsigned char)v;
+        int f = viewData_->song_->sceneRep_[srow];   // (las vacías también: un silencio de un compás por vuelta)
+        if ((mask & (EPBM_UP | EPBM_DOWN | EPBM_LEFT | EPBM_RIGHT)) && followEdit(f, mask)) {
+            viewData_->song_->sceneRep_[srow] = (unsigned char)f;
+            followNotice(f);
             isDirty_ = true;
         }
         return;
@@ -2212,6 +2277,7 @@ void SongView::processRowButtonMask(unsigned int mask) {
     if (mask == EPBM_A) {   // trk2als: A lanza la escena (la fila), como en Live
         viewData_->chainRow_ = 0;
         player->LaunchScene(viewData_->songY_ + viewData_->songOffset_);
+        sceneLaunched();
     }
     if (mask & EPBM_START) player->Transport();
     if (mask & EPBM_RIGHT) {   // → vuelve a la primera pista
@@ -2558,14 +2624,14 @@ void SongView::DrawView() {
     if (blockGrid()) {
         drawBlockGrid();
         if (rowMode_)
-            drawHelpBar("START:lanzar la fila;SEL+START:detener todo;B+Y:repeticiones sí / no;>:a las pistas");
+            drawHelpBar("A:lanzar la escena;Y+^v:vueltas;Y+<:y se detiene;Y+>:sin stop;SEL+START:detener todo;B+Y:vueltas sí / no;>:a las pistas");
         else if (sesMarking_)
             drawHelpBar("flechas:marcar;B:copiar;B+A:cortar;A+flechas:mover;SEL+A:duplicar;SEL,B:escenas;A:salir");
         else if (sesPasting_)
             drawHelpBar("suelta A:pegar;flechas:acomodar;B:cancelar");
         else
             drawHelpBar(headerMode_ ? "A:sonido / agregar;B+A:borrar pista;<>:pista;v:a los clips"
-                                    : "A:poner/abrir;A+<>:elegir;L+START:lanzar la escena;B+A:borrar;SEL,B:marcar;SEL+A:pegar;SEL+<>:pantalla;SEL+L:deshacer;SEL+R:rehacer");
+                                    : "A:poner/abrir;A+<>:elegir;L+START:lanzar la escena;Y+^v:vueltas del clip;Y+<:y se detiene;Y+>:sin stop;B+A:borrar;SEL,B:marcar;SEL+A:pegar;SEL+<>:pantalla;SEL+L:deshacer;SEL+R:rehacer");
         return;
     }
 
@@ -2709,10 +2775,10 @@ void SongView::DrawView() {
     // They will always show the empty dashes and smoothly decay when paused
     DrawVuBars();
     if (rowMode_)
-        drawHelpBar("START:lanzar la fila;SEL+START:detener todo;B+Y:repeticiones sí / no;>:a las pistas");
+        drawHelpBar("A:lanzar la escena;Y+^v:vueltas;Y+<:y se detiene;Y+>:sin stop;SEL+START:detener todo;B+Y:vueltas sí / no;>:a las pistas");
     else
     drawHelpBar(headerMode_ ? "A:sonido / agregar;B+A:borrar pista;<>:pista;v:a los clips"
-                            : "A:poner/abrir;A+<>:elegir;L+START:lanzar la escena;B+A:borrar;SEL+<>:pantalla;SEL+L:deshacer;SEL+R:rehacer");
+                            : "A:poner/abrir;A+<>:elegir;L+START:lanzar la escena;Y+^v:vueltas del clip;Y+<:y se detiene;Y+>:sin stop;B+A:borrar;SEL+<>:pantalla;SEL+L:deshacer;SEL+R:rehacer");
 };
 
 /******************************************************
@@ -2985,16 +3051,7 @@ void SongView::drawBlockGrid() {
     Player *player = Player::GetInstance();
     Project *project = viewData_->project_;
     lastBlockState_ = blockState();
-    {   // trk2als: una escena sin clips vuelve a ∞ (sus repeticiones no aplican)
-        Song *song = viewData_->song_;
-        for (int r = 0; r < SONG_ROW_COUNT; r++) {
-            if (!song->sceneRep_[r]) continue;
-            bool any = false;
-            for (int i = 0; i < SONG_CHANNEL_COUNT && !any; i++)
-                any = project->TrackExists(i) && song->data_[i + SONG_CHANNEL_COUNT * r] != 0xFF;
-            if (!any) song->sceneRep_[r] = 0;
-        }
-    }
+    // trk2als: (las escenas vacías ya conservan sus vueltas: son silencios que cuentan)
 
     GUIColor bg = ColorOf(CD_BACKGROUND);
     GUIColor fg = ColorOf(CD_NORMAL);
@@ -3130,17 +3187,10 @@ void SongView::drawBlockGrid() {
             char rl[4];
             snprintf(rl, sizeof(rl), "%02X", row);
             DrawText(SX + 5, y + 4, rl, has ? fg : dim, 1);
-            int rep = viewData_->song_->sceneRep_[row];
-            int cy = y + h - 19, ch = 15;
-            if (rep > 0) {
-                char rb[6];   // trk2als: grande y sin recuadro
-                if (viewData_->song_->followOff_) strcpy(rb, "--");   // apagadas: guardadas, sin número
-                else snprintf(rb, sizeof(rb), "x%d", rep);
-                DrawText(SX + 5, cy, rb, dim, 1);   // siempre en gris: no se confunde con el número
-            } else if (hereRow && has) {   // ∞ (se queda ahí): solo al editarla
-                FrameRect(SX + 6, cy + 3, 10, 9, fg, 4, 2);
-                FrameRect(SX + 15, cy + 3, 10, 9, fg, 4, 2);
-            }
+            // trk2als: "x4" y, con stop, un cuadrito; sin vueltas no se dibuja nada
+            // (antes un ∞): no hay nada que pase después. Siempre en gris: no
+            // se confunde con el número de la escena
+            drawFollow(SX + 5, y + h - 19, SW - 8, viewData_->song_->sceneRep_[row], dim);
         }
 
         for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
@@ -3192,6 +3242,13 @@ void SongView::drawBlockGrid() {
                     name = viewData_->song_->GetClipName(d);
                 }
                 DrawText(x + 5, y + 4, id, bg, 1);
+                if (cell != newSlotCell_) {   // trk2als: sus vueltas y su stop, junto al número
+                    // (con la letra grande si cabe; sonando, el play le quita sitio)
+                    bool playsHere = player->IsRunning() && player->IsChannelPlaying(i) &&
+                                     viewData_->currentPlayChain_[i] != 0xFF && viewData_->songPlayPos_[i] == row;
+                    int fx = x + 5 + 16 * int(strlen(id)) + 3;
+                    drawFollow(fx, y + 4, x + w - (playsHere ? 17 : 2) - fx, player->CellFollow(i, row), Mix(tc, bg, 85));
+                }
                 if (!name.empty() && h >= 34) {   // trk2als: el nombre también grande (completo arriba, en la barra)
                     int room = (w - 8) / 16;
                     if (TextLen(name) > room) name = name.substr(0, room);
