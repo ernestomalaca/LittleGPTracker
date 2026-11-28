@@ -181,6 +181,7 @@ class SongView : public View, public LaunchHost {
     struct SesSnap {
         std::vector<unsigned char> grid;
         std::vector<unsigned char> reps;   // trk2als: las repeticiones de cada escena
+        std::vector<unsigned char> nostop; // trk2als: los slots vacíos sin botón de stop
         std::map<int, Clip> clips;
         // trk2als: el sonido de una pista (cargar preset / kit vacío / ...)
         int instrTrack;

@@ -398,6 +398,9 @@ void Project::DeleteTrack(int channel) {
         unsigned char *row = song + r * SONG_CHANNEL_COUNT;
         for (int c = channel; c < SONG_CHANNEL_COUNT - 1; c++) row[c] = row[c + 1];
         row[SONG_CHANNEL_COUNT - 1] = 0xFF;
+        unsigned char *ns = song_->noStop_ + r * SONG_CHANNEL_COUNT;   // trk2als: y sus botones de stop
+        for (int c = channel; c < SONG_CHANNEL_COUNT - 1; c++) ns[c] = ns[c + 1];
+        ns[SONG_CHANNEL_COUNT - 1] = 0;
     }
     for (int c = channel; c < SONG_CHANNEL_COUNT - 1; c++) {
         FindVariable(VAR_TRACKTYPE(c))->SetInt(FindVariable(VAR_TRACKTYPE(c + 1))->GetInt());
