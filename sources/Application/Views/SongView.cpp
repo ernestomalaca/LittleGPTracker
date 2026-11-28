@@ -1774,18 +1774,17 @@ void SongView::processNormalButtonMask(unsigned int mask) {
     // lanzas solo (lanzado con su escena, manda la escena)
     if ((mask & EPBM_Y) && !headerMode_ && !rowMode_ &&
         !(mask & (EPBM_START | EPBM_A | EPBM_B | EPBM_L | EPBM_R))) {
-        if (mask & (EPBM_UP | EPBM_DOWN | EPBM_LEFT | EPBM_RIGHT)) {
+        {
             Player *pl = Player::GetInstance();
             int col = viewData_->songX_;
             int row = viewData_->songY_ + viewData_->songOffset_;
+            bool arrows = (mask & (EPBM_UP | EPBM_DOWN | EPBM_LEFT | EPBM_RIGHT)) != 0;
             if (viewData_->song_->data_[col + SONG_CHANNEL_COUNT * row] == 0xFF) {
-                View::SetNotification("aquí no hay clip");
+                if (arrows) View::SetNotification("aquí no hay clip");
             } else {
                 int f = pl->CellFollow(col, row);
-                if (followEdit(f, mask)) {
-                    pl->SetCellFollow(col, row, f);
-                    followNotice(f);
-                }
+                if (arrows && followEdit(f, mask)) pl->SetCellFollow(col, row, f);
+                followNotice(f);   // Y sola: dice qué tiene este clip
             }
             isDirty_ = true;
         }
@@ -2267,11 +2266,10 @@ void SongView::processRowButtonMask(unsigned int mask) {
     if (mask & EPBM_Y) {   // trk2als: Y + ↑ ↓: cuántas vueltas suena la escena (x1 … x16; nada = se queda); Y + ←: y se detiene; Y + →: sin stop
         int srow = viewData_->songY_ + viewData_->songOffset_;
         int f = viewData_->song_->sceneRep_[srow];   // (las vacías también: un silencio de un compás por vuelta)
-        if ((mask & (EPBM_UP | EPBM_DOWN | EPBM_LEFT | EPBM_RIGHT)) && followEdit(f, mask)) {
+        if ((mask & (EPBM_UP | EPBM_DOWN | EPBM_LEFT | EPBM_RIGHT)) && followEdit(f, mask))
             viewData_->song_->sceneRep_[srow] = (unsigned char)f;
-            followNotice(f);
-            isDirty_ = true;
-        }
+        followNotice(f);   // Y sola: dice qué tiene esta escena
+        isDirty_ = true;
         return;
     }
     if (mask == EPBM_A) {   // trk2als: A lanza la escena (la fila), como en Live
