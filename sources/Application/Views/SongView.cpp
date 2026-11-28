@@ -2611,6 +2611,15 @@ void SongView::DrawView() {
             tname = fb;
         }
         std::string ctx = tname;   // trk2als: siempre como la Session de Live
+        if (!rowMode_ && !headerMode_ && project->TrackExists(viewData_->songX_)) {
+            // trk2als: las vueltas del clip donde estás, con número (en la celda solo va la marca)
+            int fol = player->CellFollow(viewData_->songX_, viewData_->songY_ + viewData_->songOffset_);
+            if (fol & Song::FOLLOW_COUNT) {
+                char fb[24];
+                snprintf(fb, sizeof(fb), (fol & Song::FOLLOW_STOP) ? "x%d stop " : "x%d ", fol & Song::FOLLOW_COUNT);
+                ctx = std::string(fb) + ctx;
+            }
+        }
         if (!drawTopBar(TAB_SES, ctx.c_str())) {
             DrawString(pos._x, pos._y, buffer.c_str(), props);
             if (tname.size() > 17) tname = tname.substr(0, 17);
@@ -3242,13 +3251,6 @@ void SongView::drawBlockGrid() {
                     name = viewData_->song_->GetClipName(d);
                 }
                 DrawText(x + 5, y + 4, id, bg, 1);
-                if (cell != newSlotCell_) {   // trk2als: sus vueltas y su stop, junto al número
-                    // (con la letra grande si cabe; sonando, el play le quita sitio)
-                    bool playsHere = player->IsRunning() && player->IsChannelPlaying(i) &&
-                                     viewData_->currentPlayChain_[i] != 0xFF && viewData_->songPlayPos_[i] == row;
-                    int fx = x + 5 + 16 * int(strlen(id)) + 3;
-                    drawFollow(fx, y + 4, x + w - (playsHere ? 17 : 2) - fx, player->CellFollow(i, row), Mix(tc, bg, 85));
-                }
                 if (!name.empty() && h >= 34) {   // trk2als: el nombre también grande (completo arriba, en la barra)
                     int room = (w - 8) / 16;
                     if (TextLen(name) > room) name = name.substr(0, room);
@@ -3272,11 +3274,34 @@ void SongView::drawBlockGrid() {
                 // que parpadea es lo que lo detiene: la celda vacía o la escena)
                 (void)stopping;
                 FrameRect(x, y, w, h, muted ? dim : fg, 3, 3);
-                GUIColor pc = empty ? fg : bg;
-                int tx = x + w - 15, ty = y + 6;
-                for (int k = 0; k < 9; k++) FillRect(tx + k, ty + k / 2, 1, 10 - (k / 2) * 2, pc);   // el play
             }
             else if (queuedHere && queueBlink()) FrameRect(x, y, w, h, hi1, 3, 3);
+            // trk2als: la esquina del clip dice qué pasa después de sonar, sin
+            // texto (las vueltas exactas van arriba, en la barra, al pararte en
+            // él): triángulo hueco = tiene vueltas y sigue el de abajo;
+            // cuadrito = tiene vueltas y se detiene. Sin vueltas: el play
+            // lleno solo mientras suena
+            {
+                int fol = (empty || cell == newSlotCell_) ? 0 : player->CellFollow(i, row);
+                GUIColor pc = empty ? fg : bg;
+                int tx = x + w - 17, ty = y + 5;
+                if ((fol & Song::FOLLOW_COUNT) && (fol & Song::FOLLOW_STOP)) {
+                    FillRect(tx + 2, ty + 1, 10, 10, pc, 1);
+                } else if (fol & Song::FOLLOW_COUNT) {
+                    for (int k = 0; k < 13; k++) {   // contorno de 2 px
+                        int hh = 13 - k;            // alto de la columna k
+                        int top = ty - 1 + k / 2;
+                        if (hh < 1) hh = 1;
+                        if (k < 2 || hh <= 4) FillRect(tx + k, top, 1, hh - (k % 2 ? 0 : 0), pc);
+                        else {
+                            FillRect(tx + k, top, 1, 2, pc);
+                            FillRect(tx + k, top + hh - 2, 1, 2, pc);
+                        }
+                    }
+                } else if (playingHere) {
+                    for (int k = 0; k < 9; k++) FillRect(tx + 2 + k, ty + 1 + k / 2, 1, 10 - (k / 2) * 2, pc);   // el play
+                }
+            }
             // la línea de abajo: cuánto lleva el loop (lo blanco es lo que falta)
             if (playingHere && !empty) {
                 int total;
