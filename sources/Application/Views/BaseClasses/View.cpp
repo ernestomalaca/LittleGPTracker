@@ -486,7 +486,71 @@ int View::marqueeOffset(int len, int delay) {
 	return int(((idle-delay)/250)%(unsigned long)(len+3)) ;
 }
 
+// trk2als: la pila y el calor de la consola, para la barra de arriba. Se leen
+// del sistema cada 5 s (son dos archivitos); -1 = no se sabe (no se dibuja).
+// TRK_FAKEBATT="35,1,83" (pila, cargando, grados) para probar sin consola
+#include <dirent.h>
+#include <fcntl.h>
+#include <unistd.h>
+static int battPct_=-1, battCharging_=0, heatC_=-1 ;
+static int battDrawn_=-2, heatDrawn_=-2, chargeDrawn_=-2 ;
+static unsigned long battReadMs_=0 ;
+static bool battReadOnce_=false ;
+
+static bool readSmall(const char *path, char *buf, int n) {
+	int fd=open(path,O_RDONLY) ;
+	if (fd<0) return false ;
+	int got=(int)read(fd,buf,n-1) ;
+	close(fd) ;
+	if (got<=0) return false ;
+	buf[got]=0 ;
+	return true ;
+}
+
+static void pollBattery() {
+	unsigned long now=System::GetInstance()->GetClock() ;
+	if (battReadOnce_ && now-battReadMs_<5000) return ;
+	battReadOnce_=true ;
+	battReadMs_=now ;
+	const char *fake=getenv("TRK_FAKEBATT") ;
+	if (fake) { sscanf(fake,"%d,%d,%d",&battPct_,&battCharging_,&heatC_) ; return ; }
+	char buf[64], path[300] ;
+	battPct_=-1 ; battCharging_=0 ;
+	DIR *d=opendir("/sys/class/power_supply") ;
+	if (d) {
+		struct dirent *e ;
+		while ((e=readdir(d))!=NULL) {
+			if (e->d_name[0]=='.') continue ;
+			snprintf(path,sizeof(path),"/sys/class/power_supply/%s/capacity",e->d_name) ;
+			if (!readSmall(path,buf,sizeof(buf))) continue ;
+			battPct_=atoi(buf) ;
+			if (battPct_<0) battPct_=0 ;
+			if (battPct_>100) battPct_=100 ;
+			snprintf(path,sizeof(path),"/sys/class/power_supply/%s/status",e->d_name) ;
+			if (readSmall(path,buf,sizeof(buf))) battCharging_=(buf[0]=='C' || buf[0]=='F') ;   // Charging / Full
+			break ;
+		}
+		closedir(d) ;
+	}
+	heatC_=-1 ;
+	if (readSmall("/sys/class/thermal/thermal_zone0/temp",buf,sizeof(buf))) {
+		int t=atoi(buf) ;
+		heatC_=t>1000?t/1000:t ;
+	}
+}
+
+// 0 bien, 1 tibia (75), 2 caliente (80): los mismos escalones con que el warp se modera
+static int heatStep() { return heatC_>=80?2:(heatC_>=75?1:0) ; }
+// la pila se redibuja al cambiar de escalón de 5%
+static int battStep() { return battPct_<0?-1:battPct_/5 ; }
+
 void View::refreshTopBar() {
+	pollBattery() ;
+	if (topTab_>=-1 && (battStep()!=battDrawn_ || heatStep()!=heatDrawn_ || battCharging_!=chargeDrawn_)) {
+		std::string ctx=topCtx_ ;
+		drawTopBar(topTab_,ctx.c_str()) ;
+		return ;
+	}
 	if (topTab_<-1) return ;
 	bool idleNow=!topCtxIdle_.empty() && System::GetInstance()->GetClock()-lastInputMs_>=1500 ;
 	if (idleNow!=topIdleShown_ || (topCtxRoom_>0 && topCtxLen_>topCtxRoom_ && marqueeOffset(topCtxLen_,topIdleShown_?3000:1500)!=topMarq_)) {
@@ -595,6 +659,28 @@ bool View::drawTopBar(int tab, const char *context) {
 			int bx=px+(bkAfter[i]+1)*ww-ww/3-1 ;
 			FillRect(bx,ky,ww*2/3+1,PH*3/5,c>=0?TrackColor(c):Mix(bg,fg,14),1) ;
 		}
+	}
+	// trk2als: la pila: un dibujito que se vacía (sin número); verde cargando,
+	// rojo cuando queda poco. Y el calor solo cuando importa: un punto naranja
+	// (tibia) o rojo (caliente: el warp se modera)
+	pollBattery() ;
+	battDrawn_=battStep() ; heatDrawn_=heatStep() ; chargeDrawn_=battCharging_ ;
+	if (battPct_>=0) {
+		const int BW=24, BH=13 ;
+		px-=BW+3+12 ;
+		int by=9 ;
+		bool low=battPct_<=15 && !battCharging_ ;
+		GUIColor red(0xE5,0x48,0x4D) ;   // fijos: que avisen igual en cualquier tema
+		GUIColor edge=low?red:Mix(bg,fg,60) ;
+		FrameRect(px,by,BW,BH,edge,2,2) ;
+		FillRect(px+BW,by+4,3,BH-8,edge) ;   // el polo
+		int fw=(BW-6)*battPct_/100 ;
+		if (fw<2) fw=2 ;
+		FillRect(px+3,by+3,fw,BH-6,low?red:(battCharging_?LinkGreen():Mix(bg,fg,75))) ;
+	}
+	if (heatStep()>0) {
+		px-=16 ;
+		FillRect(px,10,11,11,heatStep()>=2?GUIColor(0xE5,0x48,0x4D):GUIColor(0xF5,0xA6,0x23),5) ;
 	}
 	// el contexto (p. ej. el clip), con letra grande en lo que queda; si no
 	// cabe, al quedarse quieto pasa como marquesina
