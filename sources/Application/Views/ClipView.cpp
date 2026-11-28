@@ -244,7 +244,9 @@ void ClipView::putNote() {
     }
     Note n;
     n.start = cursorStep_;
-    n.len = lastLen_;
+    // trk2als: la nota nueva siempre mide un paso (un 16avo), como el cursor de
+    // la rejilla: el largo de la última que tocaste ya no se hereda
+    n.len = 1;
     n.pitch = cursorPitch_;
     n.vel = lastVel_;
     n.instr = instr;
