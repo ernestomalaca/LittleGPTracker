@@ -415,6 +415,25 @@ void SongView::updateCursor(int dx, int dy) {
 
 void SongView::cutPosition() {
 
+    // trk2als: lo que borras queda listo para pegar (Select + A), como si lo
+    // hubieras marcado y cortado
+    {
+        int col = viewData_->songX_;
+        int row = viewData_->songY_ + viewData_->songOffset_;
+        unsigned char d = viewData_->song_->data_[col + SONG_CHANNEL_COUNT * row];
+        if (d != 0xFF) {
+            SesCell cell;
+            cell.dx = 0;
+            cell.dy = 0;
+            cell.audio = isAudioColumn(col);
+            cell.value = d;
+            if (!cell.audio) cell.clip = viewData_->song_->clips_->Get(d);
+            sesClip_.clear();
+            sesClip_.push_back(cell);
+            View::SetNotification("clip cortado");
+        }
+    }
+
     // prepare selection data
     clipboard_.x_ = viewData_->songX_;
     clipboard_.y_ = viewData_->songY_;
